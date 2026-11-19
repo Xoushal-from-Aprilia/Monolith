@@ -326,10 +326,15 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
                                 3 -> requests
                                 else -> 0
                             }
+                            val badgeScale by animateFloatAsState(if (badge > 0) 1f else 0f, Motion.bouncy(), label = "badge")
                             BadgedBox(badge = {
-                                AnimatedVisibility(badge > 0, enter = scaleIn(Motion.bouncy()), exit = scaleOut()) {
-                                    Badge(containerColor = MaterialTheme.colorScheme.primary, contentColor = MaterialTheme.colorScheme.onPrimary) {
-                                        Text(if (badge > 99) "99+" else badge.toString())
+                                if (badge > 0 || badgeScale > 0.01f) {
+                                    Badge(
+                                        containerColor = MaterialTheme.colorScheme.primary,
+                                        contentColor = MaterialTheme.colorScheme.onPrimary,
+                                        modifier = Modifier.graphicsLayer { scaleX = badgeScale; scaleY = badgeScale },
+                                    ) {
+                                        Text(if (badge > 99) "99+" else badge.coerceAtLeast(1).toString())
                                     }
                                 }
                             }) {

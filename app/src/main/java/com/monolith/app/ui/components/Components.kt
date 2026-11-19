@@ -147,15 +147,15 @@ fun MonolithMark(modifier: Modifier = Modifier, rise: Float = 1f, sweep: Float =
         drawLine(line, Offset(w / 2f - horizonHalf, baseY + 0.4f * unit), Offset(w / 2f + horizonHalf, baseY + 0.4f * unit), strokeWidth = 0.8f * unit)
         val lift = (1f - rise.coerceIn(0f, 1f)) * 50.5f
         clipRect(0f, 0f, w, baseY) {
-            fun poly(vararg pts: Offset): Path = Path().apply {
+            fun poly(pts: List<Offset>): Path = Path().apply {
                 moveTo(pts[0].x, pts[0].y)
                 for (i in 1 until pts.size) lineTo(pts[i].x, pts[i].y)
                 close()
             }
             val l = -lift
-            drawPath(poly(p(0f, 46.5f + l), p(5f, 50.5f + l), p(26f, 50.5f + l), p(21f, 46.5f + l)), top)
-            drawPath(poly(p(21f, 46.5f + l), p(26f, 50.5f + l), p(26f, 4f + l), p(21f, 0f + l)), side)
-            val frontPath = poly(p(0f, 0f + l), p(21f, 0f + l), p(21f, 46.5f + l), p(0f, 46.5f + l))
+            drawPath(poly(listOf(p(0f, 46.5f + l), p(5f, 50.5f + l), p(26f, 50.5f + l), p(21f, 46.5f + l))), top)
+            drawPath(poly(listOf(p(21f, 46.5f + l), p(26f, 50.5f + l), p(26f, 4f + l), p(21f, 0f + l))), side)
+            val frontPath = poly(listOf(p(0f, 0f + l), p(21f, 0f + l), p(21f, 46.5f + l), p(0f, 46.5f + l)))
             drawPath(frontPath, front)
             if (sweep in 0f..1f) {
                 val x0 = ox + (-10f + sweep * 45f) * unit
