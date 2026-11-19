@@ -1,0 +1,5 @@
+<resources>
+    <color name="mono_white">#FFFFFFFF</color>
+    <color name="mono_black">#FF0A0A0A</color>
+    <color name="ic_bg">#FFF4F4F2</color>
+</resources>
