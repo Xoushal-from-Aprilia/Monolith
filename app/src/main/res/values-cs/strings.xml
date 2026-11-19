@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Poloha živě</string>
+    <string name="widget_label">Kalendář Monolith</string>
+    <string name="widget_desc">Vaše nadcházející události</string>
+</resources>

@@ -4,6 +4,7 @@ import android.content.Context
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Matrix
+import android.location.Location
 import android.net.Uri
 import android.util.Log
 import androidx.exifinterface.media.ExifInterface
@@ -14,19 +15,25 @@ import com.monolith.app.core.newId
 import com.monolith.app.core.now
 import com.monolith.app.core.nowSec
 import com.monolith.app.core.strings
+import com.monolith.app.core.t
 import com.monolith.app.core.toJsonArray
 import com.monolith.app.crypto.Bech32
 import com.monolith.app.crypto.Hex
 import com.monolith.app.data.AgendaEvent
 import com.monolith.app.data.AppDatabase
 import com.monolith.app.data.Chunk
+import com.monolith.app.data.ConvSetting
 import com.monolith.app.data.Friend
 import com.monolith.app.data.FriendStatus
 import com.monolith.app.data.Group
 import com.monolith.app.data.InviteState
+import com.monolith.app.data.ListItem
 import com.monolith.app.data.Message
 import com.monolith.app.data.MsgStatus
 import com.monolith.app.data.Processed
+import com.monolith.app.data.Reaction
+import com.monolith.app.data.SharedList
+import com.monolith.app.data.Vote
 import com.monolith.app.nostr.Envelope
 import com.monolith.app.nostr.NostrEvent
 import com.monolith.app.nostr.RelayPool
@@ -54,9 +61,12 @@ import kotlin.math.roundToInt
 
 data class UserResult(val pubkey: String, val profile: Profile, val createdAt: Long)
 
+/** Reply reference stored inside a message's extra json */
+data class ReplyRef(val id: String, val sender: String, val preview: String)
+
 /**
- * Heart of the app: speaks the Monolith protocol over relays (store-and-forward, always reachable)
- * and over WebRTC data channels (direct peer-to-peer, when both phones are online).
+ * Heart of the app: the Monolith protocol over the encrypted mailbox (always reachable)
+ * and over direct links between phones (when both are online).
  */
 class Messenger(
     private val ctx: Context,
@@ -74,17 +84,16 @@ class Messenger(
         const val TTL_CHUNK = 14L * 86400
         const val TTL_LIVE = 120L
         const val PRESENCE_WINDOW = 100_000L
+        val QUICK_REACTIONS = listOf("❤️", "👍", "😂", "😮", "😢", "🔥", "🙏")
     }
 
     /** the conversation currently on screen (no notifications for it) */
     val activeConv = MutableStateFlow<String?>(null)
 
     private val _online = MutableStateFlow<Map<String, Long>>(emptyMap())
-    /** pubkey -> last presence ping (ms) */
     val online: StateFlow<Map<String, Long>> = _online.asStateFlow()
 
     private val _typing = MutableStateFlow<Map<String, Pair<String, Long>>>(emptyMap())
-    /** convId -> (pubkey, until ms) */
     val typing: StateFlow<Map<String, Pair<String, Long>>> = _typing.asStateFlow()
 
     private val wrapToMsg = ConcurrentHashMap<String, String>()
@@ -136,9 +145,7 @@ class Messenger(
                 }
             }
         }
-        scope.launch {
-            prefs.relays.collect { relays.setRelays(it) }
-        }
+        scope.launch { prefs.relays.collect { relays.setRelays(it) } }
         scope.launch {
             delay(2500)
             publishProfile()
@@ -150,6 +157,12 @@ class Messenger(
             while (true) {
                 if (Graph.foreground) sendPresenceToAll()
                 delay(45_000)
+            }
+        }
+        scope.launch {
+            while (true) {
+                sweepExpired()
+                delay(30_000)
             }
         }
     }
@@ -178,7 +191,7 @@ class Messenger(
         withContext(Dispatchers.Default) { publishWrapped(to, payload, true, TTL_LIVE) }
     }
 
-    /** prefer the direct WebRTC channel, fall back to a live relay event */
+    /** prefer the direct link, fall back to a live mailbox event */
     suspend fun sendFast(to: String, payload: JSONObject) {
         if (!Graph.rtc.send(to, payload)) sendLive(to, payload)
     }
@@ -194,9 +207,16 @@ class Messenger(
             if (db.misc().markProcessed(Processed(inner.id, now())) == -1L) return
             if (ev.createdAt > prefs.lastWrapSec && ev.createdAt <= nowSec() + 60) prefs.lastWrapSec = ev.createdAt
         } else if (nowSec() - inner.createdAt > 90) {
-            return // stale live event
+            return
         }
         handlePayload(inner.from, inner.payload, inner.createdAt * 1000, viaRtc = false)
+    }
+
+    /** friend, or member of a group I'm in (needed for group calls and group messages) */
+    suspend fun isKnownContact(pk: String): Boolean {
+        val f = db.friends().get(pk)
+        if (f?.status == FriendStatus.FRIEND) return true
+        return db.groups().allNow().any { pk in it.memberList() }
     }
 
     // ================================================================== incoming
@@ -213,18 +233,26 @@ class Messenger(
             "msg" -> onMessage(from, p, sentAt, friend)
             "chunk" -> onChunk(from, p)
             "ack" -> onAck(p)
+            "react" -> onReact(from, p, friend)
+            "edit" -> onEdit(from, p)
+            "del" -> onDelete(from, p)
+            "vote" -> onVote(from, p, friend)
+            "ttl" -> onTtl(from, p, friend)
             "grp" -> onGroup(from, p, isFriend)
             "gleave" -> onGroupLeave(from, p)
             "evinv" -> if (isFriend) onEventInvite(from, p)
             "evrsvp" -> onRsvp(from, p)
             "evdel" -> onEventDelete(from, p)
-            "loc" -> if (isFriend) onLocation(from, p)
+            "list" -> onList(from, p, isFriend)
+            "li" -> onListItem(from, p)
+            "lleave" -> onListLeave(from, p)
+            "loc" -> if (isFriend) onLocation(friend!!, p)
             "locstart" -> if (isFriend) onLocStart(friend!!, p)
             "locstop" -> if (isFriend) db.friends().sharing(from, 0)
             "pres" -> if (isFriend) onPresence(from, p)
             "typing" -> onTyping(from, p, isFriend)
             "rtc" -> if (isFriend) Graph.rtc.onSignal(from, p)
-            "call" -> if (isFriend) Graph.calls.onSignal(from, p)
+            "call" -> if (isFriend || isKnownContact(from)) Graph.calls.onSignal(from, p)
         }
     }
 
@@ -235,7 +263,6 @@ class Messenger(
 
     private suspend fun onPresence(from: String, p: JSONObject) {
         markOnline(from)
-        // answer so both sides know the other one is around
         if (p.optBoolean("q") && Graph.foreground) {
             val last = lastPresenceReply[from] ?: 0L
             if (now() - last > 20_000) {
@@ -270,7 +297,7 @@ class Messenger(
             }
             else -> {
                 db.friends().upsert(
-                    Friend(from, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.INCOMING, now())
+                    Friend(from, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.INCOMING, now(), verified = existing?.verified ?: false)
                 )
                 Graph.notifier.friendRequest(from, prof.displayName, prof.username, prof.emoji)
             }
@@ -305,37 +332,33 @@ class Messenger(
         val kind = p.optString("k", "text")
         val isActive = activeConv.value == conv && Graph.foreground
         val extra = p.optJSONObject("ex")
+        val ts = minOf(p.optLong("ts", sentAt), now())
+        val exp = p.optLong("exp", 0)
         val msg = Message(
             id = id,
             convId = conv,
             sender = from,
             outgoing = false,
-            ts = minOf(p.optLong("ts", sentAt), now()),
+            ts = ts,
             kind = kind,
             text = p.optString("x"),
             extra = extra?.toString(),
             status = if (isActive) MsgStatus.READ else MsgStatus.PENDING,
-            progress = if (kind == "photo") 0f else 1f,
+            progress = if (kind == "photo" || kind == "voice") 0f else 1f,
+            expiresAt = if (exp > 0) minOf(ts + exp * 1000, now() + exp * 1000) else 0,
         )
         if (db.messages().insert(msg) == -1L) return
         _typing.update { it - conv }
-        if (kind == "photo") tryAssemble(id)
+        if (kind == "photo" || kind == "voice") tryAssemble(id)
         sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
         if (!isActive) {
-            val title: String
-            val group: Group?
-            if (conv.startsWith("g:")) {
-                group = db.groups().get(conv.removePrefix("g:"))
-                title = group?.name ?: "Gruppo"
-            } else {
-                group = null
-                title = friend?.displayName ?: "Monolith"
-            }
+            val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
+            val title = group?.name ?: friend?.displayName ?: "Monolith"
             val sender = friend ?: db.friends().get(from)
             Graph.notifier.message(
                 conv = conv,
                 title = title,
-                senderName = sender?.displayName ?: "Qualcuno",
+                senderName = sender?.displayName ?: t("Qualcuno"),
                 senderEmoji = sender?.emoji ?: "🙂",
                 text = previewText(msg),
                 isGroup = group != null,
@@ -348,11 +371,14 @@ class Messenger(
     }
 
     fun previewText(m: Message): String = when (m.kind) {
-        "photo" -> if (m.text.isNotBlank()) "📷 ${m.text}" else "📷 Foto"
-        "event" -> "📅 " + (runCatching { JSONObject(m.extra ?: "{}").optString("title") }.getOrNull() ?: "Evento")
-        "loc" -> "📍 Posizione"
-        "nudge" -> "📳 Trillo!"
+        "photo" -> if (m.text.isNotBlank()) "📷 ${m.text}" else "📷 " + t("Foto")
+        "voice" -> "🎤 " + t("Messaggio vocale")
+        "event" -> "📅 " + (runCatching { JSONObject(m.extra ?: "{}").optString("title") }.getOrNull() ?: t("Evento"))
+        "loc" -> "📍 " + t("Posizione")
+        "nudge" -> "📳 " + t("Trillo!")
+        "poll" -> "📊 " + (runCatching { JSONObject(m.extra ?: "{}").optString("q") }.getOrNull() ?: t("Sondaggio"))
         "call" -> "📞 " + m.text
+        "deleted" -> "🚫 " + t("Messaggio eliminato")
         else -> m.text
     }
 
@@ -372,6 +398,8 @@ class Messenger(
         tryAssemble(id)
     }
 
+    private fun extFor(kind: String) = if (kind == "voice") "m4a" else "jpg"
+
     private suspend fun tryAssemble(id: String) = assembleLock.withLock {
         val msg = db.messages().get(id) ?: return@withLock
         if (msg.outgoing || (msg.progress >= 1f && msg.mediaPath != null)) return@withLock
@@ -386,7 +414,7 @@ class Messenger(
         val out = ByteArrayOutputStream()
         val dec = Base64.getDecoder()
         chunks.distinctBy { it.idx }.sortedBy { it.idx }.forEach { out.write(dec.decode(it.data)) }
-        val file = File(Media.dir(ctx), "$id.jpg")
+        val file = File(Media.dir(ctx), "$id.${extFor(msg.kind)}")
         file.writeBytes(out.toByteArray())
         db.messages().progress(id, 1f, file.absolutePath)
         db.misc().clearChunks(id)
@@ -397,6 +425,57 @@ class Messenger(
         val s = p.optInt("s", MsgStatus.DELIVERED).coerceIn(MsgStatus.DELIVERED, MsgStatus.READ)
         for (i in 0 until ids.length()) db.messages().raiseStatus(ids.getString(i), s)
     }
+
+    private suspend fun onReact(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val id = p.optString("id")
+        val m = db.messages().get(id) ?: return
+        if (m.convId != conv) return
+        val e = p.optString("e")
+        if (e.isBlank()) db.social().unreact(id, from) else db.social().react(Reaction(id, from, conv, e, now()))
+    }
+
+    private suspend fun onEdit(from: String, p: JSONObject) {
+        val m = db.messages().get(p.optString("id")) ?: return
+        if (m.sender != from || m.kind == "deleted") return
+        db.messages().edit(m.id, p.optString("x"))
+    }
+
+    private suspend fun onDelete(from: String, p: JSONObject) {
+        val m = db.messages().get(p.optString("id")) ?: return
+        if (m.sender != from) return
+        m.mediaPath?.let { runCatching { File(it).delete() } }
+        db.messages().markDeleted(m.id)
+    }
+
+    private suspend fun onVote(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val id = p.optString("id")
+        val m = db.messages().get(id) ?: return
+        if (m.convId != conv || m.kind != "poll") return
+        val opts = (p.optJSONArray("o") ?: JSONArray()).let { a -> (0 until a.length()).map { a.optInt(it) } }
+        db.social().vote(Vote(id, from, conv, opts.joinToString(","), now()))
+    }
+
+    private suspend fun onTtl(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val sec = p.optLong("s").coerceAtLeast(0)
+        val cur = db.social().settingNow(conv) ?: ConvSetting(conv)
+        db.social().saveSetting(cur.copy(ttlSec = sec))
+        val who = (friend ?: db.friends().get(from))?.displayName ?: t("Qualcuno")
+        db.messages().insert(Message(newId(), conv, from, false, now(), "system", text = ttlSystemText(who, sec), status = MsgStatus.READ))
+    }
+
+    fun ttlLabel(sec: Long): String = when {
+        sec <= 0 -> t("Disattivati")
+        sec <= 3600 -> t("1 ora")
+        sec <= 86400 -> t("24 ore")
+        else -> t("7 giorni")
+    }
+
+    private fun ttlSystemText(who: String, sec: Long) =
+        if (sec <= 0) t("{0} ha disattivato i messaggi effimeri", who)
+        else t("{0} ha attivato i messaggi effimeri: {1}", who, ttlLabel(sec))
 
     private suspend fun onGroup(from: String, p: JSONObject, isFriend: Boolean) {
         val gid = p.optString("g").ifBlank { return }
@@ -409,7 +488,6 @@ class Messenger(
             if (existing != null) db.groups().delete(gid)
             return
         }
-        // remember the profiles of members we are not friends with
         p.optJSONObject("mp")?.let { mp ->
             members.filter { it != k.pub }.forEach { pk ->
                 val known = db.friends().get(pk)
@@ -420,14 +498,13 @@ class Messenger(
                 }
             }
         }
-        val group = Group(gid, p.optString("name", "Gruppo"), p.optString("e", "💬"), members.joinToString(","), from, existing?.createdAt ?: now())
+        val group = Group(gid, p.optString("name", t("Gruppo")), p.optString("e", "💬"), members.joinToString(","), from, existing?.createdAt ?: now())
         db.groups().upsert(group)
         if (existing == null) {
             val creator = db.friends().get(from)
-            db.messages().insert(
-                Message(newId(), "g:$gid", from, false, now(), "system", text = "${creator?.displayName ?: "Qualcuno"} ti ha aggiunto al gruppo", status = MsgStatus.READ)
-            )
-            Graph.notifier.message("g:$gid", group.name, creator?.displayName ?: "", creator?.emoji ?: "🙂", "Ti ha aggiunto al gruppo", true, group.emoji, false)
+            val name = creator?.displayName ?: t("Qualcuno")
+            db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = t("{0} ti ha aggiunto al gruppo", name), status = MsgStatus.READ))
+            Graph.notifier.message("g:$gid", group.name, name, creator?.emoji ?: "🙂", t("Ti ha aggiunto al gruppo"), true, group.emoji, false)
         }
     }
 
@@ -437,20 +514,44 @@ class Messenger(
         if (from !in g.memberList()) return
         val left = db.friends().get(from)
         db.groups().upsert(g.copy(members = g.memberList().filter { it != from }.joinToString(",")))
-        db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = "${left?.displayName ?: "Qualcuno"} ha lasciato il gruppo", status = MsgStatus.READ))
+        db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = t("{0} ha lasciato il gruppo", left?.displayName ?: t("Qualcuno")), status = MsgStatus.READ))
     }
 
-    private suspend fun onLocation(from: String, p: JSONObject) {
+    // ------------------------------------------------------------------ location
+
+    private suspend fun onLocation(friend: Friend, p: JSONObject) {
         val until = p.optLong("until", now() + 60_000)
         if (until < now()) return
-        db.friends().location(from, p.optDouble("lat"), p.optDouble("lon"), p.optDouble("acc", 0.0).toFloat(), p.optLong("at", now()), until)
-        markOnline(from)
+        val lat = p.optDouble("lat")
+        val lon = p.optDouble("lon")
+        db.friends().location(
+            friend.pubkey, lat, lon, p.optDouble("acc", 0.0).toFloat(), p.optLong("at", now()), until,
+            p.optInt("dist", -1), p.optInt("eta", -1),
+        )
+        markOnline(friend.pubkey)
+        // arrival alerts
+        db.social().alertsFor(friend.pubkey).forEach { a ->
+            val d = FloatArray(1)
+            Location.distanceBetween(lat, lon, a.lat, a.lon, d)
+            if (d[0] <= a.radius) {
+                db.social().deleteAlert(a.id)
+                Graph.notifier.arrival(friend.displayName, friend.emoji, a.label)
+            }
+        }
     }
 
     private suspend fun onLocStart(friend: Friend, p: JSONObject) {
         val until = p.optLong("until")
         db.friends().sharing(friend.pubkey, until)
-        if (until > now()) Graph.notifier.locationShared(friend.displayName, friend.emoji, until)
+        if (until > now()) Graph.notifier.locationShared(friend.displayName, friend.emoji, until, p.optBoolean("otw"))
+    }
+
+    suspend fun sendLocStart(to: String, until: Long, onTheWay: Boolean = false) {
+        sendStored(to, JSONObject().put("t", "locstart").put("until", until).put("otw", onTheWay), 86400)
+    }
+
+    suspend fun sendLocStop(to: String) {
+        sendStored(to, JSONObject().put("t", "locstop"), 86400)
     }
 
     // ------------------------------------------------------------------ agenda sync
@@ -458,6 +559,7 @@ class Messenger(
     private fun eventJson(e: AgendaEvent) = JSONObject()
         .put("id", e.id).put("title", e.title).put("desc", e.description).put("notes", e.notes)
         .put("start", e.start).put("end", e.end ?: 0L).put("allDay", e.allDay).put("emoji", e.emoji)
+        .put("rep", e.repeat).put("until", e.repeatUntil ?: 0L)
 
     private suspend fun onEventInvite(from: String, p: JSONObject) {
         val o = p.optJSONObject("ev") ?: return
@@ -474,7 +576,9 @@ class Messenger(
             end = o.optLong("end").takeIf { it > 0 },
             allDay = o.optBoolean("allDay"),
             emoji = o.optString("emoji", "📌"),
-            reminderMin = existing?.reminderMin ?: 15,
+            reminders = existing?.reminders ?: "15",
+            repeat = o.optInt("rep", 0),
+            repeatUntil = o.optLong("until").takeIf { it > 0 },
             owner = from,
             invitees = (p.optJSONArray("inv") ?: JSONArray()).strings().joinToString(","),
             inviteState = existing?.inviteState ?: InviteState.PENDING,
@@ -483,7 +587,8 @@ class Messenger(
         )
         db.agenda().upsert(ev)
         if (ev.inviteState == InviteState.ACCEPTED) ReminderScheduler.schedule(ctx, ev)
-        if (existing == null) Graph.notifier.eventInvite(ev, friend?.displayName ?: "Un amico")
+        if (existing == null) Graph.notifier.eventInvite(ev, friend?.displayName ?: t("Un amico"))
+        Graph.refreshWidget()
     }
 
     private suspend fun onRsvp(from: String, p: JSONObject) {
@@ -494,7 +599,7 @@ class Messenger(
         rsvp.put(from, answer)
         db.agenda().upsert(ev.copy(rsvp = rsvp.toString(), updatedAt = now()))
         val f = db.friends().get(from)
-        Graph.notifier.rsvp(ev, f?.displayName ?: "Un amico", answer == "yes")
+        Graph.notifier.rsvp(ev, f?.displayName ?: t("Un amico"), answer == "yes")
     }
 
     private suspend fun onEventDelete(from: String, p: JSONObject) {
@@ -503,6 +608,7 @@ class Messenger(
         db.agenda().delete(ev.id)
         ReminderScheduler.cancel(ctx, ev.id)
         if (ev.inviteState != InviteState.DECLINED) Graph.notifier.eventCancelled(ev)
+        Graph.refreshWidget()
     }
 
     suspend fun saveEvent(e: AgendaEvent, notifyInvitees: Boolean = true) {
@@ -513,6 +619,7 @@ class Messenger(
             val payload = JSONObject().put("t", "evinv").put("ev", eventJson(e)).put("inv", inv.toJsonArray())
             inv.forEach { sendStored(it, payload) }
         }
+        Graph.refreshWidget()
     }
 
     suspend fun deleteEvent(e: AgendaEvent) {
@@ -523,6 +630,7 @@ class Messenger(
         } else if (e.inviteState != InviteState.DECLINED) {
             sendStored(e.owner, JSONObject().put("t", "evrsvp").put("id", e.id).put("s", "no"))
         }
+        Graph.refreshWidget()
     }
 
     suspend fun respondInvite(id: String, accept: Boolean) {
@@ -531,13 +639,107 @@ class Messenger(
         db.agenda().upsert(updated)
         if (accept) ReminderScheduler.schedule(ctx, updated) else ReminderScheduler.cancel(ctx, id)
         sendStored(e.owner, JSONObject().put("t", "evrsvp").put("id", id).put("s", if (accept) "yes" else "no"))
+        Graph.refreshWidget()
+    }
+
+    // ------------------------------------------------------------------ shared lists
+
+    private fun itemJson(i: ListItem) = JSONObject().put("id", i.id).put("x", i.text).put("d", i.done).put("by", i.by).put("ts", i.updatedAt).put("del", i.deleted)
+
+    private fun itemFrom(listId: String, o: JSONObject) = ListItem(
+        id = o.optString("id"), listId = listId, text = o.optString("x"), done = o.optBoolean("d"),
+        by = o.optString("by"), updatedAt = o.optLong("ts"), deleted = o.optBoolean("del"),
+    )
+
+    private suspend fun mergeItem(i: ListItem) {
+        if (i.id.isBlank()) return
+        val cur = db.lists().item(i.id)
+        if (cur == null || cur.updatedAt < i.updatedAt) db.lists().upsertItem(i)
+    }
+
+    private suspend fun onList(from: String, p: JSONObject, isFriend: Boolean) {
+        val id = p.optString("id").ifBlank { return }
+        val k = me() ?: return
+        val existing = db.lists().get(id)
+        val members = (p.optJSONArray("m") ?: JSONArray()).strings().filter { Hex.isHex64(it) }
+        if (existing == null && (!isFriend || k.pub !in members)) return
+        if (existing != null && from !in existing.memberList()) return
+        if (k.pub !in members) {
+            db.lists().delete(id); db.lists().clearItems(id); return
+        }
+        val l = SharedList(id, p.optString("title", t("Lista")), p.optString("e", "📝"), members.joinToString(","), existing?.owner ?: p.optString("owner", from), existing?.createdAt ?: now(), now())
+        db.lists().upsert(l)
+        p.optJSONArray("items")?.let { a -> for (i in 0 until a.length()) a.optJSONObject(i)?.let { mergeItem(itemFrom(id, it)) } }
+        if (existing == null) {
+            val f = db.friends().get(from)
+            Graph.notifier.listShared(f?.displayName ?: t("Un amico"), l.emoji + " " + l.title)
+        }
+    }
+
+    private suspend fun onListItem(from: String, p: JSONObject) {
+        val l = db.lists().get(p.optString("l")) ?: return
+        if (from !in l.memberList()) return
+        val o = p.optJSONObject("it") ?: return
+        mergeItem(itemFrom(l.id, o))
+        db.lists().upsert(l.copy(updatedAt = now()))
+    }
+
+    private suspend fun onListLeave(from: String, p: JSONObject) {
+        val l = db.lists().get(p.optString("l")) ?: return
+        if (from !in l.memberList()) return
+        db.lists().upsert(l.copy(members = l.memberList().filter { it != from }.joinToString(",")))
+    }
+
+    private suspend fun broadcastList(l: SharedList, includeItems: Boolean) {
+        val k = me() ?: return
+        val payload = JSONObject().put("t", "list").put("id", l.id).put("title", l.title).put("e", l.emoji)
+            .put("m", l.memberList().toJsonArray()).put("owner", l.owner)
+        if (includeItems) payload.put("items", JSONArray().also { a -> db.lists().itemsNow(l.id).forEach { a.put(itemJson(it)) } })
+        l.memberList().filter { it != k.pub }.forEach { sendStored(it, payload) }
+    }
+
+    suspend fun saveList(id: String?, title: String, emoji: String, members: List<String>): String? {
+        val k = me() ?: return null
+        val existing = id?.let { db.lists().get(it) }
+        val all = (members + k.pub).distinct()
+        val l = SharedList(existing?.id ?: newId(), title.trim().ifBlank { t("Lista") }, emoji, all.joinToString(","), existing?.owner ?: k.pub, existing?.createdAt ?: now(), now())
+        db.lists().upsert(l)
+        broadcastList(l, includeItems = true)
+        // members removed from the list get a final update without themselves
+        existing?.memberList()?.filter { it !in all }?.forEach {
+            sendStored(it, JSONObject().put("t", "list").put("id", l.id).put("m", all.toJsonArray()))
+        }
+        return l.id
+    }
+
+    suspend fun saveItem(listId: String, itemId: String?, text: String? = null, done: Boolean? = null, deleted: Boolean = false) {
+        val k = me() ?: return
+        val l = db.lists().get(listId) ?: return
+        val cur = itemId?.let { db.lists().item(it) }
+        val item = ListItem(
+            id = cur?.id ?: newId(), listId = listId, text = text ?: cur?.text ?: "", done = done ?: cur?.done ?: false,
+            by = k.pub, updatedAt = now(), deleted = deleted,
+        )
+        if (item.text.isBlank() && !deleted) return
+        db.lists().upsertItem(item)
+        db.lists().upsert(l.copy(updatedAt = now()))
+        val payload = JSONObject().put("t", "li").put("l", listId).put("it", itemJson(item))
+        l.memberList().filter { it != k.pub }.forEach { sendStored(it, payload) }
+    }
+
+    suspend fun leaveList(listId: String) {
+        val k = me() ?: return
+        val l = db.lists().get(listId) ?: return
+        l.memberList().filter { it != k.pub }.forEach { sendStored(it, JSONObject().put("t", "lleave").put("l", listId)) }
+        db.lists().delete(listId)
+        db.lists().clearItems(listId)
     }
 
     // ================================================================== directory
 
-    fun profilePayload(t: String): JSONObject {
+    fun profilePayload(type: String): JSONObject {
         val p = identity.profile.value ?: Profile("", "", "🙂")
-        return p.toJson().put("t", t)
+        return p.toJson().put("t", type)
     }
 
     suspend fun publishProfile() {
@@ -559,7 +761,6 @@ class Messenger(
         db.friends().friendsNow().forEach { sendStored(it.pubkey, payload) }
     }
 
-    /** exact username lookup (or npub) across relays */
     suspend fun searchUsers(query: String): List<UserResult> {
         val q = query.trim()
         val filter = JSONObject().put("kinds", JSONArray().put(Envelope.KIND_PROFILE))
@@ -574,7 +775,7 @@ class Messenger(
             if (u.length < 3) return emptyList()
             filter.put("#u", JSONArray().put(u))
         }
-        val tagFilter = Profile.normalizeUsername(q).substringAfter('#', "")
+        val tagFilter = if (q.length == 64) "" else Profile.normalizeUsername(q).substringAfter('#', "")
         val events = relays.query(listOf(filter))
         val myPub = me()?.pub
         return withContext(Dispatchers.Default) {
@@ -591,19 +792,21 @@ class Messenger(
         }
     }
 
-    suspend fun isUsernameTaken(username: String): Boolean = searchUsers(username).isNotEmpty()
-
     // ================================================================== friends
 
-    suspend fun sendFriendRequest(u: UserResult) {
+    suspend fun sendFriendRequest(u: UserResult, verified: Boolean = false) {
         val existing = db.friends().get(u.pubkey)
-        if (existing?.status == FriendStatus.FRIEND) return
+        if (existing?.status == FriendStatus.FRIEND) {
+            if (verified) db.friends().verified(u.pubkey, true)
+            return
+        }
         if (existing?.status == FriendStatus.INCOMING) {
+            if (verified) db.friends().verified(u.pubkey, true)
             acceptFriend(u.pubkey)
             return
         }
         db.friends().upsert(
-            Friend(u.pubkey, u.profile.username, u.profile.displayName, u.profile.emoji, u.profile.bio, FriendStatus.OUTGOING, now())
+            Friend(u.pubkey, u.profile.username, u.profile.displayName, u.profile.emoji, u.profile.bio, FriendStatus.OUTGOING, now(), verified = verified)
         )
         sendStored(u.pubkey, profilePayload("freq"))
     }
@@ -636,44 +839,49 @@ class Messenger(
         } else listOf(conv) to null
     }
 
+    private suspend fun ttlFor(conv: String): Long = db.social().settingNow(conv)?.ttlSec ?: 0L
+
     private suspend fun deliver(m: Message) {
         val (targets, gid) = recipients(m.convId)
         val payload = JSONObject().put("t", "msg").put("id", m.id).put("k", m.kind).put("x", m.text).put("ts", m.ts)
         m.extra?.let { payload.put("ex", JSONObject(it)) }
         gid?.let { payload.put("g", it) }
+        if (m.expiresAt > 0) payload.put("exp", ((m.expiresAt - m.ts) / 1000).coerceAtLeast(1))
         targets.forEach { to -> sendStored(to, payload, TTL_MESSAGE, m.id) }
     }
 
-    suspend fun sendText(conv: String, text: String) {
-        val k = me() ?: return
-        val t = text.trim()
-        if (t.isEmpty()) return
-        val m = Message(newId(), conv, k.pub, true, now(), "text", text = t)
+    private suspend fun newOutgoing(conv: String, kind: String, text: String = "", extra: JSONObject? = null, reply: ReplyRef? = null, mediaPath: String? = null, progress: Float = 1f): Message? {
+        val k = me() ?: return null
+        val ex = extra ?: if (reply != null) JSONObject() else null
+        if (reply != null) ex?.put("re", JSONObject().put("id", reply.id).put("s", reply.sender).put("x", reply.preview.take(140)))
+        val ts = now()
+        val ttl = ttlFor(conv)
+        val m = Message(newId(), conv, k.pub, true, ts, kind, text = text, mediaPath = mediaPath, extra = ex?.toString(), progress = progress, expiresAt = if (ttl > 0) ts + ttl * 1000 else 0)
         db.messages().insert(m)
-        deliver(m)
+        return m
+    }
+
+    suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null) {
+        val tx = text.trim()
+        if (tx.isEmpty()) return
+        deliver(newOutgoing(conv, "text", tx, reply = reply) ?: return)
     }
 
     suspend fun sendNudge(conv: String) {
-        val k = me() ?: return
-        val m = Message(newId(), conv, k.pub, true, now(), "nudge")
-        db.messages().insert(m)
-        deliver(m)
+        deliver(newOutgoing(conv, "nudge") ?: return)
     }
 
     suspend fun shareEventInChat(conv: String, e: AgendaEvent) {
-        val k = me() ?: return
-        val ex = eventJson(e)
-        val m = Message(newId(), conv, k.pub, true, now(), "event", text = e.title, extra = ex.toString())
-        db.messages().insert(m)
-        deliver(m)
+        deliver(newOutgoing(conv, "event", e.title, eventJson(e)) ?: return)
     }
 
     suspend fun sendLocationPin(conv: String, lat: Double, lon: Double) {
-        val k = me() ?: return
-        val ex = JSONObject().put("lat", lat).put("lon", lon)
-        val m = Message(newId(), conv, k.pub, true, now(), "loc", extra = ex.toString())
-        db.messages().insert(m)
-        deliver(m)
+        deliver(newOutgoing(conv, "loc", extra = JSONObject().put("lat", lat).put("lon", lon)) ?: return)
+    }
+
+    suspend fun sendPoll(conv: String, question: String, options: List<String>, multi: Boolean) {
+        val ex = JSONObject().put("q", question.trim()).put("o", options.map { it.trim() }.filter { it.isNotEmpty() }.toJsonArray()).put("m", multi)
+        deliver(newOutgoing(conv, "poll", question.trim(), ex) ?: return)
     }
 
     suspend fun addCallLog(conv: String, text: String, outgoing: Boolean) {
@@ -681,18 +889,27 @@ class Messenger(
         db.messages().insert(Message(newId(), conv, if (outgoing) k.pub else conv, outgoing, now(), "call", text = text, status = MsgStatus.READ))
     }
 
-    suspend fun sendPhoto(conv: String, uri: Uri, caption: String) {
-        val k = me() ?: return
+    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null) {
         val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return
-        val id = newId()
-        val file = File(Media.dir(ctx), "$id.jpg")
-        withContext(Dispatchers.IO) { file.writeBytes(compressed.bytes) }
-        val n = ceil(compressed.bytes.size / CHUNK_BYTES.toDouble()).toInt().coerceAtLeast(1)
-        val extra = JSONObject().put("n", n).put("w", compressed.width).put("h", compressed.height)
-        val m = Message(id, conv, k.pub, true, now(), "photo", text = caption.trim(), mediaPath = file.absolutePath, extra = extra.toString(), progress = 0f)
-        db.messages().insert(m)
+        val extra = JSONObject().put("w", compressed.width).put("h", compressed.height)
+        sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)
+    }
+
+    suspend fun sendVoice(conv: String, file: File, durationMs: Long, reply: ReplyRef? = null) {
+        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+        sendMedia(conv, "voice", bytes, JSONObject().put("dur", durationMs), "", reply)
+        runCatching { file.delete() }
+    }
+
+    private suspend fun sendMedia(conv: String, kind: String, bytes: ByteArray, extra: JSONObject, caption: String, reply: ReplyRef?) {
+        val n = ceil(bytes.size / CHUNK_BYTES.toDouble()).toInt().coerceAtLeast(1)
+        extra.put("n", n)
+        val m = newOutgoing(conv, kind, caption.trim(), extra, reply, progress = 0f) ?: return
+        val file = File(Media.dir(ctx), "${m.id}.${extFor(kind)}")
+        withContext(Dispatchers.IO) { file.writeBytes(bytes) }
+        db.messages().progress(m.id, 0f, file.absolutePath)
         deliver(m)
-        sendChunks(m, compressed.bytes)
+        sendChunks(m, bytes)
     }
 
     private suspend fun sendChunks(m: Message, bytes: ByteArray) {
@@ -700,7 +917,6 @@ class Messenger(
         val n = ceil(bytes.size / CHUNK_BYTES.toDouble()).toInt().coerceAtLeast(1)
         val enc = Base64.getEncoder()
         targets.forEach { to -> if (!Graph.rtc.isConnected(to)) Graph.rtc.ensureConnected(to) }
-        // give a direct channel a moment to come up
         if (targets.any { !Graph.rtc.isConnected(it) } && targets.any { isOnline(it) }) delay(2500)
         for (i in 0 until n) {
             val part = bytes.copyOfRange(i * CHUNK_BYTES, minOf(bytes.size, (i + 1) * CHUNK_BYTES))
@@ -719,10 +935,62 @@ class Messenger(
     private suspend fun resendPending() {
         db.messages().pending(now() - 20_000).forEach { m ->
             deliver(m)
-            if (m.kind == "photo" && m.mediaPath != null) {
+            if ((m.kind == "photo" || m.kind == "voice") && m.mediaPath != null) {
                 val f = File(m.mediaPath)
                 if (f.exists()) sendChunks(m, f.readBytes())
             }
+        }
+    }
+
+    private suspend fun toConv(conv: String, payload: JSONObject, ttl: Long = TTL_MESSAGE) {
+        val (targets, gid) = recipients(conv)
+        gid?.let { payload.put("g", it) }
+        targets.forEach { sendStored(it, payload, ttl) }
+    }
+
+    suspend fun react(m: Message, emoji: String) {
+        val k = me() ?: return
+        if (emoji.isBlank()) db.social().unreact(m.id, k.pub) else db.social().react(Reaction(m.id, k.pub, m.convId, emoji, now()))
+        toConv(m.convId, JSONObject().put("t", "react").put("id", m.id).put("e", emoji))
+    }
+
+    suspend fun editMessage(m: Message, text: String) {
+        val tx = text.trim()
+        if (!m.outgoing || tx.isEmpty()) return
+        db.messages().edit(m.id, tx)
+        toConv(m.convId, JSONObject().put("t", "edit").put("id", m.id).put("x", tx))
+    }
+
+    suspend fun deleteForEveryone(m: Message) {
+        if (!m.outgoing) return
+        m.mediaPath?.let { runCatching { File(it).delete() } }
+        db.messages().markDeleted(m.id)
+        toConv(m.convId, JSONObject().put("t", "del").put("id", m.id))
+    }
+
+    suspend fun deleteForMe(m: Message) {
+        m.mediaPath?.let { runCatching { File(it).delete() } }
+        db.messages().delete(m.id)
+    }
+
+    suspend fun vote(m: Message, options: List<Int>) {
+        val k = me() ?: return
+        db.social().vote(Vote(m.id, k.pub, m.convId, options.joinToString(","), now()))
+        toConv(m.convId, JSONObject().put("t", "vote").put("id", m.id).put("o", JSONArray().also { a -> options.forEach { a.put(it) } }))
+    }
+
+    suspend fun setDisappearing(conv: String, sec: Long) {
+        val k = me() ?: return
+        val cur = db.social().settingNow(conv) ?: ConvSetting(conv)
+        db.social().saveSetting(cur.copy(ttlSec = sec))
+        db.messages().insert(Message(newId(), conv, k.pub, true, now(), "system", text = ttlSystemText(t("Tu"), sec), status = MsgStatus.READ))
+        toConv(conv, JSONObject().put("t", "ttl").put("s", sec))
+    }
+
+    private suspend fun sweepExpired() {
+        db.messages().expired(now()).forEach { m ->
+            m.mediaPath?.let { runCatching { File(it).delete() } }
+            db.messages().delete(m.id)
         }
     }
 
@@ -752,9 +1020,9 @@ class Messenger(
         val k = me() ?: return null
         val gid = newId()
         val all = (members + k.pub).distinct()
-        val g = Group(gid, name.trim().ifBlank { "Gruppo" }, emoji, all.joinToString(","), k.pub, now())
+        val g = Group(gid, name.trim().ifBlank { t("Gruppo") }, emoji, all.joinToString(","), k.pub, now())
         db.groups().upsert(g)
-        db.messages().insert(Message(newId(), "g:$gid", k.pub, true, now(), "system", text = "Hai creato il gruppo", status = MsgStatus.READ))
+        db.messages().insert(Message(newId(), "g:$gid", k.pub, true, now(), "system", text = t("Hai creato il gruppo"), status = MsgStatus.READ))
         broadcastGroup(g)
         return gid
     }
@@ -771,13 +1039,6 @@ class Messenger(
         g.memberList().filter { it != k.pub }.forEach { sendStored(it, payload) }
     }
 
-    suspend fun addGroupMembers(gid: String, newMembers: List<String>) {
-        val g = db.groups().get(gid) ?: return
-        val updated = g.copy(members = (g.memberList() + newMembers).distinct().joinToString(","))
-        db.groups().upsert(updated)
-        broadcastGroup(updated)
-    }
-
     suspend fun leaveGroup(gid: String) {
         val k = me() ?: return
         val g = db.groups().get(gid) ?: return
@@ -785,16 +1046,12 @@ class Messenger(
         db.groups().delete(gid)
         db.messages().clear("g:$gid")
     }
+}
 
-    // ================================================================== location
-
-    suspend fun sendLocStart(to: String, until: Long) {
-        sendStored(to, JSONObject().put("t", "locstart").put("until", until), 86400)
-    }
-
-    suspend fun sendLocStop(to: String) {
-        sendStored(to, JSONObject().put("t", "locstop"), 86400)
-    }
+fun replyOf(m: Message): ReplyRef? {
+    val raw = m.extra ?: return null
+    val o = runCatching { JSONObject(raw).optJSONObject("re") }.getOrNull() ?: return null
+    return ReplyRef(o.optString("id"), o.optString("s"), o.optString("x"))
 }
 
 // ====================================================================== media helpers

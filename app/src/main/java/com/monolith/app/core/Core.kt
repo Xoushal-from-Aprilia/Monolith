@@ -34,7 +34,6 @@ fun now(): Long = System.currentTimeMillis()
 fun nowSec(): Long = System.currentTimeMillis() / 1000
 fun newId(): String = UUID.randomUUID().toString().replace("-", "").take(24)
 
-val IT: Locale = Locale.ITALIAN
 
 /** short discriminator shown after usernames, e.g. mario#3bf0 */
 fun tagOf(pubkey: String): String = pubkey.take(4)
@@ -45,13 +44,24 @@ fun List<String>.toJsonArray(): JSONArray = JSONArray().also { a -> forEach { a.
 // ------------------------------------------------------------------ time formatting
 
 object Fmt {
-    private fun f(p: String) = SimpleDateFormat(p, IT)
+    private fun f(p: String) = SimpleDateFormat(p, I18n.locale)
+    private fun cap(x: String) = x.replaceFirstChar { it.titlecase(I18n.locale) }
     fun time(ms: Long): String = f("HH:mm").format(Date(ms))
-    fun dayLong(ms: Long): String = f("EEEE d MMMM").format(Date(ms)).replaceFirstChar { it.titlecase(IT) }
-    fun dayShort(ms: Long): String = f("EEE d MMM").format(Date(ms)).replaceFirstChar { it.titlecase(IT) }
-    fun monthYear(ms: Long): String = f("MMMM yyyy").format(Date(ms)).replaceFirstChar { it.titlecase(IT) }
-    fun weekdayLetter(ms: Long): String = f("EEE").format(Date(ms)).take(3).replaceFirstChar { it.titlecase(IT) }
+    fun dayLong(ms: Long): String = cap(f("EEEE d MMMM").format(Date(ms)))
+    fun dayShort(ms: Long): String = cap(f("EEE d MMM").format(Date(ms)))
+    fun date(ms: Long): String = f("d MMM yyyy").format(Date(ms))
+    fun monthYear(ms: Long): String = cap(f("LLLL yyyy").format(Date(ms)))
+    fun weekdayLetter(ms: Long): String = cap(f("EEE").format(Date(ms)).take(3))
     fun dayNum(ms: Long): String = f("d").format(Date(ms))
+
+    /** short weekday names Monday..Sunday in the current language */
+    fun weekHeader(): List<String> {
+        val c = Calendar.getInstance().apply { set(2024, Calendar.JANUARY, 1) } // a Monday
+        return (0 until 7).map { i ->
+            val d = Calendar.getInstance().apply { timeInMillis = c.timeInMillis; add(Calendar.DAY_OF_YEAR, i) }
+            cap(f("EEEEE").format(d.time))
+        }
+    }
 
     fun sameDay(a: Long, b: Long): Boolean {
         val ca = Calendar.getInstance().apply { timeInMillis = a }
@@ -67,20 +77,20 @@ object Fmt {
         val n = now()
         return when {
             sameDay(ms, n) -> time(ms)
-            sameDay(ms, n - 86_400_000L) -> "Ieri"
-            n - ms < 6 * 86_400_000L -> f("EEEE").format(Date(ms)).replaceFirstChar { it.titlecase(IT) }
+            sameDay(ms, n - 86_400_000L) -> t("Ieri")
+            n - ms < 6 * 86_400_000L -> cap(f("EEEE").format(Date(ms)))
             else -> f("dd/MM/yy").format(Date(ms))
         }
     }
 
     fun ago(ms: Long): String {
-        if (ms <= 0) return "mai"
+        if (ms <= 0) return t("mai")
         val d = (now() - ms) / 1000
         return when {
-            d < 10 -> "adesso"
-            d < 60 -> "${d}s fa"
-            d < 3600 -> "${d / 60} min fa"
-            d < 86400 -> "${d / 3600} h fa"
+            d < 10 -> t("adesso")
+            d < 60 -> t("{0} s fa", d)
+            d < 3600 -> t("{0} min fa", d / 60)
+            d < 86400 -> t("{0} h fa", d / 3600)
             else -> dayShort(ms)
         }
     }
@@ -89,6 +99,14 @@ object Fmt {
         val m = ((untilMs - now()) / 60000).coerceAtLeast(0)
         return if (m >= 60) "${m / 60} h ${m % 60} min" else "$m min"
     }
+
+    fun duration(ms: Long): String {
+        val s = (ms / 1000).coerceAtLeast(0)
+        return "%d:%02d".format(s / 60, s % 60)
+    }
+
+    fun distance(m: Float): String =
+        if (m < 1000) "${m.toInt()} m" else String.format(I18n.locale, "%.1f km", m / 1000f)
 }
 
 // ------------------------------------------------------------------ emoji rendering
@@ -177,6 +195,23 @@ class Prefs(ctx: Context) {
     var alwaysOnline: Boolean
         get() = sp.getBoolean("always_online", true)
         set(v) = sp.edit().putBoolean("always_online", v).apply()
+
+    var appLock: Boolean
+        get() = sp.getBoolean("app_lock", false)
+        set(v) = sp.edit().putBoolean("app_lock", v).apply()
+
+    /** last live-location choice, reused by the quick settings tile */
+    var lastShareFriends: List<String>
+        get() = (sp.getString("last_share", "") ?: "").split(",").filter { it.isNotBlank() }
+        set(v) = sp.edit().putString("last_share", v.joinToString(",")).apply()
+    var lastShareMinutes: Int
+        get() = sp.getInt("last_share_min", 60)
+        set(v) = sp.edit().putInt("last_share_min", v).apply()
+
+    /** "on my way" session: friend|lat|lon|label|startedAt */
+    var onTheWay: String
+        get() = sp.getString("otw", "") ?: ""
+        set(v) = sp.edit().putString("otw", v).apply()
 }
 
 // ------------------------------------------------------------------ identity
@@ -245,6 +280,7 @@ class IdentityStore(private val ctx: Context) {
 
     fun npub(): String = keys?.let { Bech32.encode("npub", Hex.decode(it.pub)) } ?: ""
     fun nsec(): String = keys?.let { Bech32.encode("nsec", it.priv) } ?: ""
+    fun recoveryCode(): String = keys?.let { RecoveryCode.encode(it.priv) } ?: ""
 
     fun reset() {
         sp.edit().clear().apply()
@@ -255,6 +291,7 @@ class IdentityStore(private val ctx: Context) {
     companion object {
         /** accepts nsec1... or 64 hex chars */
         fun parseSecret(input: String): ByteArray? {
+            RecoveryCode.decode(input)?.let { return it }
             return try {
                 val s = input.trim()
                 val sk: ByteArray? = if (s.startsWith("nsec1")) {
@@ -294,6 +331,53 @@ class IdentityStore(private val ctx: Context) {
         val c = Cipher.getInstance("AES/GCM/NoPadding")
         c.init(Cipher.DECRYPT_MODE, secretKey(), GCMParameterSpec(128, iv))
         return c.doFinal(ct)
+    }
+}
+
+/**
+ * Human friendly recovery code: base32 of the 32-byte secret + 2 checksum bytes,
+ * grouped in blocks of 5 (e.g. ABCDE-FGHIJ-...).
+ */
+object RecoveryCode {
+    private const val ALPHA = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"
+
+    fun encode(secret: ByteArray): String {
+        val data = secret + Secp256k1.sha256(secret).copyOfRange(0, 2)
+        val sb = StringBuilder()
+        var buffer = 0
+        var bits = 0
+        for (b in data) {
+            buffer = (buffer shl 8) or (b.toInt() and 0xff)
+            bits += 8
+            while (bits >= 5) {
+                bits -= 5
+                sb.append(ALPHA[(buffer shr bits) and 31])
+            }
+        }
+        if (bits > 0) sb.append(ALPHA[(buffer shl (5 - bits)) and 31])
+        return sb.chunked(5).joinToString("-")
+    }
+
+    fun decode(code: String): ByteArray? {
+        val clean = code.uppercase(Locale.ROOT).filter { it.isLetterOrDigit() }
+        if (clean.length != 55 || clean.any { it !in ALPHA }) return null
+        val out = java.io.ByteArrayOutputStream()
+        var buffer = 0
+        var bits = 0
+        for (c in clean) {
+            buffer = (buffer shl 5) or ALPHA.indexOf(c)
+            bits += 5
+            if (bits >= 8) {
+                bits -= 8
+                out.write((buffer shr bits) and 0xff)
+            }
+        }
+        val all = out.toByteArray()
+        if (all.size < 34) return null
+        val secret = all.copyOfRange(0, 32)
+        val check = Secp256k1.sha256(secret).copyOfRange(0, 2)
+        if (!check.contentEquals(all.copyOfRange(32, 34))) return null
+        return if (Secp256k1.isValidPrivateKey(secret)) secret else null
     }
 }
 

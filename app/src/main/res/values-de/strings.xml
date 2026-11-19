@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Live-Standort</string>
+    <string name="widget_label">Monolith-Kalender</string>
+    <string name="widget_desc">Deine nächsten Termine</string>
+</resources>

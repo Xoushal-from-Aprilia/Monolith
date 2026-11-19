@@ -11,19 +11,24 @@ import android.content.pm.PackageManager
 import android.content.pm.ServiceInfo
 import android.os.Build
 import android.os.IBinder
+import android.service.quicksettings.Tile
+import android.service.quicksettings.TileService
 import androidx.core.app.RemoteInput
 import androidx.core.app.ServiceCompat
 import androidx.core.content.ContextCompat
 import com.monolith.app.Graph
+import com.monolith.app.MainActivity
 import com.monolith.app.core.Fmt
+import com.monolith.app.core.Recur
 import com.monolith.app.core.now
+import com.monolith.app.core.t
 import com.monolith.app.data.AgendaEvent
 import com.monolith.app.data.InviteState
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
 
-/** Foreground service that keeps the relay connections (and live location / calls) alive. */
+/** Foreground service that keeps Monolith reachable (messages, calls, live location). */
 class MonolithService : Service() {
 
     override fun onBind(intent: Intent?): IBinder? = null
@@ -61,6 +66,9 @@ class MonolithService : Service() {
         if (Build.VERSION.SDK_INT >= 30 && inCall && granted(Manifest.permission.RECORD_AUDIO)) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
         }
+        if (Build.VERSION.SDK_INT >= 30 && Graph.calls.videoCall && granted(Manifest.permission.CAMERA)) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
+        }
         val n = Graph.notifier.serviceNotification(sharing, inCall)
         try {
             ServiceCompat.startForeground(this, Notifier.ID_SERVICE, n, types)
@@ -91,58 +99,69 @@ class MonolithService : Service() {
     }
 }
 
+/** Agenda reminders: one alarm per reminder offset, always for the next occurrence. */
 object ReminderScheduler {
-    private fun pending(ctx: Context, id: String, create: Boolean): PendingIntent? {
-        val i = Intent(ctx, ReminderReceiver::class.java).putExtra("id", id).setAction("monolith.reminder.$id")
+    private val ALL_OFFSETS = listOf(0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080)
+
+    private fun pending(ctx: Context, id: String, minutes: Int, create: Boolean, occurrence: Long = 0L): PendingIntent? {
+        val i = Intent(ctx, ReminderReceiver::class.java)
+            .putExtra("id", id).putExtra("occ", occurrence)
+            .setAction("monolith.reminder.$id.$minutes")
         val flags = PendingIntent.FLAG_IMMUTABLE or if (create) PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_NO_CREATE
-        return PendingIntent.getBroadcast(ctx, id.hashCode(), i, flags)
+        return PendingIntent.getBroadcast(ctx, (id + minutes).hashCode(), i, flags)
     }
 
-    fun triggerAt(e: AgendaEvent): Long? {
-        if (e.reminderMin < 0) return null
-        val base = if (e.allDay) Fmt.startOfDay(e.start) + 9 * 3_600_000L else e.start
-        return base - e.reminderMin * 60_000L
-    }
+    private fun baseOf(e: AgendaEvent, occ: Long) = if (e.allDay) Fmt.startOfDay(occ) + 9 * 3_600_000L else occ
 
     fun schedule(ctx: Context, e: AgendaEvent) {
-        val t = triggerAt(e)
-        if (t == null || t < now() - 30_000 || e.inviteState == InviteState.DECLINED || e.inviteState == InviteState.PENDING) {
-            cancel(ctx, e.id)
-            return
-        }
+        cancel(ctx, e.id)
+        if (e.inviteState == InviteState.DECLINED || e.inviteState == InviteState.PENDING) return
         val am = ctx.getSystemService(AlarmManager::class.java)
-        val pi = pending(ctx, e.id, true) ?: return
-        try {
-            if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
-                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t, pi)
-            } else {
-                am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t, pi)
+        e.reminderList().forEach { m ->
+            // first occurrence whose reminder time is still ahead
+            var occ = Recur.nextAfter(e, now() - 60_000) ?: return@forEach
+            var guard = 0
+            while (baseOf(e, occ) - m * 60_000L < now() - 30_000 && guard < 400) {
+                occ = Recur.nextAfter(e, occ + 60_000) ?: return@forEach
+                guard++
             }
-        } catch (_: SecurityException) {
-            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, t, pi)
+            val trigger = baseOf(e, occ) - m * 60_000L
+            val pi = pending(ctx, e.id, m, true, occ) ?: return@forEach
+            try {
+                if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
+                    am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
+                } else {
+                    am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
+                }
+            } catch (_: SecurityException) {
+                am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
+            }
         }
     }
 
     fun cancel(ctx: Context, id: String) {
-        val pi = pending(ctx, id, false) ?: return
-        ctx.getSystemService(AlarmManager::class.java).cancel(pi)
-        pi.cancel()
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        ALL_OFFSETS.forEach { m ->
+            pending(ctx, id, m, false)?.let { am.cancel(it); it.cancel() }
+        }
     }
 
     suspend fun rescheduleAll(ctx: Context) {
-        Graph.db.agenda().upcoming(now() - 86_400_000L).forEach { schedule(ctx, it) }
+        Graph.db.agenda().allNow().forEach { schedule(ctx, it) }
     }
 }
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra("id") ?: return
+        val occ = intent.getLongExtra("occ", 0L)
         val pending = goAsync()
         Graph.scope.launch {
             try {
                 val ev = Graph.db.agenda().get(id)
                 if (ev != null && ev.inviteState != InviteState.DECLINED && ev.inviteState != InviteState.PENDING) {
-                    Graph.notifier.reminder(ev)
+                    Graph.notifier.reminder(ev, if (occ > 0) occ else ev.start)
+                    ReminderScheduler.schedule(context, ev)
                 }
             } finally {
                 pending.finish()
@@ -187,6 +206,10 @@ class ActionReceiver : BroadcastReceiver() {
         MonolithService.start(context)
         Graph.scope.launch {
             try {
+                if (intent.action == ACTION_DECLINE_CALL) {
+                    Graph.calls.decline()
+                    return@launch
+                }
                 withTimeoutOrNull(8000) { while (Graph.relays.connectedCount == 0) delay(200) }
                 val m = Graph.messenger
                 when (intent.action) {
@@ -203,7 +226,6 @@ class ActionReceiver : BroadcastReceiver() {
                     ACTION_READ -> intent.getStringExtra(EXTRA_CONV)?.let { m.markRead(it); Graph.notifier.cancelConversation(it) }
                     ACTION_ACCEPT_FRIEND -> intent.getStringExtra(EXTRA_PK)?.let { m.acceptFriend(it); delay(1200) }
                     ACTION_DECLINE_FRIEND -> intent.getStringExtra(EXTRA_PK)?.let { m.declineFriend(it) }
-                    ACTION_DECLINE_CALL -> Graph.calls.decline()
                     ACTION_STOP_SHARING -> Graph.location.stopSharing()
                     ACTION_EVENT_YES, ACTION_EVENT_NO -> intent.getStringExtra(EXTRA_EVENT)?.let {
                         m.respondInvite(it, intent.action == ACTION_EVENT_YES)
@@ -215,5 +237,40 @@ class ActionReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+}
+
+/** Quick settings tile: start/stop live location in one tap */
+class ShareTile : TileService() {
+    override fun onStartListening() {
+        super.onStartListening()
+        refresh()
+    }
+
+    override fun onClick() {
+        super.onClick()
+        if (Graph.location.sharing.value) {
+            Graph.location.stopSharing()
+            qsTile?.let { it.state = Tile.STATE_INACTIVE; it.updateTile() }
+            return
+        }
+        val i = Intent(this, MainActivity::class.java)
+            .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_SINGLE_TOP)
+            .putExtra(Notifier.EXTRA_QUICK_SHARE, true)
+        if (Build.VERSION.SDK_INT >= 34) {
+            startActivityAndCollapse(PendingIntent.getActivity(this, 90, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT))
+        } else {
+            @Suppress("DEPRECATION")
+            startActivityAndCollapse(i)
+        }
+    }
+
+    private fun refresh() {
+        val tile = qsTile ?: return
+        val on = Graph.location.sharing.value
+        tile.state = if (on) Tile.STATE_ACTIVE else Tile.STATE_INACTIVE
+        tile.label = t("Posizione live")
+        if (Build.VERSION.SDK_INT >= 29) tile.subtitle = if (on) t("Attiva") else t("Tocca per condividere")
+        tile.updateTile()
     }
 }

@@ -30,7 +30,6 @@ import androidx.compose.animation.slideInHorizontally
 import androidx.compose.animation.slideOutHorizontally
 import androidx.compose.animation.togetherWith
 import androidx.compose.foundation.background
-import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -50,6 +49,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.Alarm
 import androidx.compose.material.icons.rounded.BatteryChargingFull
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Call
@@ -60,7 +60,8 @@ import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PhotoCamera
-import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.Restore
+import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material3.Button
 import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.Icon
@@ -87,13 +88,16 @@ import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.input.KeyboardCapitalization
-import androidx.compose.ui.text.style.TextAlign
+import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.compose.LifecycleEventEffect
 import com.monolith.app.Graph
+import com.monolith.app.core.Backup
+import com.monolith.app.core.I18n
 import com.monolith.app.core.IdentityStore
 import com.monolith.app.core.Profile
+import com.monolith.app.core.t
 import com.monolith.app.crypto.Hex
 import com.monolith.app.crypto.Secp256k1
 import com.monolith.app.nostr.Envelope
@@ -103,8 +107,10 @@ import com.monolith.app.ui.components.MonolithMark
 import com.monolith.app.ui.components.PopIn
 import com.monolith.app.ui.components.bounceClick
 import com.monolith.app.ui.theme.Motion
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import org.json.JSONArray
 import org.json.JSONObject
 
@@ -123,15 +129,27 @@ fun OnboardingFlow() {
         label = "onboarding",
     ) { s ->
         when (s) {
-            0 -> Welcome(onStart = { imported = null; step = 1 }, onImport = { step = 2 })
+            0 -> Welcome(onStart = { imported = null; step = 1 }, onRestore = { step = 2 })
             1 -> ProfileSetup(imported = imported, onBack = { step = if (imported != null) 2 else 0 })
-            else -> ImportKey(onBack = { step = 0 }, onKey = { imported = it; step = 1 })
+            else -> Restore(onBack = { step = 0 }, onKey = { imported = it; step = 1 })
         }
     }
 }
 
 @Composable
-private fun Welcome(onStart: () -> Unit, onImport: () -> Unit) {
+private fun LanguageButton() {
+    var open by remember { mutableStateOf(false) }
+    val ctx = LocalContext.current
+    TextButton(onClick = { open = true }) {
+        Icon(Icons.Rounded.Translate, null, Modifier.size(18.dp))
+        Spacer(Modifier.width(6.dp))
+        Text(I18n.LANGS.first { it.first == I18n.lang }.second)
+    }
+    if (open) LanguageDialog(onDismiss = { open = false }) { I18n.set(ctx, it); open = false }
+}
+
+@Composable
+private fun Welcome(onStart: () -> Unit, onRestore: () -> Unit) {
     val rise = remember { Animatable(0f) }
     val inf = rememberInfiniteTransition(label = "welcome")
     val sweep by inf.animateFloat(-0.3f, 1.3f, infiniteRepeatable(tween(3200, easing = LinearEasing)), label = "sweep")
@@ -141,27 +159,31 @@ private fun Welcome(onStart: () -> Unit, onImport: () -> Unit) {
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()
             .padding(horizontal = 28.dp),
     ) {
-        Spacer(Modifier.weight(0.6f))
-        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
-            MonolithMark(Modifier.height(180.dp).graphicsOffset(float), rise = rise.value, sweep = sweep)
+        Row(Modifier.fillMaxWidth()) {
+            Spacer(Modifier.weight(1f))
+            LanguageButton()
         }
-        Spacer(Modifier.height(36.dp))
+        Spacer(Modifier.weight(0.5f))
+        Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+            MonolithMark(Modifier.height(170.dp).graphicsLayer { translationY = float * density }, rise = rise.value, sweep = sweep)
+        }
+        Spacer(Modifier.height(32.dp))
         PopIn(250) {
             Column {
                 Text("Monolith", style = MaterialTheme.typography.displayMedium)
                 Spacer(Modifier.height(8.dp))
                 Text(
-                    "Agenda, chat e posizione in tempo reale.\nSolo tu e i tuoi amici, senza server.",
+                    t("Agenda, chat e posizione in tempo reale.\nSolo tu e i tuoi amici."),
                     style = MaterialTheme.typography.bodyLarge,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
             }
         }
-        Spacer(Modifier.height(28.dp))
+        Spacer(Modifier.height(24.dp))
         val features = listOf(
-            Triple(Icons.Rounded.CalendarMonth, "Agenda", "Eventi, promemoria con emoji, inviti agli amici"),
-            Triple(Icons.Rounded.Forum, "Clubhouse", "Chat private e di gruppo, foto, trilli"),
-            Triple(Icons.Rounded.LocationOn, "Posizione live", "Peer-to-peer con WebRTC, cifrata end-to-end"),
+            Triple(Icons.Rounded.CalendarMonth, t("Agenda"), t("Eventi, liste condivise, promemoria con emoji")),
+            Triple(Icons.Rounded.Forum, t("Clubhouse"), t("Chat, gruppi, vocali e videochiamate")),
+            Triple(Icons.Rounded.LocationOn, t("Posizione live"), t("Condividi dove sei solo con chi vuoi")),
         )
         features.forEachIndexed { i, (icon, title, desc) ->
             PopIn(450 + i * 120) {
@@ -181,24 +203,20 @@ private fun Welcome(onStart: () -> Unit, onImport: () -> Unit) {
         Spacer(Modifier.weight(1f))
         PopIn(900) {
             Column {
-                Button(
-                    onClick = onStart,
-                    modifier = Modifier.fillMaxWidth().height(56.dp),
-                    shape = CircleShape,
-                ) { Text("Crea il tuo profilo", style = MaterialTheme.typography.titleMedium) }
+                Button(onClick = onStart, modifier = Modifier.fillMaxWidth().height(56.dp), shape = CircleShape) {
+                    Text(t("Crea il tuo profilo"), style = MaterialTheme.typography.titleMedium)
+                }
                 Spacer(Modifier.height(4.dp))
-                TextButton(onClick = onImport, modifier = Modifier.fillMaxWidth()) {
-                    Icon(Icons.Rounded.Key, null, Modifier.size(18.dp))
+                TextButton(onClick = onRestore, modifier = Modifier.fillMaxWidth()) {
+                    Icon(Icons.Rounded.Restore, null, Modifier.size(18.dp))
                     Spacer(Modifier.width(8.dp))
-                    Text("Ho già una chiave Monolith")
+                    Text(t("Ho già un profilo Monolith"))
                 }
             }
         }
         Spacer(Modifier.height(12.dp))
     }
 }
-
-private fun Modifier.graphicsOffset(dy: Float): Modifier = this.graphicsLayer { translationY = dy * density }
 
 private enum class NameState { IDLE, INVALID, CHECKING, FREE, TAKEN, OFFLINE }
 
@@ -213,7 +231,6 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
     val scope = rememberCoroutineScope()
     val importedPub = remember(imported) { imported?.let { Hex.encode(Secp256k1.publicKey(it)) } }
 
-    // restore a profile previously published with this key
     LaunchedEffect(importedPub) {
         val pk = importedPub ?: return@LaunchedEffect
         val evs = Graph.relays.query(
@@ -244,14 +261,10 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()
             .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") }
+        IconButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
         Spacer(Modifier.height(8.dp))
-        Text("Chi sei?", style = MaterialTheme.typography.displaySmall)
-        Text(
-            "Il tuo username serve agli amici per trovarti.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text(t("Chi sei?"), style = MaterialTheme.typography.displaySmall)
+        Text(t("Il tuo username serve agli amici per trovarti."), style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
         Spacer(Modifier.height(28.dp))
         Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
             Column(horizontalAlignment = Alignment.CenterHorizontally) {
@@ -261,24 +274,20 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
                     label = "avatar",
                 ) { e -> Avatar(e, 112.dp, Modifier.bounceClick(0.9f) { picker = true }) }
                 Spacer(Modifier.height(8.dp))
-                Text("Tocca per cambiare", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text(t("Tocca per cambiare"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Spacer(Modifier.height(24.dp))
         OutlinedTextField(
-            value = name,
-            onValueChange = { name = it.take(32) },
-            label = { Text("Nome visualizzato") },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words),
-            shape = MaterialTheme.shapes.medium,
+            value = name, onValueChange = { name = it.take(32) }, label = { Text(t("Nome visualizzato")) },
+            singleLine = true, modifier = Modifier.fillMaxWidth(),
+            keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Words), shape = MaterialTheme.shapes.medium,
         )
         Spacer(Modifier.height(12.dp))
         OutlinedTextField(
             value = username,
             onValueChange = { username = it.lowercase().filter { c -> c.isLetterOrDigit() || c == '_' || c == '.' }.take(20) },
-            label = { Text("Username") },
+            label = { Text(t("Username")) },
             prefix = { Text("@") },
             singleLine = true,
             modifier = Modifier.fillMaxWidth(),
@@ -288,12 +297,11 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
                 AnimatedContent(state, label = "nameState") { s ->
                     Text(
                         when (s) {
-                            NameState.IDLE -> "3–20 caratteri: lettere, numeri, _ e ."
-                            NameState.INVALID -> "Usa 3–20 caratteri: lettere, numeri, _ e ."
-                            NameState.CHECKING -> "Controllo disponibilità…"
-                            NameState.FREE -> "✓ Disponibile"
-                            NameState.TAKEN -> "Già usato da qualcun altro"
-                            NameState.OFFLINE -> "Non riesco a verificare ora, puoi continuare"
+                            NameState.IDLE, NameState.INVALID -> t("3–20 caratteri: lettere, numeri, _ e .")
+                            NameState.CHECKING -> t("Controllo disponibilità…")
+                            NameState.FREE -> "✓ " + t("Disponibile")
+                            NameState.TAKEN -> t("Già usato da qualcun altro")
+                            NameState.OFFLINE -> t("Non riesco a verificare ora, puoi continuare")
                         }
                     )
                 }
@@ -305,18 +313,17 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
             onClick = {
                 creating = true
                 scope.launch {
-                    val p = Profile(Profile.normalizeUsername(username), name.trim(), emoji)
-                    Graph.identity.create(p, imported)
+                    Graph.identity.create(Profile(Profile.normalizeUsername(username), name.trim(), emoji), imported)
                     Graph.startEngine()
                 }
             },
             enabled = ok,
             modifier = Modifier.fillMaxWidth().height(56.dp),
             shape = CircleShape,
-        ) { Text(if (creating) "Creo la tua identità…" else "Entra in Monolith", style = MaterialTheme.typography.titleMedium) }
+        ) { Text(if (creating) t("Preparo il tuo profilo…") else t("Entra in Monolith"), style = MaterialTheme.typography.titleMedium) }
         Spacer(Modifier.height(16.dp))
         Text(
-            "Monolith crea una chiave crittografica solo sul tuo telefono: è la tua identità. Nessuna email, nessun numero, nessun server.",
+            t("Il tuo profilo vive solo su questo telefono: niente email, niente numero di telefono."),
             style = MaterialTheme.typography.bodySmall,
             color = MaterialTheme.colorScheme.onSurfaceVariant,
         )
@@ -326,39 +333,85 @@ private fun ProfileSetup(imported: ByteArray?, onBack: () -> Unit) {
 }
 
 @Composable
-private fun ImportKey(onBack: () -> Unit, onKey: (ByteArray) -> Unit) {
-    var text by rememberSaveable { mutableStateOf("") }
-    val parsed = remember(text) { IdentityStore.parseSecret(text) }
+private fun Restore(onBack: () -> Unit, onKey: (ByteArray) -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var code by rememberSaveable { mutableStateOf("") }
+    val parsed = remember(code) { IdentityStore.parseSecret(code) }
+    var fileUri by remember { mutableStateOf<Uri?>(null) }
+    var password by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var error by remember { mutableStateOf<String?>(null) }
+    val pick = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri -> if (uri != null) { fileUri = uri; error = null } }
+
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()
-            .imePadding().padding(horizontal = 24.dp),
+            .imePadding().verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
     ) {
-        IconButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") }
+        IconButton(onClick = onBack, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
         Spacer(Modifier.height(8.dp))
-        Text("Ripristina", style = MaterialTheme.typography.displaySmall)
-        Text(
-            "Incolla la chiave segreta (nsec…) che hai salvato dalle impostazioni di Monolith.",
-            style = MaterialTheme.typography.bodyLarge,
-            color = MaterialTheme.colorScheme.onSurfaceVariant,
-        )
+        Text(t("Ripristina"), style = MaterialTheme.typography.displaySmall)
+        Spacer(Modifier.height(20.dp))
+
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp)) {
+                Text(t("Da un file di backup"), style = MaterialTheme.typography.titleMedium)
+                Text(t("Recupera profilo, chat, agenda, liste e amici."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(12.dp))
+                OutlinedButton(onClick = { pick.launch(arrayOf("*/*")) }, shape = CircleShape) {
+                    Text(if (fileUri == null) t("Scegli file") else t("File selezionato ✓"))
+                }
+                if (fileUri != null) {
+                    Spacer(Modifier.height(10.dp))
+                    OutlinedTextField(
+                        value = password, onValueChange = { password = it }, label = { Text(t("Password del backup")) },
+                        singleLine = true, visualTransformation = PasswordVisualTransformation(),
+                        modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+                    )
+                    error?.let { Text(it, style = MaterialTheme.typography.bodySmall, modifier = Modifier.padding(top = 6.dp)) }
+                    Spacer(Modifier.height(10.dp))
+                    Button(
+                        onClick = {
+                            busy = true
+                            scope.launch {
+                                val ok = withContext(Dispatchers.IO) {
+                                    runCatching {
+                                        ctx.contentResolver.openInputStream(fileUri!!)?.use { Backup.import(ctx, it, password.toCharArray()) } ?: false
+                                    }.getOrDefault(false)
+                                }
+                                busy = false
+                                if (ok) Graph.startEngine() else error = t("Password errata o file non valido")
+                            }
+                        },
+                        enabled = password.isNotEmpty() && !busy,
+                        shape = CircleShape,
+                        modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (busy) t("Ripristino in corso…") else t("Ripristina backup")) }
+                }
+            }
+        }
+        Spacer(Modifier.height(14.dp))
+        Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
+            Column(Modifier.padding(18.dp)) {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    Icon(Icons.Rounded.Key, null, Modifier.size(18.dp))
+                    Spacer(Modifier.width(8.dp))
+                    Text(t("Con il codice di recupero"), style = MaterialTheme.typography.titleMedium)
+                }
+                Text(t("Recupera il profilo e gli amici, non le chat."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    value = code, onValueChange = { code = it.trim() }, label = { Text(t("Codice di recupero")) },
+                    modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium,
+                    isError = code.isNotEmpty() && parsed == null,
+                    supportingText = { if (code.isNotEmpty() && parsed == null) Text(t("Codice non valido")) },
+                )
+                Button(onClick = { parsed?.let(onKey) }, enabled = parsed != null, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                    Text(t("Continua"))
+                }
+            }
+        }
         Spacer(Modifier.height(24.dp))
-        OutlinedTextField(
-            value = text,
-            onValueChange = { text = it.trim() },
-            label = { Text("Chiave segreta") },
-            modifier = Modifier.fillMaxWidth(),
-            shape = MaterialTheme.shapes.medium,
-            isError = text.isNotEmpty() && parsed == null,
-            supportingText = { if (text.isNotEmpty() && parsed == null) Text("Chiave non valida") },
-        )
-        Spacer(Modifier.weight(1f))
-        Button(
-            onClick = { parsed?.let(onKey) },
-            enabled = parsed != null,
-            modifier = Modifier.fillMaxWidth().height(56.dp).padding(bottom = 0.dp),
-            shape = CircleShape,
-        ) { Text("Continua", style = MaterialTheme.typography.titleMedium) }
-        Spacer(Modifier.height(16.dp))
     }
 }
 
@@ -379,26 +432,26 @@ private fun granted(ctx: Context, p: String) = androidx.core.content.ContextComp
 @SuppressLint("BatteryLife")
 private fun permissionList(): List<Perm> = buildList {
     if (Build.VERSION.SDK_INT >= 33) {
-        add(Perm("notif", Icons.Rounded.Notifications, "Notifiche", "Messaggi, inviti e promemoria con la tua emoji",
+        add(Perm("notif", Icons.Rounded.Notifications, t("Notifiche"), t("Messaggi, inviti e promemoria con la tua emoji"),
             listOf(Manifest.permission.POST_NOTIFICATIONS), { granted(it, Manifest.permission.POST_NOTIFICATIONS) }))
     }
-    add(Perm("loc", Icons.Rounded.LocationOn, "Posizione", "Per condividere dove sei in tempo reale",
+    add(Perm("loc", Icons.Rounded.LocationOn, t("Posizione"), t("Per condividere dove sei in tempo reale"),
         listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
         { granted(it, Manifest.permission.ACCESS_FINE_LOCATION) || granted(it, Manifest.permission.ACCESS_COARSE_LOCATION) }))
-    add(Perm("cam", Icons.Rounded.PhotoCamera, "Fotocamera", "Scatta foto da mandare in chat",
+    add(Perm("cam", Icons.Rounded.PhotoCamera, t("Fotocamera"), t("Foto, videochiamate e codici QR"),
         listOf(Manifest.permission.CAMERA), { granted(it, Manifest.permission.CAMERA) }))
-    add(Perm("mic", Icons.Rounded.Mic, "Microfono", "Chiamate vocali peer-to-peer",
+    add(Perm("mic", Icons.Rounded.Mic, t("Microfono"), t("Chiamate e messaggi vocali"),
         listOf(Manifest.permission.RECORD_AUDIO), { granted(it, Manifest.permission.RECORD_AUDIO) }))
-    add(Perm("battery", Icons.Rounded.BatteryChargingFull, "Sempre online", "Evita che Android chiuda Monolith in background",
+    add(Perm("battery", Icons.Rounded.BatteryChargingFull, t("Sempre attivo"), t("Evita che Android chiuda Monolith in background"),
         check = { c -> c.getSystemService(PowerManager::class.java).isIgnoringBatteryOptimizations(c.packageName) },
         settingsIntent = { c -> Intent(Settings.ACTION_REQUEST_IGNORE_BATTERY_OPTIMIZATIONS, Uri.parse("package:" + c.packageName)) }))
     if (Build.VERSION.SDK_INT in 31..32) {
-        add(Perm("alarm", Icons.Rounded.Alarm, "Promemoria precisi", "Notifiche dell'agenda all'orario esatto",
+        add(Perm("alarm", Icons.Rounded.Alarm, t("Promemoria precisi"), t("Notifiche dell'agenda all'orario esatto"),
             check = { c -> c.getSystemService(AlarmManager::class.java).canScheduleExactAlarms() },
             settingsIntent = { c -> Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:" + c.packageName)) }))
     }
     if (Build.VERSION.SDK_INT >= 34) {
-        add(Perm("fsi", Icons.Rounded.Call, "Chiamate a schermo intero", "Mostra le chiamate in arrivo anche a schermo bloccato",
+        add(Perm("fsi", Icons.Rounded.Call, t("Chiamate a schermo intero"), t("Mostra le chiamate in arrivo anche a schermo bloccato"),
             check = { c -> c.getSystemService(NotificationManager::class.java).canUseFullScreenIntent() },
             settingsIntent = { c -> Intent(Settings.ACTION_MANAGE_APP_USE_FULL_SCREEN_INTENT, Uri.parse("package:" + c.packageName)) }))
     }
@@ -407,19 +460,17 @@ private fun permissionList(): List<Perm> = buildList {
 @Composable
 fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
     val ctx = LocalContext.current
-    val perms = remember { permissionList() }
+    val perms = remember(I18n.lang) { permissionList() }
     var tick by remember { mutableIntStateOf(0) }
     LifecycleEventEffect(Lifecycle.Event.ON_RESUME) { tick++ }
-    val states = remember(tick) { perms.associate { it.key to it.check(ctx) } }
+    val states = remember(tick, perms) { perms.associate { it.key to it.check(ctx) } }
     var chainBattery by remember { mutableStateOf(false) }
 
     val batteryPerm = perms.first { it.key == "battery" }
     val single = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { tick++ }
     val all = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
         tick++
-        if (chainBattery && !batteryPerm.check(ctx)) {
-            runCatching { ctx.startActivity(batteryPerm.settingsIntent!!(ctx)) }
-        }
+        if (chainBattery && !batteryPerm.check(ctx)) runCatching { ctx.startActivity(batteryPerm.settingsIntent!!(ctx)) }
         chainBattery = false
     }
 
@@ -428,25 +479,21 @@ fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
         else p.settingsIntent?.let { runCatching { ctx.startActivity(it(ctx)) } }
     }
 
-    Column(
-        Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding(),
-    ) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()) {
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState()).padding(horizontal = 20.dp)) {
             if (!first) {
-                IconButton(onClick = onDone, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, "Indietro") }
+                IconButton(onClick = onDone, modifier = Modifier.padding(top = 4.dp)) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
             } else Spacer(Modifier.height(32.dp))
-            Text("Permessi", style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(horizontal = 4.dp))
+            Text(t("Permessi"), style = MaterialTheme.typography.displaySmall, modifier = Modifier.padding(horizontal = 4.dp))
             Text(
-                "Ti chiedo solo ciò che serve. Puoi cambiarli quando vuoi dalle impostazioni.",
+                t("Ti chiedo solo ciò che serve. Puoi cambiarli quando vuoi dalle impostazioni."),
                 style = MaterialTheme.typography.bodyLarge,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
                 modifier = Modifier.padding(horizontal = 4.dp),
             )
             Spacer(Modifier.height(20.dp))
             perms.forEachIndexed { i, p ->
-                PopIn(80 * i) {
-                    PermissionCard(p, states[p.key] == true) { request(p) }
-                }
+                PopIn(80 * i) { PermissionCard(p, states[p.key] == true) { request(p) } }
                 Spacer(Modifier.height(10.dp))
             }
         }
@@ -464,9 +511,9 @@ fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
                 },
                 modifier = Modifier.fillMaxWidth().height(56.dp),
                 shape = CircleShape,
-            ) { Text(if (anyMissing) "Consenti tutto" else "Tutto pronto · Continua", style = MaterialTheme.typography.titleMedium) }
+            ) { Text(if (anyMissing) t("Consenti tutto") else t("Tutto pronto · Continua"), style = MaterialTheme.typography.titleMedium) }
             if (anyMissing) {
-                TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text(if (first) "Più tardi" else "Chiudi") }
+                TextButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) { Text(if (first) t("Più tardi") else t("Chiudi")) }
             }
         }
     }
@@ -474,16 +521,11 @@ fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
 
 @Composable
 private fun PermissionCard(p: Perm, ok: Boolean, onRequest: () -> Unit) {
-    Surface(
-        shape = MaterialTheme.shapes.large,
-        color = MaterialTheme.colorScheme.surfaceContainerLow,
-        modifier = Modifier.fillMaxWidth(),
-    ) {
+    Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.fillMaxWidth()) {
         Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(
-                Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest),
-                contentAlignment = Alignment.Center,
-            ) { Icon(p.icon, null, Modifier.size(22.dp)) }
+            Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
+                Icon(p.icon, null, Modifier.size(22.dp))
+            }
             Spacer(Modifier.width(14.dp))
             Column(Modifier.weight(1f)) {
                 Text(p.title, style = MaterialTheme.typography.titleMedium)
@@ -494,23 +536,15 @@ private fun PermissionCard(p: Perm, ok: Boolean, onRequest: () -> Unit) {
                 ok,
                 transitionSpec = { (scaleIn(Motion.bouncy(), initialScale = 0.4f) + fadeIn()) togetherWith (scaleOut(targetScale = 0.6f) + fadeOut()) },
                 label = "perm",
-            ) { granted ->
-                if (granted) {
-                    Box(
-                        Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Check, "Concesso", tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp)) }
-                } else {
-                    OutlinedButton(onClick = onRequest, shape = CircleShape, contentPadding = ButtonDefaults.TextButtonContentPadding) {
-                        Text("Consenti")
+            ) { g ->
+                if (g) {
+                    Box(Modifier.size(36.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Check, t("Concesso"), tint = MaterialTheme.colorScheme.onPrimary, modifier = Modifier.size(20.dp))
                     }
+                } else {
+                    OutlinedButton(onClick = onRequest, shape = CircleShape, contentPadding = ButtonDefaults.TextButtonContentPadding) { Text(t("Consenti")) }
                 }
             }
         }
     }
 }
-
-@Suppress("unused")
-private val keepArrangement = Arrangement.Center
-@Suppress("unused")
-private val keepAlign = TextAlign.Center

@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Position en direct</string>
+    <string name="widget_label">Agenda Monolith</string>
+    <string name="widget_desc">Vos prochains événements</string>
+</resources>

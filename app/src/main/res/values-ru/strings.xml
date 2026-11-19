@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Геопозиция онлайн</string>
+    <string name="widget_label">Календарь Monolith</string>
+    <string name="widget_desc">Ваши ближайшие события</string>
+</resources>

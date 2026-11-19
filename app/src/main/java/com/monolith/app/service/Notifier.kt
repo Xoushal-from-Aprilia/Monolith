@@ -26,6 +26,7 @@ import com.monolith.app.R
 import com.monolith.app.core.EmojiArt
 import com.monolith.app.core.Fmt
 import com.monolith.app.core.now
+import com.monolith.app.core.t
 import com.monolith.app.data.AgendaEvent
 import java.util.concurrent.ConcurrentHashMap
 
@@ -46,6 +47,7 @@ class Notifier(private val ctx: Context) {
         const val EXTRA_EVENT = "open_event"
         const val EXTRA_CALL = "open_call"
         const val EXTRA_ACCEPT_CALL = "accept_call"
+        const val EXTRA_QUICK_SHARE = "quick_share"
 
         private const val INK = 0xFF0A0A0A.toInt()
     }
@@ -56,25 +58,13 @@ class Notifier(private val ctx: Context) {
     fun createChannels() {
         val m = ctx.getSystemService(NotificationManager::class.java)
         val list = listOf(
-            NotificationChannel(CH_MESSAGES, "Messaggi", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Nuovi messaggi in Clubhouse"
-                enableVibration(true)
-            },
-            NotificationChannel(CH_SOCIAL, "Amici e inviti", NotificationManager.IMPORTANCE_DEFAULT).apply {
-                description = "Richieste di amicizia, inviti, posizione"
-            },
-            NotificationChannel(CH_REMINDERS, "Promemoria agenda", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Promemoria degli eventi"
-                enableVibration(true)
-            },
-            NotificationChannel(CH_CALLS, "Chiamate", NotificationManager.IMPORTANCE_HIGH).apply {
-                description = "Chiamate vocali in arrivo"
+            NotificationChannel(CH_MESSAGES, t("Messaggi"), NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) },
+            NotificationChannel(CH_SOCIAL, t("Amici e inviti"), NotificationManager.IMPORTANCE_DEFAULT),
+            NotificationChannel(CH_REMINDERS, t("Promemoria agenda"), NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) },
+            NotificationChannel(CH_CALLS, t("Chiamate"), NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
             },
-            NotificationChannel(CH_SERVICE, "Connessione", NotificationManager.IMPORTANCE_MIN).apply {
-                description = "Mantiene Monolith sempre online"
-                setShowBadge(false)
-            },
+            NotificationChannel(CH_SERVICE, t("Connessione"), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) },
         )
         m.createNotificationChannels(list)
     }
@@ -136,9 +126,8 @@ class Notifier(private val ctx: Context) {
             lines.add(Triple(senderName to senderEmoji, text, now()))
             while (lines.size > 7) lines.removeAt(0)
         }
-        val me = Person.Builder().setName("Tu").build()
-        val style = NotificationCompat.MessagingStyle(me)
-            .setGroupConversation(isGroup)
+        val me = Person.Builder().setName(t("Tu")).build()
+        val style = NotificationCompat.MessagingStyle(me).setGroupConversation(isGroup)
         if (isGroup) style.setConversationTitle(title)
         synchronized(lines) {
             lines.forEach { (who, txt, ts) ->
@@ -151,13 +140,13 @@ class Notifier(private val ctx: Context) {
             }
         }
         val code = conv.hashCode()
-        val remote = RemoteInput.Builder(ActionReceiver.KEY_REPLY).setLabel("Rispondi…").build()
+        val remote = RemoteInput.Builder(ActionReceiver.KEY_REPLY).setLabel(t("Rispondi…")).build()
         val replyAction = NotificationCompat.Action.Builder(
-            0, "Rispondi",
+            0, t("Rispondi"),
             action(code, ActionReceiver.ACTION_REPLY, mutable = true) { putExtra(ActionReceiver.EXTRA_CONV, conv) }
         ).addRemoteInput(remote).setAllowGeneratedReplies(true).build()
         val readAction = NotificationCompat.Action.Builder(
-            0, "Segna come letto",
+            0, t("Segna come letto"),
             action(code + 1, ActionReceiver.ACTION_READ) { putExtra(ActionReceiver.EXTRA_CONV, conv) }
         ).build()
         val n = base(CH_MESSAGES)
@@ -170,7 +159,6 @@ class Notifier(private val ctx: Context) {
             .setContentIntent(openApp(code) { putExtra(EXTRA_CONV, conv) })
             .addAction(replyAction)
             .addAction(readAction)
-            .setOnlyAlertOnce(false)
             .build()
         post(code, n)
     }
@@ -194,97 +182,87 @@ class Notifier(private val ctx: Context) {
 
     // ------------------------------------------------------------------ social
 
+    private fun simple(id: Int, title: String, text: String, emoji: String, intent: PendingIntent? = null) {
+        val b = base(CH_SOCIAL).setContentTitle(title).setContentText(text).setLargeIcon(emojiIcon(emoji))
+        intent?.let { b.setContentIntent(it) }
+        post(id, b.build())
+    }
+
     fun friendRequest(pk: String, name: String, username: String, emoji: String) {
         val code = ("fr$pk").hashCode()
         val n = base(CH_SOCIAL)
-            .setContentTitle("Nuova richiesta di amicizia")
-            .setContentText("$name (@$username) vuole aggiungerti")
+            .setContentTitle(t("Nuova richiesta di amicizia"))
+            .setContentText(t("{0} (@{1}) vuole aggiungerti", name, username))
             .setLargeIcon(emojiIcon(emoji))
             .setCategory(NotificationCompat.CATEGORY_SOCIAL)
             .setContentIntent(openApp(code) { putExtra(EXTRA_TAB, 3) })
-            .addAction(0, "Accetta", action(code, ActionReceiver.ACTION_ACCEPT_FRIEND) { putExtra(ActionReceiver.EXTRA_PK, pk) })
-            .addAction(0, "Rifiuta", action(code + 1, ActionReceiver.ACTION_DECLINE_FRIEND) { putExtra(ActionReceiver.EXTRA_PK, pk) })
+            .addAction(0, t("Accetta"), action(code, ActionReceiver.ACTION_ACCEPT_FRIEND) { putExtra(ActionReceiver.EXTRA_PK, pk) })
+            .addAction(0, t("Rifiuta"), action(code + 1, ActionReceiver.ACTION_DECLINE_FRIEND) { putExtra(ActionReceiver.EXTRA_PK, pk) })
             .build()
         post(code, n)
     }
 
     fun cancelFriendRequest(pk: String) = nm.cancel(("fr$pk").hashCode())
 
-    fun friendAccepted(name: String, emoji: String) {
-        val n = base(CH_SOCIAL)
-            .setContentTitle("$name ha accettato la tua richiesta")
-            .setContentText("Ora potete chattare, condividere eventi e posizione")
-            .setLargeIcon(emojiIcon(emoji))
-            .setContentIntent(openApp(11) { putExtra(EXTRA_TAB, 3) })
-            .build()
-        post(("fa$name").hashCode(), n)
-    }
+    fun friendAccepted(name: String, emoji: String) =
+        simple(("fa$name").hashCode(), t("{0} ha accettato la tua richiesta", name), t("Ora potete chattare, condividere eventi e posizione"), emoji, openApp(11) { putExtra(EXTRA_TAB, 3) })
 
-    fun locationShared(name: String, emoji: String, until: Long) {
-        val n = base(CH_SOCIAL)
-            .setContentTitle("$name condivide la posizione con te")
-            .setContentText("In tempo reale fino alle ${Fmt.time(until)}")
-            .setLargeIcon(emojiIcon(emoji))
-            .setContentIntent(openApp(12) { putExtra(EXTRA_TAB, 2) })
-            .build()
-        post(("loc$name").hashCode(), n)
-    }
+    fun locationShared(name: String, emoji: String, until: Long, onTheWay: Boolean) =
+        simple(
+            ("loc$name").hashCode(),
+            if (onTheWay) t("{0} sta arrivando", name) else t("{0} condivide la posizione con te", name),
+            t("In tempo reale fino alle {0}", Fmt.time(until)), emoji, openApp(12) { putExtra(EXTRA_TAB, 2) },
+        )
 
-    fun missedCall(pk: String, name: String, emoji: String) {
-        val n = base(CH_SOCIAL)
-            .setContentTitle("Chiamata persa")
-            .setContentText("$name ti ha chiamato")
-            .setLargeIcon(emojiIcon(emoji))
-            .setContentIntent(openApp(pk.hashCode()) { putExtra(EXTRA_CONV, pk) })
-            .build()
-        post(("mc$pk").hashCode(), n)
-    }
+    fun arrival(name: String, emoji: String, place: String) =
+        simple(("arr$name$place").hashCode(), t("{0} è arrivato", name), place, emoji, openApp(13) { putExtra(EXTRA_TAB, 2) })
+
+    fun arrivedSelf(name: String, place: String) =
+        simple(("me-arr$place").hashCode(), t("Sei arrivato"), t("Ho avvisato {0} e fermato la condivisione", name), "📍")
+
+    fun listShared(from: String, title: String) =
+        simple(("list$title").hashCode(), t("{0} ha condiviso una lista con te", from), title, "📝", openApp(14) { putExtra(EXTRA_TAB, 0) })
+
+    fun missedCall(conv: String, name: String, emoji: String) =
+        simple(("mc$conv").hashCode(), t("Chiamata persa"), t("{0} ti ha chiamato", name), emoji, openApp(conv.hashCode()) { putExtra(EXTRA_CONV, conv) })
 
     // ------------------------------------------------------------------ agenda
 
     fun eventInvite(ev: AgendaEvent, from: String) {
         val code = ("inv" + ev.id).hashCode()
         val n = base(CH_SOCIAL)
-            .setContentTitle("$from ti invita: ${ev.emoji} ${ev.title}")
+            .setContentTitle(t("{0} ti invita: {1}", from, ev.emoji + " " + ev.title))
             .setContentText(Fmt.dayLong(ev.start) + if (ev.allDay) "" else " · " + Fmt.time(ev.start))
             .setLargeIcon(emojiIcon(ev.emoji))
             .setContentIntent(openApp(code) { putExtra(EXTRA_TAB, 0); putExtra(EXTRA_EVENT, ev.id) })
-            .addAction(0, "Partecipo", action(code, ActionReceiver.ACTION_EVENT_YES) { putExtra(ActionReceiver.EXTRA_EVENT, ev.id) })
-            .addAction(0, "Non posso", action(code + 1, ActionReceiver.ACTION_EVENT_NO) { putExtra(ActionReceiver.EXTRA_EVENT, ev.id) })
+            .addAction(0, t("Partecipo"), action(code, ActionReceiver.ACTION_EVENT_YES) { putExtra(ActionReceiver.EXTRA_EVENT, ev.id) })
+            .addAction(0, t("Non posso"), action(code + 1, ActionReceiver.ACTION_EVENT_NO) { putExtra(ActionReceiver.EXTRA_EVENT, ev.id) })
             .build()
         post(code, n)
     }
 
     fun cancelInvite(id: String) = nm.cancel(("inv$id").hashCode())
 
-    fun rsvp(ev: AgendaEvent, name: String, yes: Boolean) {
-        val n = base(CH_SOCIAL)
-            .setContentTitle(if (yes) "$name partecipa a ${ev.title}" else "$name non può venire a ${ev.title}")
-            .setContentText(Fmt.dayLong(ev.start))
-            .setLargeIcon(emojiIcon(ev.emoji))
-            .setContentIntent(openApp(13) { putExtra(EXTRA_TAB, 0); putExtra(EXTRA_EVENT, ev.id) })
-            .build()
-        post(("rsvp" + ev.id + name).hashCode(), n)
-    }
+    fun rsvp(ev: AgendaEvent, name: String, yes: Boolean) =
+        simple(
+            ("rsvp" + ev.id + name).hashCode(),
+            if (yes) t("{0} partecipa a {1}", name, ev.title) else t("{0} non può venire a {1}", name, ev.title),
+            Fmt.dayLong(ev.start), ev.emoji, openApp(15) { putExtra(EXTRA_TAB, 0); putExtra(EXTRA_EVENT, ev.id) },
+        )
 
-    fun eventCancelled(ev: AgendaEvent) {
-        val n = base(CH_SOCIAL)
-            .setContentTitle("Evento annullato")
-            .setContentText("${ev.emoji} ${ev.title} · ${Fmt.dayShort(ev.start)}")
-            .setLargeIcon(emojiIcon(ev.emoji))
-            .build()
-        post(("del" + ev.id).hashCode(), n)
-    }
+    fun eventCancelled(ev: AgendaEvent) =
+        simple(("del" + ev.id).hashCode(), t("Evento annullato"), "${ev.emoji} ${ev.title} · ${Fmt.dayShort(ev.start)}", ev.emoji)
 
     /** Agenda reminder: the chosen emoji is the notification icon */
-    fun reminder(ev: AgendaEvent) {
+    fun reminder(ev: AgendaEvent, occurrence: Long) {
         if (!allowed()) return
         val small = Icon.createWithBitmap(EmojiArt.bitmap(ev.emoji, 96))
         val large = EmojiArt.bitmap(ev.emoji, 192, background = 0xFFEDEDED.toInt())
         val whenText = when {
-            ev.allDay -> "Oggi, tutto il giorno"
-            ev.start <= now() + 60_000 -> "Adesso · ${Fmt.time(ev.start)}"
-            else -> "Alle ${Fmt.time(ev.start)} · tra ${Fmt.remaining(ev.start)}"
+            ev.allDay -> t("Oggi, tutto il giorno")
+            occurrence <= now() + 60_000 -> t("Adesso · {0}", Fmt.time(occurrence))
+            occurrence - now() > 20 * 3_600_000L -> Fmt.dayLong(occurrence) + " · " + Fmt.time(occurrence)
+            else -> t("Alle {0} · tra {1}", Fmt.time(occurrence), Fmt.remaining(occurrence))
         }
         val body = listOf(ev.description, ev.notes).filter { it.isNotBlank() }.joinToString("\n")
         val i = Intent(ctx, MainActivity::class.java).apply {
@@ -309,13 +287,14 @@ class Notifier(private val ctx: Context) {
 
     // ------------------------------------------------------------------ calls
 
-    fun incomingCall(pk: String, name: String, emoji: String) {
+    fun incomingCall(pk: String, name: String, emoji: String, video: Boolean, groupName: String?) {
         val full = openApp(70) { putExtra(EXTRA_CALL, true) }
         val accept = openApp(71) { putExtra(EXTRA_CALL, true); putExtra(EXTRA_ACCEPT_CALL, true) }
         val decline = action(72, ActionReceiver.ACTION_DECLINE_CALL)
+        val what = if (video) t("Videochiamata in arrivo…") else t("Chiamata vocale in arrivo…")
         val n = base(CH_CALLS)
-            .setContentTitle(name)
-            .setContentText("Chiamata vocale in arrivo…")
+            .setContentTitle(if (groupName != null) "$name · $groupName" else name)
+            .setContentText(what)
             .setLargeIcon(emojiIcon(emoji))
             .setCategory(NotificationCompat.CATEGORY_CALL)
             .setPriority(NotificationCompat.PRIORITY_MAX)
@@ -323,8 +302,8 @@ class Notifier(private val ctx: Context) {
             .setAutoCancel(false)
             .setFullScreenIntent(full, true)
             .setContentIntent(full)
-            .addAction(0, "Rifiuta", decline)
-            .addAction(0, "Rispondi", accept)
+            .addAction(0, t("Rifiuta"), decline)
+            .addAction(0, t("Rispondi"), accept)
             .build()
         post(ID_CALL, n)
     }
@@ -341,12 +320,12 @@ class Notifier(private val ctx: Context) {
             .setPriority(NotificationCompat.PRIORITY_MIN)
             .setContentIntent(openApp(80) { if (sharing) putExtra(EXTRA_TAB, 2) })
         when {
-            inCall -> b.setContentTitle("Chiamata in corso").setContentText("Tocca per tornare alla chiamata")
+            inCall -> b.setContentTitle(t("Chiamata in corso")).setContentText(t("Tocca per tornare alla chiamata"))
                 .setContentIntent(openApp(81) { putExtra(EXTRA_CALL, true) })
-            sharing -> b.setContentTitle("Stai condividendo la posizione")
-                .setContentText("In tempo reale con i tuoi amici")
-                .addAction(0, "Interrompi", action(82, ActionReceiver.ACTION_STOP_SHARING))
-            else -> b.setContentTitle("Monolith è online").setContentText("Pronto a ricevere messaggi e chiamate")
+            sharing -> b.setContentTitle(t("Stai condividendo la posizione"))
+                .setContentText(t("In tempo reale con i tuoi amici"))
+                .addAction(0, t("Interrompi"), action(82, ActionReceiver.ACTION_STOP_SHARING))
+            else -> b.setContentTitle(t("Monolith è attivo")).setContentText(t("Pronto a ricevere messaggi e chiamate"))
         }
         return b.build()
     }

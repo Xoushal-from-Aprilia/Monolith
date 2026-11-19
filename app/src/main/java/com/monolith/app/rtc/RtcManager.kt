@@ -12,6 +12,9 @@ import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import org.webrtc.DataChannel
+import org.webrtc.DefaultVideoDecoderFactory
+import org.webrtc.DefaultVideoEncoderFactory
+import org.webrtc.EglBase
 import org.webrtc.IceCandidate
 import org.webrtc.MediaConstraints
 import org.webrtc.MediaStream
@@ -59,6 +62,8 @@ object RtcFactory {
     @Volatile
     private var factory: PeerConnectionFactory? = null
 
+    val egl: EglBase by lazy { EglBase.create() }
+
     @Synchronized
     fun get(ctx: Context): PeerConnectionFactory {
         factory?.let { return it }
@@ -72,6 +77,8 @@ object RtcFactory {
         val f = PeerConnectionFactory.builder()
             .setOptions(PeerConnectionFactory.Options())
             .setAudioDeviceModule(adm)
+            .setVideoEncoderFactory(DefaultVideoEncoderFactory(egl.eglBaseContext, true, true))
+            .setVideoDecoderFactory(DefaultVideoDecoderFactory(egl.eglBaseContext))
             .createPeerConnectionFactory()
         factory = f
         return f

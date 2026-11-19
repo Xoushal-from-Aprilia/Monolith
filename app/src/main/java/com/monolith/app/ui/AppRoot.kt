@@ -1,6 +1,12 @@
 package com.monolith.app.ui
 
+import android.app.KeyguardManager
+import android.content.Context
 import android.net.Uri
+import android.os.Build
+import android.widget.Toast
+import androidx.biometric.BiometricManager
+import androidx.biometric.BiometricPrompt
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.AnimatedVisibility
 import androidx.compose.animation.SharedTransitionLayout
@@ -24,17 +30,20 @@ import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Forum
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.rounded.CalendarMonth
+import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
+import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.NavigationBar
@@ -56,9 +65,12 @@ import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import androidx.core.content.ContextCompat
+import androidx.fragment.app.FragmentActivity
 import androidx.navigation.NavHostController
 import androidx.navigation.NavType
 import androidx.navigation.compose.NavHost
@@ -66,6 +78,8 @@ import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.navigation.navArgument
 import com.monolith.app.Graph
+import com.monolith.app.core.AppLock
+import com.monolith.app.core.t
 import com.monolith.app.data.FriendStatus
 import com.monolith.app.rtc.CallPhase
 import com.monolith.app.ui.components.LocalNavScope
@@ -75,8 +89,11 @@ import com.monolith.app.ui.screens.AgendaScreen
 import com.monolith.app.ui.screens.CallScreen
 import com.monolith.app.ui.screens.ChatListScreen
 import com.monolith.app.ui.screens.ChatScreen
+import com.monolith.app.ui.screens.CreditsScreen
 import com.monolith.app.ui.screens.EventEditorScreen
 import com.monolith.app.ui.screens.FriendsScreen
+import com.monolith.app.ui.screens.JournalScreen
+import com.monolith.app.ui.screens.ListDetailScreen
 import com.monolith.app.ui.screens.MapScreen
 import com.monolith.app.ui.screens.NewGroupScreen
 import com.monolith.app.ui.screens.OnboardingFlow
@@ -96,17 +113,70 @@ data class NavRequest(
     val event: String? = null,
     val call: Boolean = false,
     val acceptCall: Boolean = false,
+    val quickShare: Boolean = false,
 )
 
 object NavBus {
     val requests = MutableStateFlow<NavRequest?>(null)
+    val openShareSheet = MutableStateFlow(false)
 }
 
 object Routes {
     fun chat(conv: String) = "chat/" + Uri.encode(conv)
     fun event(id: String, date: Long = 0L) = "event/" + Uri.encode(id) + "?date=$date"
     fun photo(path: String, key: String) = "photo?path=" + Uri.encode(path) + "&key=" + Uri.encode(key)
+    fun list(id: String) = "list/" + Uri.encode(id)
 }
+
+// ====================================================================== device lock
+
+object Unlock {
+    private fun authenticators() = BiometricManager.Authenticators.BIOMETRIC_WEAK or BiometricManager.Authenticators.DEVICE_CREDENTIAL
+
+    fun available(ctx: Context): Boolean {
+        val km = ctx.getSystemService(KeyguardManager::class.java)
+        return km?.isDeviceSecure == true
+    }
+
+    fun prompt(ctx: Context, title: String, onOk: () -> Unit) {
+        val activity = ctx as? FragmentActivity ?: return
+        val prompt = BiometricPrompt(activity, ContextCompat.getMainExecutor(activity), object : BiometricPrompt.AuthenticationCallback() {
+            override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) = onOk()
+        })
+        val b = BiometricPrompt.PromptInfo.Builder().setTitle(title)
+        if (Build.VERSION.SDK_INT >= 30) {
+            b.setAllowedAuthenticators(authenticators())
+        } else {
+            @Suppress("DEPRECATION")
+            b.setDeviceCredentialAllowed(true)
+        }
+        runCatching { prompt.authenticate(b.build()) }
+    }
+}
+
+@Composable
+private fun LockScreen() {
+    val ctx = LocalContext.current
+    LaunchedEffect(Unit) {
+        delay(350)
+        Unlock.prompt(ctx, t("Sblocca Monolith")) { AppLock.unlock() }
+    }
+    Box(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background), contentAlignment = Alignment.Center) {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
+            MonolithMark(Modifier.height(120.dp))
+            Spacer(Modifier.height(28.dp))
+            Text(t("Monolith è bloccato"), style = MaterialTheme.typography.titleLarge)
+            Spacer(Modifier.height(20.dp))
+            Button(onClick = { Unlock.prompt(ctx, t("Sblocca Monolith")) { AppLock.unlock() } }, shape = CircleShape) {
+                Icon(Icons.Rounded.Fingerprint, null)
+                Spacer(Modifier.padding(4.dp))
+                Text(t("Sblocca"))
+            }
+        }
+    }
+}
+
+// ====================================================================== root
 
 @Composable
 fun AppRoot() {
@@ -116,22 +186,27 @@ fun AppRoot() {
         delay(1450)
         intro = false
     }
-    AnimatedContent(
-        targetState = when {
-            intro -> 0
-            profile == null -> 1
-            else -> 2
-        },
-        transitionSpec = {
-            (fadeIn(tween(500, delayMillis = 120)) + scaleIn(tween(600, easing = Motion.Emphasized), initialScale = 1.04f)) togetherWith
-                fadeOut(tween(260))
-        },
-        label = "root",
-    ) { stage ->
-        when (stage) {
-            0 -> IntroSplash()
-            1 -> OnboardingFlow()
-            else -> MainNav()
+    Box(Modifier.fillMaxSize()) {
+        AnimatedContent(
+            targetState = when {
+                intro -> 0
+                profile == null -> 1
+                else -> 2
+            },
+            transitionSpec = {
+                (fadeIn(tween(500, delayMillis = 120)) + scaleIn(tween(600, easing = Motion.Emphasized), initialScale = 1.04f)) togetherWith
+                    fadeOut(tween(260))
+            },
+            label = "root",
+        ) { stage ->
+            when (stage) {
+                0 -> IntroSplash()
+                1 -> OnboardingFlow()
+                else -> MainNav()
+            }
+        }
+        AnimatedVisibility(AppLock.locked && profile != null && !intro, enter = fadeIn(), exit = fadeOut(tween(350))) {
+            LockScreen()
         }
     }
 }
@@ -171,10 +246,15 @@ private fun IntroSplash() {
 
 @Composable
 private fun MainNav() {
+    val ctx = LocalContext.current
     val nav = rememberNavController()
     val homeTab = rememberSaveable { mutableIntStateOf(0) }
     val req by NavBus.requests.collectAsState()
     val call by Graph.calls.state.collectAsState()
+
+    LaunchedEffect(Unit) {
+        if (!Graph.prefs.permissionsDone) nav.navigate("permissions?first=true")
+    }
 
     LaunchedEffect(req) {
         val r = req ?: return@LaunchedEffect
@@ -182,6 +262,20 @@ private fun MainNav() {
         if (r.call) {
             if (r.acceptCall) Graph.calls.accept()
             if (nav.currentDestination?.route != "call") nav.navigate("call") { launchSingleTop = true }
+            return@LaunchedEffect
+        }
+        if (r.quickShare) {
+            homeTab.intValue = 2
+            nav.popBackStack("home", inclusive = false)
+            val last = Graph.prefs.lastShareFriends
+            val friends = Graph.db.friends().friendsNow().map { it.pubkey }.toSet()
+            val targets = last.filter { it in friends }
+            if (targets.isNotEmpty() && Graph.location.hasPermission()) {
+                Graph.location.startSharing(targets, Graph.prefs.lastShareMinutes)
+                Toast.makeText(ctx, t("Condivisione della posizione avviata"), Toast.LENGTH_SHORT).show()
+            } else {
+                NavBus.openShareSheet.value = true
+            }
             return@LaunchedEffect
         }
         r.tab?.let { homeTab.intValue = it }
@@ -204,10 +298,6 @@ private fun MainNav() {
         }
     }
 
-    LaunchedEffect(Unit) {
-        if (!Graph.prefs.permissionsDone) nav.navigate("permissions?first=true")
-    }
-
     SharedTransitionLayout {
         CompositionLocalProvider(LocalSharedScope provides this) {
             NavHost(
@@ -223,10 +313,7 @@ private fun MainNav() {
                         HomeScreen(nav, homeTab.intValue) { homeTab.intValue = it }
                     }
                 }
-                composable(
-                    "chat/{conv}",
-                    arguments = listOf(navArgument("conv") { type = NavType.StringType }),
-                ) { entry ->
+                composable("chat/{conv}", arguments = listOf(navArgument("conv") { type = NavType.StringType })) { entry ->
                     CompositionLocalProvider(LocalNavScope provides this) {
                         ChatScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: ""))
                     }
@@ -241,11 +328,12 @@ private fun MainNav() {
                     popExitTransition = { slideOutVertically(tween(380, easing = Motion.Emphasized)) { it / 5 } + fadeOut(tween(220)) },
                 ) { entry ->
                     CompositionLocalProvider(LocalNavScope provides this) {
-                        EventEditorScreen(
-                            nav,
-                            Uri.decode(entry.arguments?.getString("id") ?: "new"),
-                            entry.arguments?.getLong("date") ?: 0L,
-                        )
+                        EventEditorScreen(nav, Uri.decode(entry.arguments?.getString("id") ?: "new"), entry.arguments?.getLong("date") ?: 0L)
+                    }
+                }
+                composable("list/{id}", arguments = listOf(navArgument("id") { type = NavType.StringType })) { entry ->
+                    CompositionLocalProvider(LocalNavScope provides this) {
+                        ListDetailScreen(nav, Uri.decode(entry.arguments?.getString("id") ?: "new"))
                     }
                 }
                 composable("group/new") {
@@ -254,26 +342,23 @@ private fun MainNav() {
                 composable("settings") {
                     CompositionLocalProvider(LocalNavScope provides this) { SettingsScreen(nav) }
                 }
+                composable("journal") { JournalScreen(nav) }
+                composable("credits") { CreditsScreen(nav) }
                 composable(
                     "permissions?first={first}",
                     arguments = listOf(navArgument("first") { type = NavType.BoolType; defaultValue = false }),
                 ) { entry ->
                     val first = entry.arguments?.getBoolean("first") ?: false
-                    PermissionsScreen(
-                        first = first,
-                        onDone = {
-                            Graph.prefs.permissionsDone = true
-                            nav.popBackStack()
-                        },
-                    )
+                    PermissionsScreen(first = first, onDone = {
+                        Graph.prefs.permissionsDone = true
+                        nav.popBackStack()
+                    })
                 }
                 composable(
                     "call",
                     enterTransition = { fadeIn(tween(350)) + scaleIn(tween(450, easing = Motion.Emphasized), initialScale = 0.94f) },
                     popExitTransition = { fadeOut(tween(300)) + scaleOut(tween(300), targetScale = 0.96f) },
-                ) {
-                    CallScreen(nav)
-                }
+                ) { CallScreen(nav) }
                 composable(
                     "photo?path={path}&key={key}",
                     arguments = listOf(
@@ -309,11 +394,12 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
     val unreadTotal = unread.sumOf { it.n }
     val requests = friends.count { it.status == FriendStatus.INCOMING }
+
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
-                TABS.forEachIndexed { i, t ->
+                TABS.forEachIndexed { i, tb ->
                     val selected = tab == i
                     val scale by animateFloatAsState(if (selected) 1.12f else 1f, Motion.bouncy(), label = "tabScale")
                     val lift by animateDpAsState(if (selected) (-1).dp else 0.dp, Motion.bouncy(), label = "tabLift")
@@ -333,14 +419,12 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
                                         containerColor = MaterialTheme.colorScheme.primary,
                                         contentColor = MaterialTheme.colorScheme.onPrimary,
                                         modifier = Modifier.graphicsLayer { scaleX = badgeScale; scaleY = badgeScale },
-                                    ) {
-                                        Text(if (badge > 99) "99+" else badge.coerceAtLeast(1).toString())
-                                    }
+                                    ) { Text(if (badge > 99) "99+" else badge.coerceAtLeast(1).toString()) }
                                 }
                             }) {
                                 Icon(
-                                    if (selected) t.on else t.off,
-                                    contentDescription = t.label,
+                                    if (selected) tb.on else tb.off,
+                                    contentDescription = t(tb.label),
                                     modifier = Modifier.graphicsLayer {
                                         scaleX = scale; scaleY = scale
                                         translationY = lift.toPx()
@@ -348,7 +432,7 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
                                 )
                             }
                         },
-                        label = { Text(t.label, fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal) },
+                        label = { Text(t(tb.label), fontWeight = if (selected) FontWeight.SemiBold else FontWeight.Normal, maxLines = 1) },
                         colors = NavigationBarItemDefaults.colors(
                             selectedIconColor = MaterialTheme.colorScheme.onPrimary,
                             indicatorColor = MaterialTheme.colorScheme.primary,
@@ -370,8 +454,8 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
             },
             modifier = Modifier.padding(bottom = pad.calculateBottomPadding()),
             label = "tabs",
-        ) { t ->
-            when (t) {
+        ) { tb ->
+            when (tb) {
                 0 -> AgendaScreen(nav)
                 1 -> ChatListScreen(nav)
                 2 -> MapScreen(nav)

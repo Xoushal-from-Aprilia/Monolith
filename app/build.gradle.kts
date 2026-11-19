@@ -14,7 +14,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "1.0." + (System.getenv("VERSION_CODE") ?: "0")
+        versionName = "0.2.0"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }
@@ -52,6 +52,7 @@ android {
             "-opt-in=androidx.compose.animation.ExperimentalSharedTransitionApi",
             "-opt-in=androidx.compose.foundation.ExperimentalFoundationApi",
             "-opt-in=androidx.compose.animation.ExperimentalAnimationApi",
+            "-opt-in=androidx.compose.foundation.layout.ExperimentalLayoutApi",
         )
     }
     buildFeatures {
@@ -102,4 +103,9 @@ dependencies {
     implementation("io.coil-kt:coil-compose:2.7.0")
     implementation("org.osmdroid:osmdroid-android:6.1.20")
     implementation("io.getstream:stream-webrtc-android:1.3.8")
+    implementation("androidx.glance:glance-appwidget:1.1.1")
+    implementation("androidx.biometric:biometric:1.1.0")
+    implementation("androidx.fragment:fragment-ktx:1.8.5")
+    implementation("com.google.zxing:core:3.5.3")
+    implementation("com.journeyapps:zxing-android-embedded:4.3.0") { isTransitive = false }
 }

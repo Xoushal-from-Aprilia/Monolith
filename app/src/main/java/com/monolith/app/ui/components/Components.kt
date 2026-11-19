@@ -73,6 +73,7 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Path
+import androidx.compose.ui.graphics.asImageBitmap
 import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.graphics.vector.ImageVector
@@ -83,6 +84,8 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.Dp
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.monolith.app.core.FriendQr
+import com.monolith.app.core.t
 import com.monolith.app.data.MsgStatus
 import com.monolith.app.ui.theme.Grotesk
 import com.monolith.app.ui.theme.LocalDark
@@ -366,14 +369,14 @@ fun EmojiPickerSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     val cats = EMOJI_SETS.keys.toList()
     ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(bottom = 16.dp)) {
-            Text("Scegli un'emoji", style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
+            Text(t("Scegli un'emoji"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
             Spacer(Modifier.height(12.dp))
             Row(
                 Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 cats.forEachIndexed { i, c ->
-                    FilterChip(selected = cat == i, onClick = { cat = i }, label = { Text(c) })
+                    FilterChip(selected = cat == i, onClick = { cat = i }, label = { Text(t(c)) })
                 }
             }
             val list = EMOJI_SETS[cats[cat]]!!.split(" ").filter { it.isNotBlank() }
@@ -398,12 +401,12 @@ fun EmojiPickerSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
                     onValueChange = { custom = firstGrapheme(it.trim()) },
                     modifier = Modifier.width(180.dp),
                     singleLine = true,
-                    label = { Text("Qualsiasi emoji") },
+                    label = { Text(t("Qualsiasi emoji")) },
                     keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
                     keyboardActions = KeyboardActions(onDone = { if (custom.isNotBlank()) onPick(custom) }),
                 )
                 Spacer(Modifier.width(12.dp))
-                TextButton(onClick = { if (custom.isNotBlank()) onPick(custom) }, enabled = custom.isNotBlank()) { Text("Usa") }
+                TextButton(onClick = { if (custom.isNotBlank()) onPick(custom) }, enabled = custom.isNotBlank()) { Text(t("Usa")) }
             }
         }
     }
@@ -420,6 +423,20 @@ fun Pill(text: String, modifier: Modifier = Modifier, strong: Boolean = false) {
     ) {
         Text(text, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 10.dp, vertical = 4.dp))
     }
+}
+
+/** QR code drawn in the current theme colours */
+@Composable
+fun QrImage(text: String, modifier: Modifier = Modifier) {
+    val dark = LocalDark.current
+    val bmp = remember(text, dark) {
+        FriendQr.bitmap(
+            text, 512,
+            dark = if (dark) android.graphics.Color.rgb(242, 242, 242) else android.graphics.Color.rgb(10, 10, 10),
+            light = if (dark) android.graphics.Color.rgb(10, 10, 10) else android.graphics.Color.WHITE,
+        ).asImageBitmap()
+    }
+    androidx.compose.foundation.Image(bmp, contentDescription = "QR", modifier = modifier, filterQuality = androidx.compose.ui.graphics.FilterQuality.None)
 }
 
 @Suppress("unused")

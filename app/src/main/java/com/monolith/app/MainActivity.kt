@@ -5,7 +5,7 @@ import android.graphics.Color
 import android.os.Build
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
+import androidx.fragment.app.FragmentActivity
 import androidx.activity.SystemBarStyle
 import androidx.activity.compose.setContent
 import androidx.activity.enableEdgeToEdge
@@ -27,7 +27,7 @@ import com.monolith.app.ui.theme.LocalDark
 import com.monolith.app.ui.theme.MonolithTheme
 import kotlinx.coroutines.launch
 
-class MainActivity : ComponentActivity() {
+class MainActivity : FragmentActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         installSplashScreen()
@@ -81,9 +81,10 @@ class MainActivity : ComponentActivity() {
         val event = i.getStringExtra(Notifier.EXTRA_EVENT)
         val call = i.getBooleanExtra(Notifier.EXTRA_CALL, false)
         val accept = i.getBooleanExtra(Notifier.EXTRA_ACCEPT_CALL, false)
+        val quick = i.getBooleanExtra(Notifier.EXTRA_QUICK_SHARE, false)
         if (call) showOverLock(true)
-        if (conv != null || tab != null || event != null || call) {
-            NavBus.requests.value = NavRequest(conv, tab, event, call, accept)
+        if (conv != null || tab != null || event != null || call || quick) {
+            NavBus.requests.value = NavRequest(conv, tab, event, call, accept, quick)
         }
         // consume the extras so a configuration change doesn't replay them
         i.removeExtra(Notifier.EXTRA_CONV)
@@ -91,6 +92,7 @@ class MainActivity : ComponentActivity() {
         i.removeExtra(Notifier.EXTRA_EVENT)
         i.removeExtra(Notifier.EXTRA_CALL)
         i.removeExtra(Notifier.EXTRA_ACCEPT_CALL)
+        i.removeExtra(Notifier.EXTRA_QUICK_SHARE)
     }
 
     override fun onResume() {

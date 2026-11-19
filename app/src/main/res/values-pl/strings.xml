@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Lokalizacja na żywo</string>
+    <string name="widget_label">Kalendarz Monolith</string>
+    <string name="widget_desc">Twoje nadchodzące wydarzenia</string>
+</resources>

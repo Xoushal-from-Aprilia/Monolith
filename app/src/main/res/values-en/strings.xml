@@ -1,0 +1,5 @@
+<resources>
+    <string name="tile_label">Live location</string>
+    <string name="widget_label">Monolith agenda</string>
+    <string name="widget_desc">Your upcoming events</string>
+</resources>
