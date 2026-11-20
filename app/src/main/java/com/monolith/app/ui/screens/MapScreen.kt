@@ -855,7 +855,7 @@ private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPu
                         when {
                             pres == null -> "—"
                             pres.inside -> t("qui dalle {0}", Fmt.time(pres.at))
-                            else -> t("uscito {0}", Fmt.ago(pres.at))
+                            else -> t("fuori · {0}", Fmt.ago(pres.at))
                         },
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )

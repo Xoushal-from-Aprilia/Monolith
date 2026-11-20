@@ -30,17 +30,21 @@ import kotlin.math.min
 /**
  * Watches my position against the common places and tells the other members when I arrive.
  *
- * Battery-aware: coarse, rare fixes when far from every place, GPS only while approaching one,
- * and calm network fixes while I'm inside (just enough to notice when I leave).
+ * Battery-aware: coarse, rare fixes when far from every place, GPS only while moving towards one,
+ * and calm network fixes while I'm inside or standing still (just enough to notice a change).
  */
 class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) {
-    private enum class Mode { OFF, FAR, NEAR, INSIDE }
+    /** FAR: rare coarse fixes · NEAR: GPS while approaching · CALM: inside a place, or standing still nearby */
+    private enum class Mode { OFF, FAR, NEAR, CALM }
 
     private val lm = ctx.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private val lock = Mutex()
     @Volatile private var mode = Mode.OFF
     @Volatile private var last: Location? = null
     private val streak = HashMap<String, Int>()
+    // "am I moving?": the last point I was at, and since when
+    private var anchor: Location? = null
+    private var anchorAt = 0L
     private var wasActive = false
 
     private val listener = object : LocationListener {
@@ -74,12 +78,12 @@ class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) 
     /** re-evaluate what to listen to (places changed, permission granted…) */
     fun refresh() {
         scope.launch {
-            val now = active
-            if (now != wasActive) {
-                wasActive = now
+            val on = active
+            if (on != wasActive) {
+                wasActive = on
                 MonolithService.refresh(ctx)
             }
-            listen(if (!now) Mode.OFF else desired(last))
+            listen(if (!on) Mode.OFF else desired(last))
         }
     }
 
@@ -87,6 +91,11 @@ class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) 
     fun onFix(loc: Location) {
         if (Graph.places.all.value.isEmpty()) return
         last = loc
+        val a = anchor
+        if (a == null || a.distanceTo(loc) > 40f) {
+            anchor = loc
+            anchorAt = now()
+        }
         scope.launch {
             evaluate(loc)
             listen(if (!active) Mode.OFF else desired(loc))
@@ -103,9 +112,14 @@ class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) 
         val places = Graph.places.all.value
         if (places.isEmpty()) return Mode.OFF
         loc ?: return Mode.FAR
-        if (places.any { Graph.places.geo(it.id).inside == true }) return Mode.INSIDE
+        if (places.any { Graph.places.geo(it.id).inside == true }) return Mode.CALM
         val edge = places.minOf { distance(loc, it) - it.radius }
-        return if (edge < 600f) Mode.NEAR else Mode.FAR
+        val still = anchor != null && now() - anchorAt > 3 * 60_000L
+        return when {
+            edge < 400f && !still -> Mode.NEAR
+            edge < 400f -> Mode.CALM
+            else -> Mode.FAR
+        }
     }
 
     @Volatile private var appliedAt = 0L
@@ -133,7 +147,7 @@ class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) 
                 req(LocationManager.NETWORK_PROVIDER, 30_000L, 5f)
                 if (fine) req(LocationManager.GPS_PROVIDER, 8_000L, 4f)
             }
-            Mode.INSIDE -> if (!req(LocationManager.NETWORK_PROVIDER, 60_000L, 10f) && fine) req(LocationManager.GPS_PROVIDER, 60_000L, 10f)
+            Mode.CALM -> if (!req(LocationManager.NETWORK_PROVIDER, 60_000L, 10f) && fine) req(LocationManager.GPS_PROVIDER, 60_000L, 10f)
             Mode.OFF -> {}
         }
         // ask once for something recent so we don't wait for the first interval
