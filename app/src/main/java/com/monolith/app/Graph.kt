@@ -69,7 +69,8 @@ object Graph {
         }
 
         runCatching {
-            Configuration.getInstance().userAgentValue = BuildConfig.APPLICATION_ID
+            // tile servers ask for a stable, app-specific User-Agent
+            Configuration.getInstance().userAgentValue = "Monolith/${BuildConfig.VERSION_NAME} (Android; ${BuildConfig.APPLICATION_ID})"
             Configuration.getInstance().osmdroidBasePath = application.filesDir.resolve("osmdroid")
             Configuration.getInstance().osmdroidTileCache = application.cacheDir.resolve("tiles")
         }

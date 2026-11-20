@@ -30,6 +30,7 @@ import androidx.compose.foundation.lazy.items
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Layers
 import androidx.compose.material.icons.rounded.DirectionsWalk
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MyLocation
@@ -88,24 +89,13 @@ import com.monolith.app.ui.components.PulseDot
 import com.monolith.app.ui.components.RoundAction
 import com.monolith.app.ui.components.SectionLabel
 import com.monolith.app.ui.components.bounceClick
-import com.monolith.app.ui.theme.LocalDark
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
-import org.osmdroid.tileprovider.tilesource.XYTileSource
 import org.osmdroid.util.GeoPoint
 import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
-
-private fun cartoSource(dark: Boolean): XYTileSource {
-    val style = if (dark) "dark_all" else "light_all"
-    return XYTileSource(
-        "Carto-$style", 0, 20, 256, ".png",
-        arrayOf("https://a.basemaps.cartocdn.com/$style/", "https://b.basemaps.cartocdn.com/$style/", "https://c.basemaps.cartocdn.com/$style/"),
-        "© OpenStreetMap contributors © CARTO",
-    )
-}
 
 private fun distanceTo(a: Location?, lat: Double, lon: Double): String? {
     a ?: return null
@@ -118,7 +108,9 @@ private fun etaText(sec: Int): String = if (sec < 60) t("meno di 1 min") else if
 
 @Composable
 fun MapScreen(nav: NavHostController) {
-    val dark = LocalDark.current
+    val mapDark = rememberMapDark()
+    val styleIdx by Graph.prefs.mapStyle.collectAsState()
+    val style = MapLook.style(styleIdx)
     val friends by remember { Graph.db.friends().friends() }.collectAsState(initial = emptyList())
     val alerts by remember { Graph.db.social().alerts() }.collectAsState(initial = emptyList())
     val me by Graph.location.me.collectAsState()
@@ -131,6 +123,7 @@ fun MapScreen(nav: NavHostController) {
     var shareSheet by remember { mutableStateOf(false) }
     var otwSheet by remember { mutableStateOf(false) }
     var alertFor by remember { mutableStateOf<Friend?>(null) }
+    var styleSheet by remember { mutableStateOf(false) }
     var mapView by remember { mutableStateOf<MapView?>(null) }
     var centeredOnce by remember { mutableStateOf(false) }
 
@@ -170,7 +163,11 @@ fun MapScreen(nav: NavHostController) {
             modifier = Modifier.fillMaxSize(),
             factory = { c ->
                 MapView(c).apply {
-                    setTileSource(cartoSource(dark))
+                    setTileSource(style.source)
+                    overlayManager.tilesOverlay.setLoadingBackgroundColor(MapLook.LOADING)
+                    overlayManager.tilesOverlay.setLoadingLineColor(MapLook.LOADING)
+                    overlayManager.tilesOverlay.setColorFilter(MapLook.filter(mapDark))
+                    setBackgroundColor(MapLook.backdrop(mapDark))
                     setMultiTouchControls(true)
                     zoomController.setVisibility(CustomZoomButtonsController.Visibility.NEVER)
                     isTilesScaledToDpi = true
@@ -181,8 +178,13 @@ fun MapScreen(nav: NavHostController) {
                 }
             },
             update = { mv ->
-                val src = cartoSource(dark)
-                if (mv.tileProvider.tileSource.name() != src.name()) mv.setTileSource(src)
+                if (mv.tileProvider.tileSource.name() != style.source.name()) {
+                    mv.setTileSource(style.source)
+                    if (mv.zoomLevelDouble > mv.maxZoomLevel) mv.controller.setZoom(mv.maxZoomLevel)
+                }
+                mv.overlayManager.tilesOverlay.setColorFilter(MapLook.filter(mapDark))
+                mv.setBackgroundColor(MapLook.backdrop(mapDark))
+                val dark = mapDark
                 mv.overlays.clear()
                 val res = mv.context.resources
                 val ink = if (dark) 0xFFF2F2F2.toInt() else 0xFF0A0A0A.toInt()
@@ -229,6 +231,8 @@ fun MapScreen(nav: NavHostController) {
         )
         // centre crosshair (used to pick places)
         Icon(Icons.Rounded.Add, null, Modifier.align(Alignment.Center).size(22.dp).alpha(0.35f))
+        // credit to the map services, always visible
+        MapAttribution(style, Modifier.align(Alignment.TopEnd).statusBarsPadding().padding(top = 70.dp, end = 16.dp))
 
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 16.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
             Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.94f), shadowElevation = 6.dp) {
@@ -241,6 +245,8 @@ fun MapScreen(nav: NavHostController) {
                 }
             }
             Spacer(Modifier.weight(1f))
+            RoundAction(Icons.Rounded.Layers, t("Stile della mappa"), size = 48.dp) { styleSheet = true }
+            Spacer(Modifier.width(10.dp))
             RoundAction(Icons.Rounded.MyLocation, t("La mia posizione"), size = 48.dp) {
                 if (!hasPerm) permLauncher.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                 else me?.let { mapView?.controller?.animateTo(GeoPoint(it.latitude, it.longitude), 16.0, 700L) }
@@ -323,6 +329,7 @@ fun MapScreen(nav: NavHostController) {
         }
     }
 
+    if (styleSheet) MapStyleSheet { styleSheet = false }
     if (shareSheet) ShareSheet(friends.filter { it.status == FriendStatus.FRIEND }, iShareWith.map { it.pubkey }.toSet()) { shareSheet = false }
     if (otwSheet) OnTheWaySheet(friends.filter { it.status == FriendStatus.FRIEND }, center(), onClose = { otwSheet = false })
     alertFor?.let { f -> AlertSheet(f, me, center(), alerts.filter { it.friend == f.pubkey }) { alertFor = null } }

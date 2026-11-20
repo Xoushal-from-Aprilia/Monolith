@@ -165,6 +165,16 @@ class Prefs(ctx: Context) {
     val theme: StateFlow<Int> = _theme.asStateFlow()
     fun setTheme(v: Int) { sp.edit().putInt("theme", v).apply(); _theme.value = v }
 
+    private val _mapStyle = MutableStateFlow(sp.getInt("map_style", 0))
+    /** index into MapLook.STYLES */
+    val mapStyle: StateFlow<Int> = _mapStyle.asStateFlow()
+    fun setMapStyle(v: Int) { sp.edit().putInt("map_style", v).apply(); _mapStyle.value = v }
+
+    private val _mapTone = MutableStateFlow(sp.getInt("map_tone", 0))
+    /** 0 = follow app theme, 1 = white, 2 = black */
+    val mapTone: StateFlow<Int> = _mapTone.asStateFlow()
+    fun setMapTone(v: Int) { sp.edit().putInt("map_tone", v).apply(); _mapTone.value = v }
+
     private val _relays = MutableStateFlow(
         sp.getString("relays", null)?.split("\n")?.filter { it.isNotBlank() } ?: DEFAULT_RELAYS
     )

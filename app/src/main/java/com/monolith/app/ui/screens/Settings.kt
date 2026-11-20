@@ -38,6 +38,7 @@ import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Translate
+import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -129,6 +130,9 @@ fun SettingsScreen(nav: NavHostController) {
     var revealed by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
     var langDialog by remember { mutableStateOf(false) }
+    var mapSheet by remember { mutableStateOf(false) }
+    val mapStyleIdx by Graph.prefs.mapStyle.collectAsState()
+    val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
     var lockOn by remember { mutableStateOf(Graph.prefs.appLock) }
     var backupDialog by remember { mutableStateOf(false) }
@@ -190,6 +194,7 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
+            SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
 
             SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 16.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -247,6 +252,7 @@ fun SettingsScreen(nav: NavHostController) {
 
     if (picker) EmojiPickerSheet(onDismiss = { picker = false }) { emoji = it; picker = false }
     if (showQr) MyQrDialog { showQr = false }
+    if (mapSheet) MapStyleSheet { mapSheet = false }
     if (langDialog) LanguageDialog(onDismiss = { langDialog = false }) { I18n.set(ctx, it); langDialog = false }
 
     if (showCode) {
@@ -356,6 +362,15 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "0.2.1", "2026-11-20",
+        listOf(
+            "Mappe in bianco e nero, in tono con lo stile dell'app",
+            "Tre stili di mappa gratuiti e senza account: Classica, Essenziale e Topografica",
+            "Colore della mappa: automatico, bianco o nero",
+            "Le mappe tornano a caricarsi correttamente",
+        ),
+    ),
+    Release(
         "0.2.0", "2026-11-20",
         listOf(
             "Messaggi vocali: tieni premuto il microfono per registrare",
@@ -450,7 +465,8 @@ fun JournalScreen(nav: NavHostController) {
 fun CreditsScreen(nav: NavHostController) {
     val apis = listOf(
         "OpenStreetMap" to t("Dati delle mappe · © OpenStreetMap contributors (ODbL)"),
-        "CARTO Basemaps" to t("Stile delle mappe · © CARTO"),
+        "Humanitarian OSM · OpenStreetMap France" to t("Mappa Essenziale"),
+        "OpenTopoMap" to t("Mappa Topografica · CC-BY-SA"),
         "Android Location" to t("Posizione del telefono"),
         "Android Camera2" to t("Fotocamera e videochiamate"),
         "Android BiometricPrompt" to t("Blocco con impronta, volto o PIN"),
