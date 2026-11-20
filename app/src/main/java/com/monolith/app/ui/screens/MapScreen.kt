@@ -326,7 +326,7 @@ fun MapScreen(nav: NavHostController) {
                     m.icon = BitmapDrawable(res, icon(f.emoji, 132, paper, ink))
                     m.setAnchor(Marker.ANCHOR_CENTER, Marker.ANCHOR_CENTER)
                     m.title = f.displayName
-                    m.snippet = t("Aggiornato {0}", Fmt.ago(f.locAt))
+                    m.snippet = listOfNotNull(t("Aggiornato {0}", Fmt.ago(f.locAt)), batteryText(f.pubkey)).joinToString(" · ")
                     mv.overlays.add(m)
                 }
                 me?.let { loc ->
@@ -665,6 +665,7 @@ private fun PeoplePanel(
 
 @Composable
 private fun FriendLocationRow(f: Friend, me: Location?, modifier: Modifier, onClick: () -> Unit) {
+    com.monolith.app.data.FriendBattery.all.collectAsState().value
     Row(modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Avatar(f.emoji, 42.dp, online = now() - f.locAt < 60_000)
         Spacer(Modifier.width(12.dp))
@@ -673,11 +674,16 @@ private fun FriendLocationRow(f: Friend, me: Location?, modifier: Modifier, onCl
             val arriving = f.etaSec >= 0 && f.distM >= 0 && now() - f.locAt < 120_000
             Text(
                 if (arriving) t("In arrivo · {0} · circa {1}", Fmt.distance(f.distM.toFloat()), etaText(f.etaSec))
-                else listOfNotNull(t("aggiornato {0}", Fmt.ago(f.locAt)), distanceTo(me, f.lat ?: 0.0, f.lon ?: 0.0)).joinToString(" · "),
+                else listOfNotNull(t("aggiornato {0}", Fmt.ago(f.locAt)), distanceTo(me, f.lat ?: 0.0, f.lon ?: 0.0), batteryText(f.pubkey)).joinToString(" · "),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
     }
+}
+
+/** "🔋 45%" for a friend sharing the position, if the phone sent it in the last minutes */
+private fun batteryText(pk: String): String? = com.monolith.app.data.FriendBattery.fresh(pk)?.let {
+    (if (it.charging) "⚡ " else if (it.level <= 15) "🪫 " else "🔋 ") + it.level + "%"
 }
 
 /** "Marco, tu" for the people currently inside a place */

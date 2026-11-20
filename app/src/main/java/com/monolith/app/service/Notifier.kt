@@ -248,6 +248,14 @@ class Notifier(private val ctx: Context) {
             t("In tempo reale fino alle {0}", Fmt.time(until)), emoji, openApp(12) { putExtra(EXTRA_TAB, 2) },
         )
 
+    /** a friend sharing their position is about to run out of battery */
+    fun batteryLow(pk: String, name: String, emoji: String, level: Int) =
+        simple(
+            ("bat$pk").hashCode(),
+            t("Il telefono di {0} sta per spegnersi", name),
+            t("Batteria al {0}% mentre condivide la posizione", level), emoji, openApp(21) { putExtra(EXTRA_TAB, 2) },
+        )
+
     fun arrival(name: String, emoji: String, place: String) =
         simple(("arr$name$place").hashCode(), t("{0} è arrivato", name), place, emoji, openApp(13) { putExtra(EXTRA_TAB, 2) }, Sounds.channelId(SoundKind.MEETING))
 

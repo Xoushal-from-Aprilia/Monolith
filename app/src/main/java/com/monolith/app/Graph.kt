@@ -8,6 +8,7 @@ import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.glance.appwidget.updateAll
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.combine
 import com.monolith.app.core.AppCtx
 import com.monolith.app.core.AppLock
 import com.monolith.app.core.I18n
@@ -60,6 +61,9 @@ object Graph {
     lateinit var done: DoneStore
     lateinit var scheduled: ScheduledStore
     lateinit var pins: PinStore
+    lateinit var bondDays: com.monolith.app.data.BondDays
+    lateinit var favorites: com.monolith.app.data.Favorites
+    lateinit var saved: com.monolith.app.data.SavedStore
     lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
 
@@ -81,6 +85,9 @@ object Graph {
         done = DoneStore(application)
         scheduled = ScheduledStore(application)
         pins = PinStore(application)
+        bondDays = com.monolith.app.data.BondDays(application)
+        favorites = com.monolith.app.data.Favorites(application)
+        saved = com.monolith.app.data.SavedStore(application)
         statuses = StatusStore(application)
         Sounds.init(application)
         com.monolith.app.net.Stories.init(application)
@@ -145,7 +152,7 @@ object Graph {
         scope.launch {
             kotlinx.coroutines.flow.combine(
                 db.messages().unread(), db.messages().lastMessages(), statuses.friends, places.all, db.friends().friends(),
-            ) { _, _, _, _, _ -> Unit }.collectLatest {
+            ) { _, _, _, _, _ -> Unit }.combine(favorites.all) { _, _ -> Unit }.combine(bondDays.days) { _, _ -> Unit }.collectLatest {
                 kotlinx.coroutines.delay(2500)
                 runCatching { FriendsWidget().updateAll(app) }
             }
@@ -161,6 +168,7 @@ object Graph {
             placeWatch.start()
             shards.start()
             watchFriendsWidget()
+            scope.launch { runCatching { bondDays.backfill(db) } }
         }
         MonolithService.start(app)
     }

@@ -1,6 +1,12 @@
 package com.monolith.app.ui.screens
 
 import android.content.Context
+import com.monolith.app.data.SavedItem
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.runtime.DisposableEffect
+import androidx.compose.foundation.combinedClickable
+import androidx.compose.foundation.ExperimentalFoundationApi
+import android.media.MediaPlayer
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
@@ -38,6 +44,8 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
+import androidx.compose.material.icons.rounded.Star
+import androidx.compose.material.icons.rounded.StarBorder
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.Button
 import androidx.compose.material3.Icon
@@ -147,6 +155,9 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     val storyMsgs by remember(pk) { Graph.db.messages().conversation(Stories.convOf(pk)) }.collectAsState(initial = emptyList())
     val stories = Stories.visible(storyMsgs).filter { it.sender == pk }
     val bond by produceState<Bond?>(null, pk) { if (!mine) value = Bonds.with(pk) }
+    val favs by Graph.favorites.all.collectAsState()
+    val savedAll by Graph.saved.all.collectAsState()
+    val saved = savedAll.filter { it.owner == pk }.sortedByDescending { it.savedAt }
     var statusSheet by remember { mutableStateOf(false) }
     var textStory by remember { mutableStateOf(false) }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
@@ -163,6 +174,13 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().verticalScroll(rememberScrollState())) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
+            Spacer(Modifier.weight(1f))
+            if (!mine && friend?.status == FriendStatus.FRIEND) {
+                val fav = pk in favs
+                IconButton(onClick = { Graph.favorites.toggle(pk) }) {
+                    Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.StarBorder, if (fav) t("Togli dai preferiti") else t("Aggiungi ai preferiti"))
+                }
+            }
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
@@ -172,7 +190,10 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 contentAlignment = Alignment.Center,
             ) { Avatar(emoji, 116.dp) }
             Spacer(Modifier.height(12.dp))
-            Text(name, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(name, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                if (!mine) com.monolith.app.ui.components.BondBadge(pk)
+            }
             if (user.isNotBlank()) Text("@$user", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             if (bio.isNotBlank()) {
                 Spacer(Modifier.height(10.dp))
@@ -230,6 +251,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 }
             }
         }
+        if (!mine && saved.isNotEmpty()) SavedSection(nav, saved, friend?.displayName ?: "")
         bond?.let { b ->
             Surface(
                 shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow,
@@ -409,5 +431,98 @@ fun ScratchCard(m: Message, ink: Color, bubble: Color, modifier: Modifier = Modi
                 modifier = Modifier.align(Alignment.Center),
             )
         }
+    }
+}
+
+private fun savedText(s: SavedItem): String = when (s.kind) {
+    "voice" -> "🎤  " + t("Messaggio vocale")
+    "loc" -> "📍  " + t("Posizione")
+    "place" -> "📍  " + s.text
+    "scratch" -> "✨  " + s.text
+    else -> s.text
+}
+
+/** messages and photos you kept from the chat with this friend: they stay even if the chat is deleted */
+@OptIn(ExperimentalFoundationApi::class)
+@Composable
+private fun SavedSection(nav: NavHostController, items: List<SavedItem>, friendName: String) {
+    var remove by remember { mutableStateOf<SavedItem?>(null) }
+    var playing by remember { mutableStateOf<String?>(null) }
+    val player = remember { arrayOfNulls<MediaPlayer>(1) }
+    DisposableEffect(Unit) { onDispose { runCatching { player[0]?.release() } } }
+    val myPub = Graph.identity.keys?.pub
+    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
+        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+            Icon(Icons.Rounded.Bookmark, null, Modifier.size(18.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(t("Salvati"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
+            Text(items.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        val photos = items.filter { it.kind == "photo" && it.media != null }
+        if (photos.isNotEmpty()) {
+            LazyRow(
+                contentPadding = PaddingValues(horizontal = 20.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+            ) {
+                items(photos, key = { it.id }) { p ->
+                    AsyncImage(
+                        File(p.media!!), null, contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(112.dp).clip(RoundedCornerShape(18.dp))
+                            .combinedClickable(onClick = { nav.navigate(Routes.photo(p.media, "saved-" + p.id)) }, onLongClick = { remove = p }),
+                    )
+                }
+            }
+        }
+        items.filter { it.kind != "photo" }.forEach { s ->
+            Surface(
+                shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                    .combinedClickable(
+                        onClick = {
+                            if (s.kind == "voice" && s.media != null) {
+                                runCatching { player[0]?.release() }
+                                player[0] = null
+                                if (playing == s.id) {
+                                    playing = null
+                                } else {
+                                    player[0] = runCatching {
+                                        MediaPlayer().apply {
+                                            setDataSource(s.media); prepare(); start()
+                                            setOnCompletionListener { playing = null }
+                                        }
+                                    }.getOrNull()
+                                    playing = if (player[0] != null) s.id else null
+                                }
+                            }
+                        },
+                        onLongClick = { remove = s },
+                    ),
+            ) {
+                Column(Modifier.padding(horizontal = 16.dp, vertical = 12.dp)) {
+                    Text(
+                        if (s.kind == "voice" && playing == s.id) "⏸  " + t("In riproduzione…") else savedText(s),
+                        style = MaterialTheme.typography.bodyLarge,
+                    )
+                    Spacer(Modifier.height(4.dp))
+                    Text(
+                        (if (s.from == myPub) t("Tu") else friendName) + " · " + Fmt.dayShort(s.ts),
+                        style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                }
+            }
+        }
+        Text(
+            t("Tieni premuto per togliere"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+        )
+    }
+    remove?.let { r ->
+        MonoDialog(
+            onDismissRequest = { remove = null },
+            title = { Text(t("Togliere dai salvati?")) },
+            confirmButton = { TextButton(onClick = { Graph.saved.remove(r.id); remove = null }) { Text(t("Togli")) } },
+            dismissButton = { TextButton(onClick = { remove = null }) { Text(t("Annulla")) } },
+        )
     }
 }

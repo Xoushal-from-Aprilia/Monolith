@@ -94,6 +94,7 @@ private fun slidesFor(r: WeekRecap): List<String> = buildList {
     } else {
         if (r.messages > 0) add("messages")
         if (r.people.isNotEmpty()) add("people")
+        if (r.bond != null) add("bond")
         if (r.emojis.isNotEmpty()) add("emoji")
         if (r.calls > 0) add("calls")
         if (r.messages > 0) add("rhythm")
@@ -317,6 +318,28 @@ private fun Slide(id: String, r: WeekRecap, ink: Color, bg: Color, onClose: () -
                         Text(num(p.n), color = ink.copy(alpha = 0.55f), style = MaterialTheme.typography.titleMedium)
                     }
                 }
+            }
+        }
+
+        "bond" -> Column(top, verticalArrangement = Arrangement.Center) {
+            val (p, b) = r.bond!!
+            Rise(0) { Kicker(t("Il legame più forte"), ink) }
+            Spacer(Modifier.height(10.dp))
+            Rise(100) { Big(p.name, ink, 40.sp) }
+            Spacer(Modifier.height(24.dp))
+            Rise(350) {
+                Row(verticalAlignment = Alignment.Bottom) {
+                    BondStone(b, Modifier.size(110.dp, 150.dp))
+                    Spacer(Modifier.width(20.dp))
+                    Column {
+                        Big(b.name, ink, 36.sp)
+                        Line(t("{0} giorni insieme nell'ultimo mese", b.days30), ink, 0.65f)
+                    }
+                }
+            }
+            if (b.streak > 1) {
+                Spacer(Modifier.height(26.dp))
+                Rise(1300) { Line(t("🔥 {0} giorni di fila", b.streak), ink) }
             }
         }
 

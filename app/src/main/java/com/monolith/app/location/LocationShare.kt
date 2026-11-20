@@ -205,10 +205,14 @@ class LocationShare(private val ctx: Context, private val scope: CoroutineScope)
                 return
             }
         }
+        val bm = ctx.getSystemService(android.os.BatteryManager::class.java)
+        val bat = runCatching { bm.getIntProperty(android.os.BatteryManager.BATTERY_PROPERTY_CAPACITY) }.getOrDefault(-1)
+        val chg = runCatching { bm.isCharging }.getOrDefault(false)
         targets.forEach { f ->
             val payload = JSONObject().put("t", "loc")
                 .put("lat", loc.latitude).put("lon", loc.longitude)
                 .put("acc", loc.accuracy.toDouble()).put("at", tNow).put("until", f.iShareUntil)
+            if (bat in 0..100) payload.put("bat", bat).put("chg", chg)
             if (otw != null && otw.friend == f.pubkey) payload.put("dist", dist).put("eta", eta)
             if (!Graph.rtc.send(f.pubkey, payload)) {
                 Graph.rtc.ensureConnected(f.pubkey)

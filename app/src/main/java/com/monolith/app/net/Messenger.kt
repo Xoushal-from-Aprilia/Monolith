@@ -371,6 +371,7 @@ class Messenger(
             expiresAt = if (exp > 0) minOf(ts + exp * 1000, now() + exp * 1000) else 0,
         )
         if (db.messages().insert(msg) == -1L) return
+        if (!conv.startsWith("g:") && kind != "call") Graph.bondDays.touch(conv, ts)
         _typing.update { it - conv }
         if (kind == "photo" || kind == "voice") tryAssemble(id)
         sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
@@ -562,6 +563,9 @@ class Messenger(
             friend.pubkey, lat, lon, p.optDouble("acc", 0.0).toFloat(), p.optLong("at", now()), until,
             p.optInt("dist", -1), p.optInt("eta", -1),
         )
+        if (p.has("bat") && com.monolith.app.data.FriendBattery.update(friend.pubkey, p.optInt("bat", -1), p.optBoolean("chg"))) {
+            Graph.notifier.batteryLow(friend.pubkey, friend.displayName, friend.emoji, p.optInt("bat"))
+        }
         markOnline(friend.pubkey)
     }
 
@@ -1016,6 +1020,7 @@ class Messenger(
         val ttl = ttlFor(conv)
         val m = Message(newId(), conv, k.pub, true, ts, kind, text = text, mediaPath = mediaPath, extra = ex?.toString(), progress = progress, expiresAt = if (ttl > 0) ts + ttl * 1000 else 0)
         db.messages().insert(m)
+        if (!conv.startsWith("g:")) Graph.bondDays.touch(conv, ts)
         return m
     }
 

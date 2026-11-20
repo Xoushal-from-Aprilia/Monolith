@@ -87,6 +87,8 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Timer
+import androidx.compose.material.icons.rounded.Bookmark
+import androidx.compose.material.icons.rounded.BookmarkBorder
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
@@ -229,6 +231,7 @@ fun ChatListScreen(nav: NavHostController) {
     var statusSheet by remember { mutableStateOf(false) }
     var statusOf by remember { mutableStateOf<Pair<Friend, com.monolith.app.data.Status?>?>(null) }
 
+    val favs by Graph.favorites.all.collectAsState()
     val byPk = friends.associateBy { it.pubkey }
     val lastBy = last.associateBy { it.convId }
     val unreadBy = unread.associate { it.convId to it.n }
@@ -243,7 +246,7 @@ fun ChatListScreen(nav: NavHostController) {
             val m = lastBy[c]
             add(ConvRow(c, g.name, g.emoji, m, unreadBy[c] ?: 0, false, true, m?.ts ?: g.createdAt))
         }
-    }.sortedByDescending { it.sort }
+    }.sortedWith(compareByDescending<ConvRow> { !it.isGroup && it.conv in favs }.thenByDescending { it.sort })
     val onlineFriends = friends.filter { it.status == FriendStatus.FRIEND && isOnline(it.pubkey) }
 
     Box(Modifier.fillMaxSize()) {
@@ -342,7 +345,13 @@ private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, F
         Avatar(r.emoji, 54.dp, Modifier.sharedElementKey("avatar-" + r.conv), online = r.online)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
-            Text(r.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                Text(r.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                if (!r.isGroup) {
+                    com.monolith.app.ui.components.FavStar(r.conv)
+                    com.monolith.app.ui.components.BondBadge(r.conv)
+                }
+            }
             AnimatedContent(typingPk != null, label = "preview") { isTyping ->
                 if (isTyping) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
@@ -431,6 +440,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     var scheduleDialog by remember { mutableStateOf(false) }
     var scratchDialog by remember { mutableStateOf(false) }
     val pins by Graph.pins.pins.collectAsState()
+    val savedList by Graph.saved.all.collectAsState()
     val scheduledAll by Graph.scheduled.all.collectAsState()
     val scheduledHere = scheduledAll.filter { it.conv == conv }
 
@@ -533,6 +543,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                 Column(Modifier.weight(1f).bounceClick(0.99f) { if (!isGroup) nav.navigate(Routes.profile(conv)) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (!isGroup) com.monolith.app.ui.components.BondBadge(conv)
                         if (friend?.verified == true) {
                             Spacer(Modifier.width(4.dp))
                             Icon(Icons.Rounded.Verified, t("Verificato"), Modifier.size(16.dp))
@@ -808,6 +819,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     ActionRow(Icons.Rounded.PushPin, if (isPinned) t("Togli dalla cima") else t("Fissa in alto")) {
                         actionsFor = null
                         Graph.scope.launch { Graph.messenger.pin(conv, if (isPinned) null else m.id) }
+                    }
+                }
+                val saveOwner = if (!conv.startsWith("g:")) conv else if (!m.outgoing) m.sender else null
+                if (saveOwner != null && m.kind in setOf("text", "photo", "voice", "loc", "place", "scratch")) {
+                    val isSaved = savedList.any { it.msgId == m.id }
+                    ActionRow(if (isSaved) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, if (isSaved) t("Togli dai salvati") else t("Salva nel profilo")) {
+                        actionsFor = null
+                        if (isSaved) Graph.saved.unsaveMessage(m.id) else Graph.saved.save(saveOwner, m)
+                        android.widget.Toast.makeText(ctx, if (isSaved) t("Tolto dai salvati") else t("Salvato nel profilo"), android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
                 if (m.text.isNotBlank() && m.kind != "system") {

@@ -375,7 +375,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear()
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear()
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false
@@ -415,6 +415,17 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "1.1.0", "2026-11-21",
+        listOf(
+            "Legame accanto ai nomi: il piccolo monolite con la serie compare quando vi scrivete da almeno 100 giorni di fila",
+            "La serie del Legame non si perde più con i messaggi che si autoeliminano",
+            "Riepilogo della domenica: nuova slide con il legame più forte",
+            "Amici preferiti: stella nel profilo, in cima a Clubhouse e nel widget Amici",
+            "Batteria degli amici mentre condividono la posizione, con avviso quando il telefono sta per spegnersi",
+            "Salvati: tieni premuto un messaggio o una foto e salvalo nel profilo dell'amico, resta lì anche se la chat sparisce",
+        ),
+    ),
     Release(
         "1.0.0", "2026-11-20",
         listOf(

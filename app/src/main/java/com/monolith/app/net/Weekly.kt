@@ -38,6 +38,8 @@ data class WeekRecap(
     val habitDays: Int,
     val bestHabit: Triple<String, String, Int>?,
     val newFriends: List<WeekPerson>,
+    /** the strongest bond right now */
+    val bond: Pair<WeekPerson, Bond>?,
 ) {
     val messages get() = sent + received
     val callMinutes get() = ((callMs + 59_999) / 60_000).toInt()
@@ -209,9 +211,15 @@ object Weekly {
         val newFriends = friends.values.filter { it.status == FriendStatus.FRIEND && it.createdAt >= firstDay }
             .sortedBy { it.createdAt }.map { WeekPerson(it.pubkey, it.displayName, it.emoji, 0) }
 
+        val bond = friends.values.filter { it.status == FriendStatus.FRIEND }
+            .map { f -> f to Bonds.with(f.pubkey) }
+            .filter { it.second.days30 > 0 }
+            .maxByOrNull { it.second.days30 * 1000 + it.second.streak }
+            ?.let { (f, b) -> WeekPerson(f.pubkey, f.displayName, f.emoji, b.days30) to b }
+
         return WeekRecap(
             firstDay, to, sent, received, people, emojis, calls, callMs, photos, voices, days, hour,
-            arrivalsSeen.size, places, events, eventsDone, habitDays, bestHabit, newFriends,
+            arrivalsSeen.size, places, events, eventsDone, habitDays, bestHabit, newFriends, bond,
         )
     }
 

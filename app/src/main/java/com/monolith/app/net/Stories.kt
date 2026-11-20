@@ -92,11 +92,9 @@ data class Bond(val level: Int, val streak: Int, val days30: Int) {
 object Bonds {
     suspend fun with(pk: String): Bond {
         val since = now() - 60L * DAY_MS
-        val days = Graph.db.messages().timestamps(pk, since).map { dayCode(it) }.toSet()
-        val c = Calendar.getInstance()
-        if (dayCode(c.timeInMillis) !in days) c.add(Calendar.DAY_OF_YEAR, -1)
-        var streak = 0
-        while (dayCode(c.timeInMillis) in days) { streak++; c.add(Calendar.DAY_OF_YEAR, -1) }
+        val days = Graph.db.messages().timestamps(pk, since).map { dayCode(minOf(it, now())) }.toSet() +
+            (Graph.bondDays.days.value[pk] ?: emptySet())
+        val streak = com.monolith.app.data.streakOf(days)
         val cut = dayCode(now() - 30L * DAY_MS)
         val days30 = days.count { it > cut }
         val level = when {

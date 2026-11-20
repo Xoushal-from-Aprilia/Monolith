@@ -61,8 +61,12 @@ class FriendsWidget : GlanceAppWidget() {
         val statuses = Graph.statuses.friends.value
         val places = Graph.places.all.value
         val at = now()
+        val favs = Graph.favorites.all.value
         return friends
-            .sortedWith(compareByDescending<com.monolith.app.data.Friend> { last[it.pubkey] ?: 0L }.thenBy { it.displayName.lowercase() })
+            .sortedWith(
+                compareByDescending<com.monolith.app.data.Friend> { it.pubkey in favs }
+                    .thenByDescending { last[it.pubkey] ?: 0L }.thenBy { it.displayName.lowercase() },
+            )
             .take(6)
             .map { f ->
                 val st = statuses[f.pubkey]?.takeIf { it.active }
@@ -74,7 +78,10 @@ class FriendsWidget : GlanceAppWidget() {
                     last[f.pubkey] != null -> t("Ultimo messaggio {0}", Fmt.ago(last[f.pubkey] ?: 0L))
                     else -> "@" + f.username
                 }
-                FriendItem(f.pubkey, f.emoji, f.displayName, line, unread[f.pubkey] ?: 0)
+                val streak = Graph.bondDays.streak(f.pubkey)
+                val name = (if (f.pubkey in favs) "★ " else "") + f.displayName +
+                    (if (streak >= com.monolith.app.data.BOND_BADGE_DAYS) "  🗿 $streak" else "")
+                FriendItem(f.pubkey, f.emoji, name, line, unread[f.pubkey] ?: 0)
             }
     }
 }

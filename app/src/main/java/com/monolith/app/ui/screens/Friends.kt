@@ -296,6 +296,8 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(f.displayName, style = MaterialTheme.typography.titleMedium)
                         if (f.verified) { Spacer(Modifier.width(4.dp)); Icon(Icons.Rounded.Verified, t("Verificato"), Modifier.size(16.dp)) }
+                        com.monolith.app.ui.components.FavStar(f.pubkey)
+                        com.monolith.app.ui.components.BondBadge(f.pubkey)
                     }
                     Text(
                         when {
