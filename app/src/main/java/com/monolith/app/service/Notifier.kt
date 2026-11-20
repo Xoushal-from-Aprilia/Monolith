@@ -361,7 +361,7 @@ class Notifier(private val ctx: Context) {
     fun birthday(pk: String, name: String, emoji: String) {
         val n = base(Sounds.channelId(SoundKind.REMINDER))
             .setContentTitle(t("Oggi è il compleanno di {0}", name))
-            .setContentText(t("Mandagli gli auguri 🎂"))
+            .setContentText(t("Manda i tuoi auguri 🎂"))
             .setLargeIcon(emojiIcon(emoji))
             .setCategory(NotificationCompat.CATEGORY_REMINDER)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
