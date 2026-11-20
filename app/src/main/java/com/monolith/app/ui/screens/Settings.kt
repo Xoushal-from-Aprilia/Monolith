@@ -362,6 +362,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear()
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false
@@ -401,6 +402,15 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "0.6.0", "2026-11-20",
+        listOf(
+            "Messaggi programmati: scrivi ora, parte all'ora che scegli",
+            "Cerca nei messaggi di tutte le chat",
+            "Messaggi fissati in cima alla chat, per tutti",
+            "Stato di 24 ore: un'emoji e una frase che vedono gli amici",
+        ),
+    ),
     Release(
         "0.5.0", "2026-11-20",
         listOf(

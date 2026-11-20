@@ -17,6 +17,9 @@ import com.monolith.app.data.AppDatabase
 import com.monolith.app.audio.Sounds
 import com.monolith.app.data.BirthdayStore
 import com.monolith.app.data.DoneStore
+import com.monolith.app.data.PinStore
+import com.monolith.app.data.ScheduledStore
+import com.monolith.app.data.StatusStore
 import com.monolith.app.data.PlacesStore
 import com.monolith.app.location.LocationShare
 import com.monolith.app.location.PlaceWatcher
@@ -51,6 +54,9 @@ object Graph {
     lateinit var places: PlacesStore
     lateinit var birthdays: BirthdayStore
     lateinit var done: DoneStore
+    lateinit var scheduled: ScheduledStore
+    lateinit var pins: PinStore
+    lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
 
     @Volatile
@@ -69,6 +75,9 @@ object Graph {
         db = AppDatabase.build(application)
         birthdays = BirthdayStore(application)
         done = DoneStore(application)
+        scheduled = ScheduledStore(application)
+        pins = PinStore(application)
+        statuses = StatusStore(application)
         Sounds.init(application)
         notifier = Notifier(application).also { it.createChannels() }
         relays = RelayPool(scope) { identity.keys }

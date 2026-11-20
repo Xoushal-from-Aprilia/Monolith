@@ -94,6 +94,7 @@ import com.monolith.app.ui.screens.EventEditorScreen
 import com.monolith.app.ui.screens.FriendsScreen
 import com.monolith.app.ui.screens.JournalScreen
 import com.monolith.app.ui.screens.SoundsScreen
+import com.monolith.app.ui.screens.SearchScreen
 import com.monolith.app.ui.screens.ListDetailScreen
 import com.monolith.app.ui.screens.MapScreen
 import com.monolith.app.ui.screens.NewGroupScreen
@@ -126,7 +127,7 @@ object NavBus {
 }
 
 object Routes {
-    fun chat(conv: String) = "chat/" + Uri.encode(conv)
+    fun chat(conv: String, focus: String = "") = "chat/" + Uri.encode(conv) + (if (focus.isNotEmpty()) "?focus=" + Uri.encode(focus) else "")
     fun event(id: String, date: Long = 0L) = "event/" + Uri.encode(id) + "?date=$date"
     fun photo(path: String, key: String) = "photo?path=" + Uri.encode(path) + "&key=" + Uri.encode(key)
     fun list(id: String) = "list/" + Uri.encode(id)
@@ -317,11 +318,18 @@ private fun MainNav() {
                         HomeScreen(nav, homeTab.intValue) { homeTab.intValue = it }
                     }
                 }
-                composable("chat/{conv}", arguments = listOf(navArgument("conv") { type = NavType.StringType })) { entry ->
+                composable(
+                    "chat/{conv}?focus={focus}",
+                    arguments = listOf(
+                        navArgument("conv") { type = NavType.StringType },
+                        navArgument("focus") { type = NavType.StringType; defaultValue = "" },
+                    ),
+                ) { entry ->
                     CompositionLocalProvider(LocalNavScope provides this) {
-                        ChatScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: ""))
+                        ChatScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: ""), Uri.decode(entry.arguments?.getString("focus") ?: ""))
                     }
                 }
+                composable("search") { SearchScreen(nav) }
                 composable(
                     "event/{id}?date={date}",
                     arguments = listOf(

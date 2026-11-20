@@ -157,6 +157,7 @@ object ReminderScheduler {
     suspend fun rescheduleAll(ctx: Context) {
         Graph.db.agenda().allNow().forEach { schedule(ctx, it) }
         BirthdayAlarm.schedule(ctx)
+        ScheduledSender.rearmAll(ctx)
         // a birthday today that nobody announced yet (phone was off at nine)
         if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 9) BirthdayAlarm.fire(ctx)
     }
@@ -203,6 +204,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val ACTION_DONE = "monolith.reminder.DONE"
         const val ACTION_SNOOZED = "monolith.reminder.SNOOZED"
         const val ACTION_BIRTHDAYS = "monolith.reminder.BIRTHDAYS"
+        const val ACTION_SEND = "monolith.reminder.SEND"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -214,6 +216,7 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 when {
                     action == ACTION_BIRTHDAYS -> BirthdayAlarm.fire(context)
+                    action.startsWith(ACTION_SEND) && id != null -> ScheduledSender.fire(id)
                     action.startsWith(ACTION_SNOOZE) && id != null -> {
                         Graph.notifier.cancelReminder(id)
                         ReminderScheduler.snooze(context, id, occ, intent.getIntExtra("snooze", 10))
@@ -245,6 +248,46 @@ class ReminderReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+}
+
+/** messages written now that leave later */
+object ScheduledSender {
+    private fun pi(ctx: Context, id: String): PendingIntent {
+        val i = Intent(ctx, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_SEND + "." + id).putExtra("id", id)
+        return PendingIntent.getBroadcast(ctx, ("sch$id").hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    fun add(ctx: Context, conv: String, text: String, at: Long) {
+        val s = com.monolith.app.data.Scheduled(java.util.UUID.randomUUID().toString(), conv, text.trim(), at)
+        Graph.scheduled.add(s)
+        arm(ctx, s)
+    }
+
+    fun cancel(ctx: Context, id: String) {
+        Graph.scheduled.remove(id)
+        runCatching { ctx.getSystemService(AlarmManager::class.java).cancel(pi(ctx, id)) }
+    }
+
+    private fun arm(ctx: Context, s: com.monolith.app.data.Scheduled) {
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, s.at, pi(ctx, s.id))
+            else am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, s.at, pi(ctx, s.id))
+        } catch (_: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, s.at, pi(ctx, s.id))
+        }
+    }
+
+    suspend fun fire(id: String) {
+        val s = Graph.scheduled.get(id) ?: return
+        Graph.scheduled.remove(id)
+        Graph.startEngine()
+        Graph.messenger.sendText(s.conv, s.text)
+    }
+
+    suspend fun rearmAll(ctx: Context) {
+        Graph.scheduled.all.value.forEach { if (it.at <= now()) fire(it.id) else arm(ctx, it) }
     }
 }
 

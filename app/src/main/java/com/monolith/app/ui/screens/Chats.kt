@@ -188,6 +188,9 @@ import org.json.JSONObject
 import java.io.File
 import com.monolith.app.ui.components.MonoSheet
 import com.monolith.app.ui.components.MonoDialog
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Schedule
+import androidx.compose.material.icons.rounded.PushPin
 
 private data class ConvRow(
     val conv: String,
@@ -222,6 +225,8 @@ fun ChatListScreen(nav: NavHostController) {
     val profile by Graph.identity.profile.collectAsState()
     val tick = rememberTicker()
     var newChat by remember { mutableStateOf(false) }
+    var statusSheet by remember { mutableStateOf(false) }
+    var statusOf by remember { mutableStateOf<Pair<Friend, com.monolith.app.data.Status?>?>(null) }
 
     val byPk = friends.associateBy { it.pubkey }
     val lastBy = last.associateBy { it.convId }
@@ -248,21 +253,12 @@ fun ChatListScreen(nav: NavHostController) {
                         t("Clubhouse"), Modifier.weight(1f),
                         subtitle = if (onlineFriends.isEmpty()) t("Le tue conversazioni") else t("{0} amici online", onlineFriends.size),
                     )
-                    Avatar(profile?.emoji ?: "🗿", 44.dp, Modifier.padding(end = 20.dp).bounceClick { nav.navigate("settings") })
+                    IconButton(onClick = { nav.navigate("search") }) { Icon(Icons.Rounded.Search, t("Cerca nei messaggi")) }
+                    Avatar(profile?.emoji ?: "🗿", 44.dp, Modifier.padding(start = 4.dp, end = 20.dp).bounceClick { nav.navigate("settings") })
                 }
             }
-            if (onlineFriends.isNotEmpty()) {
-                item(key = "online") {
-                    LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(vertical = 8.dp)) {
-                        items(onlineFriends, key = { it.pubkey }) { f ->
-                            Column(Modifier.width(64.dp).animateItem().bounceClick { nav.navigate(Routes.chat(f.pubkey)) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                                Avatar(f.emoji, 58.dp, online = true, ring = true)
-                                Spacer(Modifier.height(4.dp))
-                                Text(f.displayName, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                            }
-                        }
-                    }
-                }
+            item(key = "statuses") {
+                StatusStrip(friends, isOnline, onMine = { statusSheet = true }, onFriend = { f, st -> statusOf = f to st })
             }
             if (rows.isEmpty()) {
                 item(key = "empty") {
@@ -286,6 +282,11 @@ fun ChatListScreen(nav: NavHostController) {
             shape = RoundedCornerShape(20.dp),
             modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).sharedBoundsKey("group-new"),
         )
+    }
+
+    if (statusSheet) StatusSheet { statusSheet = false }
+    statusOf?.let { (f, st) ->
+        StatusDialog(f, st, onClose = { statusOf = null }, onWrite = { nav.navigate(Routes.chat(f.pubkey)) })
     }
 
     if (newChat) {
@@ -385,7 +386,7 @@ private fun hasPerm(ctx: android.content.Context, p: String) = ContextCompat.che
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-fun ChatScreen(nav: NavHostController, conv: String) {
+fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val ctx = LocalContext.current
     val haptics = LocalHapticFeedback.current
     val uiScope = rememberCoroutineScope()
@@ -418,6 +419,10 @@ fun ChatScreen(nav: NavHostController, conv: String) {
     var recStart by remember { mutableLongStateOf(0L) }
     var recCancel by remember { mutableStateOf(false) }
     val recorder = remember { VoiceRecorder(ctx) }
+    var scheduleDialog by remember { mutableStateOf(false) }
+    val pins by Graph.pins.pins.collectAsState()
+    val scheduledAll by Graph.scheduled.all.collectAsState()
+    val scheduledHere = scheduledAll.filter { it.conv == conv }
 
     DisposableEffect(conv) {
         Graph.messenger.activeConv.value = conv
@@ -553,6 +558,21 @@ fun ChatScreen(nav: NavHostController, conv: String) {
         // ---- messages
         val listState = rememberLazyListState()
         LaunchedEffect(messages.firstOrNull()?.id) { if (listState.firstVisibleItemIndex < 3) listState.animateScrollToItem(0) }
+        fun scrollToMsg(id: String) {
+            val idx = chatItems.indexOfFirst { it.key == id }
+            if (idx >= 0) uiScope.launch { listState.animateScrollToItem(idx + if (typing != null) 1 else 0) }
+        }
+        // opened from search: go to that message once
+        var focused by remember(conv) { mutableStateOf(false) }
+        LaunchedEffect(chatItems.size, focus) {
+            if (!focused && focus.isNotBlank() && chatItems.any { it.key == focus }) { focused = true; scrollToMsg(focus) }
+        }
+        val pinned = pins[conv]?.let { id -> messages.firstOrNull { it.id == id && it.kind != "deleted" } }
+        PinnedBar(
+            pinned?.let { Graph.messenger.previewText(it) },
+            onOpen = { pinned?.let { scrollToMsg(it.id) } },
+            onUnpin = { Graph.scope.launch { Graph.messenger.pin(conv, null) } },
+        )
         LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, reverseLayout = true, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)) {
             if (typing != null) {
                 item(key = "typing") {
@@ -582,15 +602,14 @@ fun ChatScreen(nav: NavHostController, conv: String) {
                             Toast.makeText(ctx, t("Aggiunto all'agenda"), Toast.LENGTH_SHORT).show()
                         },
                         onOpenMap = { lat, lon -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=$lat,$lon"))) } },
-                        onQuote = { id ->
-                            val idx = chatItems.indexOfFirst { it.key == id }
-                            if (idx >= 0) uiScope.launch { listState.animateScrollToItem(idx + if (typing != null) 1 else 0) }
-                        },
+                        onQuote = { id -> scrollToMsg(id) },
                         onReact = { m, e -> Graph.scope.launch { Graph.messenger.react(m, e) } },
                     )
                 }
             }
         }
+
+        ScheduledBar(scheduledHere) { sc -> com.monolith.app.service.ScheduledSender.cancel(ctx, sc.id) }
 
         // ---- reply / edit banner
         AnimatedVisibility(replyTo != null || editing != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -644,6 +663,7 @@ fun ChatScreen(nav: NavHostController, conv: String) {
                                         attach = false; locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                                     })
                                     DropdownMenuItem(text = { Text(t("Evento dall'agenda")) }, leadingIcon = { Icon(Icons.Rounded.Event, null) }, onClick = { attach = false; shareEvent = true })
+                                    DropdownMenuItem(text = { Text(t("Programma messaggio")) }, leadingIcon = { Icon(Icons.Rounded.Schedule, null) }, onClick = { attach = false; scheduleDialog = true })
                                 }
                             }
                             Box(
@@ -768,6 +788,13 @@ fun ChatScreen(nav: NavHostController, conv: String) {
                     Spacer(Modifier.height(12.dp))
                     ActionRow(Icons.AutoMirrored.Rounded.Reply, t("Rispondi")) { replyTo = m; editing = null; actionsFor = null }
                 }
+                if (m.kind != "system" && m.kind != "call" && m.kind != "deleted") {
+                    val isPinned = pins[conv] == m.id
+                    ActionRow(Icons.Rounded.PushPin, if (isPinned) t("Togli dalla cima") else t("Fissa in alto")) {
+                        actionsFor = null
+                        Graph.scope.launch { Graph.messenger.pin(conv, if (isPinned) null else m.id) }
+                    }
+                }
                 if (m.text.isNotBlank() && m.kind != "system") {
                     ActionRow(Icons.Rounded.ContentCopy, t("Copia")) {
                         ctx.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("msg", m.text))
@@ -788,6 +815,13 @@ fun ChatScreen(nav: NavHostController, conv: String) {
                     Graph.scope.launch { Graph.messenger.deleteForMe(m) }
                 }
             }
+        }
+    }
+    if (scheduleDialog) {
+        ScheduleDialog(text, onClose = { scheduleDialog = false }) { tx, at ->
+            com.monolith.app.service.ScheduledSender.add(ctx, conv, tx, at)
+            text = ""
+            Toast.makeText(ctx, t("Messaggio programmato"), Toast.LENGTH_SHORT).show()
         }
     }
     reactPicker?.let { m ->

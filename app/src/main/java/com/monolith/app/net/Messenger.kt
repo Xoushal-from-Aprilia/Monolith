@@ -235,6 +235,11 @@ class Messenger(
             "chunk" -> onChunk(from, p)
             "ack" -> onAck(p)
             "react" -> onReact(from, p, friend)
+            "pin" -> onPin(from, p, friend)
+            "status" -> if (friend?.status == FriendStatus.FRIEND) {
+                val u = p.optLong("u")
+                Graph.statuses.setFriend(from, if (u > now()) com.monolith.app.data.Status(p.optString("e").take(8), p.optString("x").take(80), minOf(u, now() + 86_400_000L)) else null)
+            }
             "edit" -> onEdit(from, p)
             "del" -> onDelete(from, p)
             "vote" -> onVote(from, p, friend)
@@ -1089,6 +1094,31 @@ class Messenger(
         val (targets, gid) = recipients(conv)
         gid?.let { payload.put("g", it) }
         targets.forEach { sendStored(it, payload, ttl) }
+    }
+
+    private suspend fun onPin(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val id = p.optString("id")
+        if (id.isNotBlank()) {
+            val m = db.messages().get(id) ?: return
+            if (m.convId != conv) return
+        }
+        Graph.pins.set(conv, id.ifBlank { null })
+    }
+
+    /** keep a message at the top of the conversation, for everyone in it (null = unpin) */
+    suspend fun pin(conv: String, msgId: String?) {
+        Graph.pins.set(conv, msgId)
+        toConv(conv, JSONObject().put("t", "pin").put("id", msgId ?: ""))
+    }
+
+    /** my 24-hour status, sent to every friend (null clears it) */
+    suspend fun setStatus(emoji: String?, text: String?) {
+        val st = if (emoji.isNullOrBlank() && text.isNullOrBlank()) null
+        else com.monolith.app.data.Status(emoji?.ifBlank { "💬" } ?: "💬", text.orEmpty().trim().take(80), now() + 86_400_000L)
+        Graph.statuses.setMine(st)
+        val payload = JSONObject().put("t", "status").put("e", st?.emoji ?: "").put("x", st?.text ?: "").put("u", st?.until ?: 0L)
+        db.friends().friendsNow().filter { it.status == FriendStatus.FRIEND }.forEach { sendStored(it.pubkey, payload, 86_400L) }
     }
 
     suspend fun react(m: Message, emoji: String) {

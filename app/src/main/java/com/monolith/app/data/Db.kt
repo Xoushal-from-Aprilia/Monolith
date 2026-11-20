@@ -272,6 +272,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages")
     suspend fun allNow(): List<Message>
 
+    @Query("SELECT * FROM messages WHERE text LIKE '%' || :q || '%' AND kind NOT IN ('deleted', 'system', 'call') ORDER BY ts DESC LIMIT 150")
+    suspend fun search(q: String): List<Message>
+
     @Query("SELECT * FROM messages WHERE id = :id")
     suspend fun get(id: String): Message?
 
