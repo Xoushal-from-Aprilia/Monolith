@@ -2,4 +2,6 @@
     <string name="tile_label">Poloha živě</string>
     <string name="widget_label">Kalendář Monolith</string>
     <string name="widget_desc">Vaše nadcházející události</string>
+    <string name="friends_widget_label">Přátelé Monolith</string>
+    <string name="friends_widget_desc">Vaši přátelé se stavem a místem</string>
 </resources>

@@ -7,10 +7,12 @@ import androidx.lifecycle.DefaultLifecycleObserver
 import androidx.lifecycle.LifecycleOwner
 import androidx.lifecycle.ProcessLifecycleOwner
 import androidx.glance.appwidget.updateAll
+import kotlinx.coroutines.flow.collectLatest
 import com.monolith.app.core.AppCtx
 import com.monolith.app.core.AppLock
 import com.monolith.app.core.I18n
 import com.monolith.app.widget.AgendaWidget
+import com.monolith.app.widget.FriendsWidget
 import com.monolith.app.core.IdentityStore
 import com.monolith.app.core.Prefs
 import com.monolith.app.data.AppDatabase
@@ -82,6 +84,7 @@ object Graph {
         statuses = StatusStore(application)
         Sounds.init(application)
         com.monolith.app.net.Stories.init(application)
+        com.monolith.app.net.Weekly.refresh(application)
         notifier = Notifier(application).also { it.createChannels() }
         relays = RelayPool(scope) { identity.keys }
         messenger = Messenger(application, scope, db)
@@ -137,6 +140,18 @@ object Graph {
         scope.launch { runCatching { AgendaWidget().updateAll(app) } }
     }
 
+    /** keep the friends widget in step with chats, statuses and common places */
+    private fun watchFriendsWidget() {
+        scope.launch {
+            kotlinx.coroutines.flow.combine(
+                db.messages().unread(), db.messages().lastMessages(), statuses.friends, places.all, db.friends().friends(),
+            ) { _, _, _, _, _ -> Unit }.collectLatest {
+                kotlinx.coroutines.delay(2500)
+                runCatching { FriendsWidget().updateAll(app) }
+            }
+        }
+    }
+
     @Synchronized
     fun startEngine() {
         if (!identity.hasIdentity()) return
@@ -145,6 +160,7 @@ object Graph {
             messenger.start()
             placeWatch.start()
             shards.start()
+            watchFriendsWidget()
         }
         MonolithService.start(app)
     }

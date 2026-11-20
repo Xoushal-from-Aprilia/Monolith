@@ -28,6 +28,7 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
+import androidx.compose.material.icons.rounded.AutoAwesome
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -139,6 +140,7 @@ fun SettingsScreen(nav: NavHostController) {
     val mapStyleIdx by Graph.prefs.mapStyle.collectAsState()
     val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
+    var weeklyOn by remember { mutableStateOf(com.monolith.app.net.Weekly.enabled(ctx)) }
     var lockOn by remember { mutableStateOf(Graph.prefs.appLock) }
     var backupDialog by remember { mutableStateOf(false) }
     var backupPassword by remember { mutableStateOf("") }
@@ -205,6 +207,17 @@ fun SettingsScreen(nav: NavHostController) {
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
             SettingRow(Icons.Rounded.MusicNote, t("Suoni"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
+            SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(t("Riepilogo della domenica"), style = MaterialTheme.typography.titleMedium)
+                    Text(t("Una notifica ogni domenica alle 18"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = weeklyOn, onCheckedChange = {
+                    weeklyOn = it
+                    com.monolith.app.net.Weekly.setEnabled(ctx, it)
+                })
+            }
 
             SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 16.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -402,6 +415,16 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "1.0.0", "2026-11-20",
+        listOf(
+            "Riepilogo della domenica: ogni domenica alle 18 la tua settimana in slide animate",
+            "Le persone con cui hai parlato di più, la tua emoji, chiamate, ritmo, luoghi, foto, agenda e abitudini",
+            "Un titolo per la tua settimana, da condividere con chi vuoi",
+            "Widget Amici per la schermata Home: stato, dove si trovano, messaggi da leggere; un tocco apre la chat",
+            "Il riepilogo si guarda quando vuoi da Impostazioni, e l'avviso della domenica si può spegnere",
+        ),
+    ),
     Release(
         "0.9.0", "2026-11-20",
         listOf(

@@ -2,4 +2,6 @@
     <string name="tile_label">Position en direct</string>
     <string name="widget_label">Agenda Monolith</string>
     <string name="widget_desc">Vos prochains événements</string>
+    <string name="friends_widget_label">Amis Monolith</string>
+    <string name="friends_widget_desc">Vos amis, avec statut et lieu</string>
 </resources>

@@ -82,9 +82,10 @@ class MainActivity : FragmentActivity() {
         val call = i.getBooleanExtra(Notifier.EXTRA_CALL, false)
         val accept = i.getBooleanExtra(Notifier.EXTRA_ACCEPT_CALL, false)
         val quick = i.getBooleanExtra(Notifier.EXTRA_QUICK_SHARE, false)
+        val route = i.getStringExtra(Notifier.EXTRA_ROUTE)
         if (call) showOverLock(true)
-        if (conv != null || tab != null || event != null || call || quick) {
-            NavBus.requests.value = NavRequest(conv, tab, event, call, accept, quick)
+        if (conv != null || tab != null || event != null || call || quick || route != null) {
+            NavBus.requests.value = NavRequest(conv, tab, event, call, accept, quick, route)
         }
         // consume the extras so a configuration change doesn't replay them
         i.removeExtra(Notifier.EXTRA_CONV)
@@ -93,6 +94,7 @@ class MainActivity : FragmentActivity() {
         i.removeExtra(Notifier.EXTRA_CALL)
         i.removeExtra(Notifier.EXTRA_ACCEPT_CALL)
         i.removeExtra(Notifier.EXTRA_QUICK_SHARE)
+        i.removeExtra(Notifier.EXTRA_ROUTE)
     }
 
     override fun onResume() {

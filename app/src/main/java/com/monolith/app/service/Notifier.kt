@@ -49,6 +49,7 @@ class Notifier(private val ctx: Context) {
         const val EXTRA_CALL = "open_call"
         const val EXTRA_ACCEPT_CALL = "accept_call"
         const val EXTRA_QUICK_SHARE = "quick_share"
+        const val EXTRA_ROUTE = "open_route"
 
         private const val INK = 0xFF0A0A0A.toInt()
     }
@@ -363,6 +364,11 @@ class Notifier(private val ctx: Context) {
             .setContentIntent(openApp(17) { putExtra(EXTRA_TAB, 0) })
             .build()
         post(("notes$place").hashCode(), n)
+    }
+
+    /** Sunday evening: the recap of the week is ready */
+    fun weekly(title: String, text: String) {
+        simple(7070, title, text, "✨", openApp(20) { putExtra(EXTRA_ROUTE, "wrapped") })
     }
 
     fun birthday(pk: String, name: String, emoji: String) {

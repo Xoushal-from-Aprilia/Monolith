@@ -91,6 +91,8 @@ data class Message(
 
 data class UnreadCount(val convId: String, val n: Int)
 
+data class ConvTs(val convId: String, val ts: Long)
+
 @Entity(tableName = "reactions", primaryKeys = ["msgId", "sender"], indices = [Index("convId")])
 data class Reaction(val msgId: String, val sender: String, val convId: String, val emoji: String, val ts: Long)
 
@@ -271,6 +273,15 @@ interface MessageDao {
 
     @Query("SELECT * FROM messages")
     suspend fun allNow(): List<Message>
+
+    @Query("SELECT * FROM messages WHERE ts > :since AND kind NOT IN ('system', 'deleted')")
+    suspend fun since(since: Long): List<Message>
+
+    @Query("SELECT convId, MAX(ts) AS ts FROM messages WHERE kind NOT IN ('system', 'deleted') GROUP BY convId")
+    suspend fun lastActivity(): List<ConvTs>
+
+    @Query("SELECT convId, COUNT(*) AS n FROM messages WHERE outgoing = 0 AND status < 3 GROUP BY convId")
+    suspend fun unreadNow(): List<UnreadCount>
 
     @Query("SELECT ts FROM messages WHERE convId = :conv AND kind NOT IN ('system', 'deleted', 'call') AND ts > :since")
     suspend fun timestamps(conv: String, since: Long): List<Long>

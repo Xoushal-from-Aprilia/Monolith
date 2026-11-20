@@ -247,6 +247,7 @@ fun ChatListScreen(nav: NavHostController) {
     val onlineFriends = friends.filter { it.status == FriendStatus.FRIEND && isOnline(it.pubkey) }
 
     Box(Modifier.fillMaxSize()) {
+        val weeklyReady by com.monolith.app.net.Weekly.ready.collectAsState()
         LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 110.dp)) {
             item(key = "head") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
@@ -265,6 +266,7 @@ fun ChatListScreen(nav: NavHostController) {
                     onFriend = { f, _ -> nav.navigate(Routes.profile(f.pubkey)) },
                 )
             }
+            if (weeklyReady) item(key = "weekly") { WeeklyCard { nav.navigate("wrapped") } }
             item(key = "shards") { ShardStrip(nav, unreadBy) }
             if (rows.isEmpty()) {
                 item(key = "empty") {

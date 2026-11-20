@@ -160,6 +160,12 @@ object ReminderScheduler {
         ScheduledSender.rearmAll(ctx)
         // a birthday today that nobody announced yet (phone was off at nine)
         if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 9) BirthdayAlarm.fire(ctx)
+        WeeklyAlarm.schedule(ctx)
+        // Sunday evening and the recap didn't go out (phone off at six)
+        val c = java.util.Calendar.getInstance()
+        if (c.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY && c.get(java.util.Calendar.HOUR_OF_DAY) >= WeeklyAlarm.HOUR) {
+            com.monolith.app.net.Weekly.announce(ctx)
+        }
     }
 
     fun snooze(ctx: Context, id: String, occ: Long, minutes: Int) {
@@ -205,6 +211,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val ACTION_SNOOZED = "monolith.reminder.SNOOZED"
         const val ACTION_BIRTHDAYS = "monolith.reminder.BIRTHDAYS"
         const val ACTION_SEND = "monolith.reminder.SEND"
+        const val ACTION_WEEK = "monolith.reminder.WEEK"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -216,6 +223,7 @@ class ReminderReceiver : BroadcastReceiver() {
             try {
                 when {
                     action == ACTION_BIRTHDAYS -> BirthdayAlarm.fire(context)
+                    action == ACTION_WEEK -> WeeklyAlarm.fire(context)
                     action.startsWith(ACTION_SEND) && id != null -> ScheduledSender.fire(id)
                     action.startsWith(ACTION_SNOOZE) && id != null -> {
                         Graph.notifier.cancelReminder(id)
@@ -312,6 +320,26 @@ object BirthdayAlarm {
                 Graph.notifier.birthday(pk, f.displayName, f.emoji)
             }
         }
+        schedule(ctx)
+    }
+}
+
+/** Sunday at six in the evening: the recap of the week */
+object WeeklyAlarm {
+    const val HOUR = 18
+
+    fun schedule(ctx: Context) {
+        val c = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, HOUR); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            while (get(java.util.Calendar.DAY_OF_WEEK) != java.util.Calendar.SUNDAY || timeInMillis <= now()) add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        val i = Intent(ctx, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_WEEK)
+        val pi = PendingIntent.getBroadcast(ctx, 9091, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        runCatching { ctx.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, c.timeInMillis, pi) }
+    }
+
+    suspend fun fire(ctx: Context) {
+        com.monolith.app.net.Weekly.announce(ctx)
         schedule(ctx)
     }
 }

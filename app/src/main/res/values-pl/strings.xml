@@ -2,4 +2,6 @@
     <string name="tile_label">Lokalizacja na żywo</string>
     <string name="widget_label">Kalendarz Monolith</string>
     <string name="widget_desc">Twoje nadchodzące wydarzenia</string>
+    <string name="friends_widget_label">Znajomi Monolith</string>
+    <string name="friends_widget_desc">Twoi znajomi ze statusem i miejscem</string>
 </resources>

@@ -3,4 +3,6 @@
     <string name="tile_label">Posizione live</string>
     <string name="widget_label">Agenda Monolith</string>
     <string name="widget_desc">I tuoi prossimi eventi</string>
+    <string name="friends_widget_label">Amici Monolith</string>
+    <string name="friends_widget_desc">I tuoi amici, con stato e luogo</string>
 </resources>

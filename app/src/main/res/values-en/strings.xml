@@ -2,4 +2,6 @@
     <string name="tile_label">Live location</string>
     <string name="widget_label">Monolith agenda</string>
     <string name="widget_desc">Your upcoming events</string>
+    <string name="friends_widget_label">Monolith friends</string>
+    <string name="friends_widget_desc">Your friends, with status and place</string>
 </resources>

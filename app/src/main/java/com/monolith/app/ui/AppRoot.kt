@@ -118,6 +118,7 @@ data class NavRequest(
     val call: Boolean = false,
     val acceptCall: Boolean = false,
     val quickShare: Boolean = false,
+    val route: String? = null,
 )
 
 object NavBus {
@@ -299,6 +300,10 @@ private fun MainNav() {
                 nav.popBackStack("home", inclusive = false)
                 nav.navigate(Routes.event(r.event)) { launchSingleTop = true }
             }
+            r.route != null -> {
+                nav.popBackStack("home", inclusive = false)
+                nav.navigate(r.route) { launchSingleTop = true }
+            }
             else -> nav.popBackStack("home", inclusive = false)
         }
     }
@@ -339,6 +344,7 @@ private fun MainNav() {
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("profile/{pk}") { entry -> com.monolith.app.ui.screens.ProfileScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("stories/{pk}") { entry -> com.monolith.app.ui.screens.StoryViewer(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("wrapped", enterTransition = { fadeIn(tween(400)) }, exitTransition = { fadeOut(tween(300)) }) { com.monolith.app.ui.screens.WrappedScreen(nav) }
                 composable("bill/{id}") { entry -> com.monolith.app.ui.screens.BillScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("album/{id}") { entry -> com.monolith.app.ui.screens.AlbumScreen(nav, Uri.decode(entry.arguments?.getString("id") ?: "")) }
                 composable(
