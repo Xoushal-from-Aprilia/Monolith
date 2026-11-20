@@ -119,6 +119,8 @@ data class NavRequest(
 object NavBus {
     val requests = MutableStateFlow<NavRequest?>(null)
     val openShareSheet = MutableStateFlow(false)
+    /** a common place to show on the map (from a chat bubble) */
+    val focusPlace = MutableStateFlow<String?>(null)
 }
 
 object Routes {

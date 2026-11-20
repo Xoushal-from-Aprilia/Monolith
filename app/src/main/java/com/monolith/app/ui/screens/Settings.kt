@@ -322,6 +322,7 @@ fun SettingsScreen(nav: NavHostController) {
                     Graph.scope.launch {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
+                        Graph.places.clear()
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false
@@ -361,6 +362,16 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "0.3.0", "2026-11-20",
+        listOf(
+            "Luoghi comuni: segna casa, ufficio o palestra con un raggio da 10 a 100 metri e condividili con gli amici",
+            "Quando tu o un amico arrivate in un luogo comune, l'altro riceve un messaggio in chat e una notifica",
+            "La mappa ora ha due sezioni: Persone e Luoghi comuni",
+            "I vecchi avvisi di arrivo sono stati sostituiti dai luoghi comuni",
+            "Corretto il promemoria degli eventi che arrivava più volte",
+        ),
+    ),
     Release(
         "0.2.1", "2026-11-20",
         listOf(

@@ -14,7 +14,9 @@ import com.monolith.app.widget.AgendaWidget
 import com.monolith.app.core.IdentityStore
 import com.monolith.app.core.Prefs
 import com.monolith.app.data.AppDatabase
+import com.monolith.app.data.PlacesStore
 import com.monolith.app.location.LocationShare
+import com.monolith.app.location.PlaceWatcher
 import com.monolith.app.net.Messenger
 import com.monolith.app.nostr.RelayPool
 import com.monolith.app.rtc.CallManager
@@ -43,6 +45,8 @@ object Graph {
     lateinit var rtc: RtcManager
     lateinit var calls: CallManager
     lateinit var location: LocationShare
+    lateinit var places: PlacesStore
+    lateinit var placeWatch: PlaceWatcher
 
     @Volatile
     var foreground = false
@@ -63,7 +67,9 @@ object Graph {
         messenger = Messenger(application, scope, db)
         rtc = RtcManager(application, scope)
         calls = CallManager(application, scope)
+        places = PlacesStore(application)
         location = LocationShare(application, scope)
+        placeWatch = PlaceWatcher(application, scope)
         rtc.keepAlive = { pk ->
             messenger.activeConv.value == pk || calls.state.value.peer == pk
         }
@@ -114,6 +120,7 @@ object Graph {
         if (!engineStarted) {
             engineStarted = true
             messenger.start()
+            placeWatch.start()
         }
         MonolithService.start(app)
     }

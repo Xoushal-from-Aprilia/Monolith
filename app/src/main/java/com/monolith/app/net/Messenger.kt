@@ -30,6 +30,7 @@ import com.monolith.app.data.InviteState
 import com.monolith.app.data.ListItem
 import com.monolith.app.data.Message
 import com.monolith.app.data.MsgStatus
+import com.monolith.app.data.Place
 import com.monolith.app.data.Processed
 import com.monolith.app.data.Reaction
 import com.monolith.app.data.SharedList
@@ -246,6 +247,9 @@ class Messenger(
             "list" -> onList(from, p, isFriend)
             "li" -> onListItem(from, p)
             "lleave" -> onListLeave(from, p)
+            "place" -> onPlace(from, p, isFriend)
+            "placedel" -> onPlaceDelete(from, p)
+            "placehere" -> onPlaceHere(from, p)
             "loc" -> if (isFriend) onLocation(friend!!, p)
             "locstart" -> if (isFriend) onLocStart(friend!!, p)
             "locstop" -> if (isFriend) db.friends().sharing(from, 0)
@@ -351,7 +355,9 @@ class Messenger(
         _typing.update { it - conv }
         if (kind == "photo" || kind == "voice") tryAssemble(id)
         sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
-        if (!isActive) {
+        // an arrival that reaches me hours later is history, not news: keep it in the chat, silently
+        val stale = kind == "place" && now() - ts > 2 * 3_600_000L
+        if (!isActive && !stale) {
             val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
             val title = group?.name ?: friend?.displayName ?: "Monolith"
             val sender = friend ?: db.friends().get(from)
@@ -379,6 +385,10 @@ class Messenger(
         "poll" -> "📊 " + (runCatching { JSONObject(m.extra ?: "{}").optString("q") }.getOrNull() ?: t("Sondaggio"))
         "call" -> "📞 " + m.text
         "deleted" -> "🚫 " + t("Messaggio eliminato")
+        "place" -> {
+            val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
+            "📍 " + if (m.outgoing) t("Hai raggiunto {0}", name) else t("Ha raggiunto {0}", name)
+        }
         else -> m.text
     }
 
@@ -529,15 +539,6 @@ class Messenger(
             p.optInt("dist", -1), p.optInt("eta", -1),
         )
         markOnline(friend.pubkey)
-        // arrival alerts
-        db.social().alertsFor(friend.pubkey).forEach { a ->
-            val d = FloatArray(1)
-            Location.distanceBetween(lat, lon, a.lat, a.lon, d)
-            if (d[0] <= a.radius) {
-                db.social().deleteAlert(a.id)
-                Graph.notifier.arrival(friend.displayName, friend.emoji, a.label)
-            }
-        }
     }
 
     private suspend fun onLocStart(friend: Friend, p: JSONObject) {
@@ -826,6 +827,104 @@ class Messenger(
     suspend fun removeFriend(pk: String) {
         db.friends().delete(pk)
         sendStored(pk, JSONObject().put("t", "frem"))
+    }
+
+    // ------------------------------------------------------------------ common places
+
+    private val places get() = Graph.places
+
+    private fun placePayload(p: Place) = JSONObject().put("t", "place").put("id", p.id).put("n", p.name).put("e", p.emoji)
+        .put("la", p.lat).put("lo", p.lon).put("r", p.radius).put("m", p.members.toJsonArray()).put("by", p.createdBy).put("u", p.updatedAt)
+
+    private suspend fun onPlace(from: String, p: JSONObject, isFriend: Boolean) {
+        val id = p.optString("id").ifBlank { return }
+        val k = me() ?: return
+        val existing = places.get(id)
+        val members = (p.optJSONArray("m") ?: JSONArray()).strings().filter { Hex.isHex64(it) }
+        if (existing == null && (!isFriend || k.pub !in members || from !in members)) return
+        if (existing != null && from !in existing.members) return
+        if (k.pub !in members) { places.delete(id); return }
+        val u = p.optLong("u")
+        if (existing != null && existing.updatedAt >= u) return
+        val lat = p.optDouble("la")
+        val lon = p.optDouble("lo")
+        if (lat.isNaN() || lon.isNaN()) return
+        val place = Place(
+            id = id, name = p.optString("n").ifBlank { t("Luogo") }, emoji = p.optString("e", "📍"),
+            lat = lat, lon = lon, radius = p.optInt("r", 30).coerceIn(Place.MIN_RADIUS, Place.MAX_RADIUS),
+            members = members, createdBy = p.optString("by", from), updatedAt = u,
+            here = existing?.here?.filterKeys { it in members } ?: emptyMap(),
+        )
+        places.upsert(place)
+        if (existing != null && (existing.lat != place.lat || existing.lon != place.lon || existing.radius != place.radius)) places.resetGeo(id)
+        if (existing == null) {
+            val f = db.friends().get(from)
+            Graph.notifier.placeShared(f?.displayName ?: t("Un amico"), place.emoji + " " + place.name)
+        }
+    }
+
+    private fun onPlaceDelete(from: String, p: JSONObject) {
+        val existing = places.get(p.optString("id")) ?: return
+        if (from !in existing.members) return
+        places.delete(existing.id)
+    }
+
+    private fun onPlaceHere(from: String, p: JSONObject) {
+        val existing = places.get(p.optString("id")) ?: return
+        if (from !in existing.members) return
+        places.setHere(existing.id, from, p.optBoolean("in"), minOf(p.optLong("at", now()), now()))
+    }
+
+    /** create or edit a common place and share it with [friends] */
+    suspend fun savePlace(id: String?, name: String, emoji: String, lat: Double, lon: Double, radius: Int, friends: List<String>): String? {
+        val k = me() ?: return null
+        val existing = id?.let { places.get(it) }
+        val all = (friends + k.pub).distinct()
+        val p = Place(
+            id = existing?.id ?: newId(), name = name.trim().ifBlank { t("Luogo") }, emoji = emoji,
+            lat = lat, lon = lon, radius = radius.coerceIn(Place.MIN_RADIUS, Place.MAX_RADIUS),
+            members = all, createdBy = existing?.createdBy ?: k.pub, updatedAt = now(),
+            here = existing?.here?.filterKeys { it in all } ?: emptyMap(),
+        )
+        places.upsert(p)
+        if (existing == null || existing.lat != lat || existing.lon != lon || existing.radius != p.radius) places.resetGeo(p.id)
+        val payload = placePayload(p)
+        all.filter { it != k.pub }.forEach { sendStored(it, payload) }
+        // people taken off the place get a last update without themselves, so it disappears for them
+        existing?.members?.filter { it !in all && it != k.pub }?.forEach {
+            sendStored(it, JSONObject().put("t", "place").put("id", p.id).put("m", all.toJsonArray()).put("u", p.updatedAt))
+        }
+        Graph.placeWatch.refresh()
+        return p.id
+    }
+
+    /** a common place is common: deleting it removes it for everyone */
+    suspend fun deletePlace(id: String) {
+        val k = me() ?: return
+        val p = places.get(id) ?: return
+        places.delete(id)
+        p.members.filter { it != k.pub }.forEach { sendStored(it, JSONObject().put("t", "placedel").put("id", id)) }
+        Graph.placeWatch.refresh()
+    }
+
+    /**
+     * I walked into (or out of) a common place: everyone else in it learns where I am, and on arrival
+     * they also get a chat message, which brings the usual notification.
+     */
+    suspend fun placePresence(p: Place, inside: Boolean, notify: Boolean) {
+        val k = me() ?: return
+        val at = now()
+        places.setHere(p.id, k.pub, inside, at)
+        val others = p.members.filter { it != k.pub }
+        others.forEach { sendStored(it, JSONObject().put("t", "placehere").put("id", p.id).put("in", inside).put("at", at), 2L * 86400) }
+        if (inside && notify) {
+            val ex = JSONObject().put("id", p.id).put("n", p.name).put("e", p.emoji).put("la", p.lat).put("lo", p.lon)
+            others.forEach { pk ->
+                if (db.friends().get(pk)?.status == FriendStatus.FRIEND) {
+                    deliver(newOutgoing(pk, "place", p.name, JSONObject(ex.toString())) ?: return@forEach)
+                }
+            }
+        }
     }
 
     // ================================================================== chat

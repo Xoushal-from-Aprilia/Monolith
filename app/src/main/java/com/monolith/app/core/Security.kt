@@ -13,7 +13,6 @@ import com.google.zxing.qrcode.decoder.ErrorCorrectionLevel
 import com.monolith.app.Graph
 import com.monolith.app.crypto.Hex
 import com.monolith.app.data.AgendaEvent
-import com.monolith.app.data.ArrivalAlert
 import com.monolith.app.data.ConvSetting
 import com.monolith.app.data.Friend
 import com.monolith.app.data.Group
@@ -152,8 +151,6 @@ object Backup {
     private fun item(i: ListItem) = JSONObject().put("id", i.id).put("l", i.listId).put("x", i.text).put("d", i.done).put("b", i.by).put("u", i.updatedAt).put("del", i.deleted)
     private fun item(o: JSONObject) = ListItem(o.getString("id"), o.optString("l"), o.optString("x"), o.optBoolean("d"), o.optString("b"), o.optLong("u"), o.optBoolean("del"))
 
-    private fun alert(a: ArrivalAlert) = JSONObject().put("id", a.id).put("f", a.friend).put("la", a.lat).put("lo", a.lon).put("r", a.radius).put("l", a.label).put("c", a.createdAt)
-    private fun alert(o: JSONObject) = ArrivalAlert(o.getString("id"), o.optString("f"), o.optDoubleOrNull("la") ?: 0.0, o.optDoubleOrNull("lo") ?: 0.0, o.optInt("r"), o.optString("l"), o.optLong("c"))
 
     // ---------------------------------------------------------------- export / import
 
@@ -170,7 +167,7 @@ object Backup {
             .put("agenda", JSONArray().also { a -> db.agenda().allNow().forEach { a.put(event(it)) } })
             .put("lists", JSONArray().also { a -> db.lists().listsNow().forEach { a.put(list(it)) } })
             .put("items", JSONArray().also { a -> db.lists().allItems().forEach { a.put(item(it)) } })
-            .put("alerts", JSONArray().also { a -> db.social().allAlerts().forEach { a.put(alert(it)) } })
+            .put("places", Graph.places.exportJson())
             .put("reactions", JSONArray().also { a ->
                 db.social().allReactions().forEach { r -> a.put(JSONObject().put("m", r.msgId).put("s", r.sender).put("c", r.convId).put("e", r.emoji).put("t", r.ts)) }
             })
@@ -245,7 +242,6 @@ object Backup {
         val events = ArrayList<AgendaEvent>(); arr("agenda") { events += event(it) }
         val lists = ArrayList<SharedList>(); arr("lists") { lists += list(it) }
         val items = ArrayList<ListItem>(); arr("items") { items += item(it) }
-        val alerts = ArrayList<ArrivalAlert>(); arr("alerts") { alerts += alert(it) }
         val reactions = ArrayList<Reaction>(); arr("reactions") { reactions += Reaction(it.getString("m"), it.getString("s"), it.optString("c"), it.optString("e"), it.optLong("t")) }
         val votes = ArrayList<Vote>(); arr("votes") { votes += Vote(it.getString("m"), it.getString("s"), it.optString("c"), it.optString("o"), it.optLong("t")) }
         val conv = ArrayList<ConvSetting>(); arr("conv") { conv += ConvSetting(it.getString("c"), it.optLong("t")) }
@@ -256,7 +252,7 @@ object Backup {
         events.forEach { db.agenda().upsert(it) }
         lists.forEach { db.lists().upsert(it) }
         items.forEach { db.lists().upsertItem(it) }
-        alerts.forEach { db.social().saveAlert(it) }
+        d.optJSONArray("places")?.let { Graph.places.importJson(it) }
         reactions.forEach { db.social().react(it) }
         votes.forEach { db.social().vote(it) }
         conv.forEach { db.social().saveSetting(it) }

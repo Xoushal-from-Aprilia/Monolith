@@ -220,6 +220,9 @@ class Notifier(private val ctx: Context) {
     fun arrivedSelf(name: String, place: String) =
         simple(("me-arr$place").hashCode(), t("Sei arrivato"), t("Ho avvisato {0} e fermato la condivisione", name), "📍")
 
+    fun placeShared(from: String, place: String) =
+        simple(("place$place").hashCode(), t("{0} ha aggiunto un luogo comune", from), place, "📍", openApp(15) { putExtra(EXTRA_TAB, 2) })
+
     fun listShared(from: String, title: String) =
         simple(("list$title").hashCode(), t("{0} ha condiviso una lista con te", from), title, "📝", openApp(14) { putExtra(EXTRA_TAB, 0) })
 

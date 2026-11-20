@@ -58,6 +58,7 @@ import androidx.compose.material.icons.rounded.Forum
 import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.PhotoCamera
 import androidx.compose.material.icons.rounded.Restore
@@ -438,6 +439,11 @@ private fun permissionList(): List<Perm> = buildList {
     add(Perm("loc", Icons.Rounded.LocationOn, t("Posizione"), t("Per condividere dove sei in tempo reale"),
         listOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION),
         { granted(it, Manifest.permission.ACCESS_FINE_LOCATION) || granted(it, Manifest.permission.ACCESS_COARSE_LOCATION) }))
+    if (Build.VERSION.SDK_INT >= 29) {
+        // optional, asked on its own: Android ignores it when bundled with other permissions
+        add(Perm("bgloc", Icons.Rounded.MyLocation, t("Posizione sempre"), t("Per i luoghi comuni: avvisa gli amici quando arrivi, anche ad app chiusa"),
+            listOf(Manifest.permission.ACCESS_BACKGROUND_LOCATION), { granted(it, Manifest.permission.ACCESS_BACKGROUND_LOCATION) }))
+    }
     add(Perm("cam", Icons.Rounded.PhotoCamera, t("Fotocamera"), t("Foto, videochiamate e codici QR"),
         listOf(Manifest.permission.CAMERA), { granted(it, Manifest.permission.CAMERA) }))
     add(Perm("mic", Icons.Rounded.Mic, t("Microfono"), t("Chiamate e messaggi vocali"),
@@ -475,7 +481,9 @@ fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
     }
 
     fun request(p: Perm) {
-        if (p.runtime.isNotEmpty()) single.launch(p.runtime.toTypedArray())
+        if (p.key == "bgloc" && !granted(ctx, Manifest.permission.ACCESS_FINE_LOCATION) && !granted(ctx, Manifest.permission.ACCESS_COARSE_LOCATION)) {
+            single.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
+        } else if (p.runtime.isNotEmpty()) single.launch(p.runtime.toTypedArray())
         else p.settingsIntent?.let { runCatching { ctx.startActivity(it(ctx)) } }
     }
 
@@ -498,8 +506,8 @@ fun PermissionsScreen(first: Boolean, onDone: () -> Unit) {
             }
         }
         Column(Modifier.padding(20.dp)) {
-            val missingRuntime = perms.filter { states[it.key] != true }.flatMap { it.runtime }
-            val anyMissing = perms.any { states[it.key] != true }
+            val missingRuntime = perms.filter { states[it.key] != true && it.key != "bgloc" }.flatMap { it.runtime }
+            val anyMissing = perms.any { states[it.key] != true && it.key != "bgloc" }
             Button(
                 onClick = {
                     if (missingRuntime.isNotEmpty()) {

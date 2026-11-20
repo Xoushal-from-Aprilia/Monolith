@@ -178,6 +178,7 @@ class LocationShare(private val ctx: Context, private val scope: CoroutineScope)
             while (speeds.size > 12) speeds.removeFirst()
         }
         _me.value = loc
+        Graph.placeWatch.onFix(loc)
         if (_sharing.value) scope.launch { broadcast(loc) }
     }
 

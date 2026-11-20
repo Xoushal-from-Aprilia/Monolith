@@ -41,7 +41,7 @@ class MonolithService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promote()
-        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall) {
+        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -84,7 +84,7 @@ class MonolithService : Service() {
     companion object {
         fun start(ctx: Context) {
             if (!Graph.identity.hasIdentity()) return
-            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall) return
+            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active) return
             try {
                 ContextCompat.startForegroundService(ctx, Intent(ctx, MonolithService::class.java))
             } catch (_: Exception) {
@@ -99,13 +99,19 @@ class MonolithService : Service() {
     }
 }
 
-/** Agenda reminders: one alarm per reminder offset, always for the next occurrence. */
+/**
+ * Agenda reminders: one alarm per reminder offset, always for the next occurrence.
+ *
+ * A reminder is only ever scheduled strictly in the future, and every (event, occurrence, offset)
+ * is shown at most once: rescheduling right after an alarm fires used to re-arm the same instant
+ * and Android delivered it again and again (the "same reminder three times" bug).
+ */
 object ReminderScheduler {
     private val ALL_OFFSETS = listOf(0, 5, 10, 15, 30, 60, 120, 1440, 2880, 10080)
 
-    private fun pending(ctx: Context, id: String, minutes: Int, create: Boolean, occurrence: Long = 0L): PendingIntent? {
+    private fun pending(ctx: Context, id: String, minutes: Int, create: Boolean, occurrence: Long = 0L, trigger: Long = 0L): PendingIntent? {
         val i = Intent(ctx, ReminderReceiver::class.java)
-            .putExtra("id", id).putExtra("occ", occurrence)
+            .putExtra("id", id).putExtra("occ", occurrence).putExtra("min", minutes).putExtra("trig", trigger)
             .setAction("monolith.reminder.$id.$minutes")
         val flags = PendingIntent.FLAG_IMMUTABLE or if (create) PendingIntent.FLAG_UPDATE_CURRENT else PendingIntent.FLAG_NO_CREATE
         return PendingIntent.getBroadcast(ctx, (id + minutes).hashCode(), i, flags)
@@ -117,16 +123,18 @@ object ReminderScheduler {
         cancel(ctx, e.id)
         if (e.inviteState == InviteState.DECLINED || e.inviteState == InviteState.PENDING) return
         val am = ctx.getSystemService(AlarmManager::class.java)
+        val tNow = now()
         e.reminderList().forEach { m ->
-            // first occurrence whose reminder time is still ahead
-            var occ = Recur.nextAfter(e, now() - 60_000) ?: return@forEach
+            // first occurrence whose reminder time is still strictly ahead
+            var occ = Recur.nextAfter(e, tNow - m * 60_000L - 60_000L) ?: return@forEach
             var guard = 0
-            while (baseOf(e, occ) - m * 60_000L < now() - 30_000 && guard < 400) {
+            while ((baseOf(e, occ) - m * 60_000L <= tNow + 1_000L || wasShown(ctx, e.id, occ, m)) && guard < 400) {
                 occ = Recur.nextAfter(e, occ + 60_000) ?: return@forEach
                 guard++
             }
+            if (guard >= 400) return@forEach
             val trigger = baseOf(e, occ) - m * 60_000L
-            val pi = pending(ctx, e.id, m, true, occ) ?: return@forEach
+            val pi = pending(ctx, e.id, m, true, occ, trigger) ?: return@forEach
             try {
                 if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) {
                     am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, trigger, pi)
@@ -149,18 +157,45 @@ object ReminderScheduler {
     suspend fun rescheduleAll(ctx: Context) {
         Graph.db.agenda().allNow().forEach { schedule(ctx, it) }
     }
+
+    // ---- "already shown" memory, so the same reminder never appears twice
+
+    private fun shownPrefs(ctx: Context) = ctx.getSharedPreferences("reminders_shown", Context.MODE_PRIVATE)
+    private fun key(id: String, occ: Long, m: Int) = "$id|$occ|$m"
+
+    private fun wasShown(ctx: Context, id: String, occ: Long, m: Int) = shownPrefs(ctx).contains(key(id, occ, m))
+
+    /** returns false if this exact reminder was already shown */
+    @Synchronized
+    fun markShown(ctx: Context, id: String, occ: Long, m: Int): Boolean {
+        val sp = shownPrefs(ctx)
+        val k = key(id, occ, m)
+        if (sp.contains(k)) return false
+        val ed = sp.edit().putLong(k, now())
+        // forget entries older than 60 days
+        val old = now() - 60L * 86_400_000
+        sp.all.forEach { (kk, v) -> if (v is Long && v < old) ed.remove(kk) }
+        ed.commit()
+        return true
+    }
 }
 
 class ReminderReceiver : BroadcastReceiver() {
     override fun onReceive(context: Context, intent: Intent) {
         val id = intent.getStringExtra("id") ?: return
         val occ = intent.getLongExtra("occ", 0L)
+        val minutes = intent.getIntExtra("min", -1)
+        val trigger = intent.getLongExtra("trig", 0L)
         val pending = goAsync()
         Graph.scope.launch {
             try {
                 val ev = Graph.db.agenda().get(id)
                 if (ev != null && ev.inviteState != InviteState.DECLINED && ev.inviteState != InviteState.PENDING) {
-                    Graph.notifier.reminder(ev, if (occ > 0) occ else ev.start)
+                    // skip duplicates, and reminders that come very late (phone was off for hours)
+                    val fresh = trigger <= 0L || now() - trigger < 6 * 3_600_000L
+                    if (fresh && ReminderScheduler.markShown(context, id, occ, minutes)) {
+                        Graph.notifier.reminder(ev, if (occ > 0) occ else ev.start)
+                    }
                     ReminderScheduler.schedule(context, ev)
                 }
             } finally {

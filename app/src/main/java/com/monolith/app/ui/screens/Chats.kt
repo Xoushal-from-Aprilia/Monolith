@@ -149,6 +149,8 @@ import androidx.core.content.FileProvider
 import androidx.navigation.NavHostController
 import coil.compose.AsyncImage
 import com.monolith.app.Graph
+import com.monolith.app.ui.NavBus
+import com.monolith.app.ui.NavRequest
 import com.monolith.app.core.Fmt
 import com.monolith.app.core.newId
 import com.monolith.app.core.now
@@ -1047,6 +1049,38 @@ private fun MessageRow(
                         }, shape = CircleShape) { Text(t("Aggiungi all'agenda")) }
                     }
                     MetaLine(m, textColor)
+                }
+            }
+            "place" -> {
+                val pid = ex.optString("id")
+                Surface(
+                    shape = shape, color = bubbleColor,
+                    modifier = Modifier.widthIn(max = 280.dp).combinedClickable(
+                        onClick = {
+                            if (Graph.places.get(pid) != null) {
+                                NavBus.focusPlace.value = pid
+                                NavBus.requests.value = NavRequest(tab = 2)
+                            }
+                        },
+                        onLongClick = { onLongPress(m) },
+                    ),
+                ) {
+                    Column(Modifier.padding(14.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Box(Modifier.size(44.dp).clip(CircleShape).background(textColor.copy(alpha = 0.12f)), contentAlignment = Alignment.Center) {
+                                Text(ex.optString("e", "📍"), fontSize = 22.sp)
+                            }
+                            Spacer(Modifier.width(12.dp))
+                            Column {
+                                Text(ex.optString("n").ifBlank { m.text }, color = textColor, style = MaterialTheme.typography.titleMedium)
+                                Text(
+                                    if (out) t("Hai raggiunto questo luogo") else t("Ha raggiunto questo luogo"),
+                                    color = textColor.copy(alpha = 0.75f), style = MaterialTheme.typography.bodySmall,
+                                )
+                            }
+                        }
+                        MetaLine(m, textColor)
+                    }
                 }
             }
             "loc" -> {
