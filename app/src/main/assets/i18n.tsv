@@ -655,3 +655,58 @@ Non vedrai più le stanze. Potranno invitarti di nuovo.	You won't see the rooms 
 Shard: spazi per te e i tuoi amici, con stanze scritte e stanze vocali	Shards: spaces for you and your friends, with text and voice rooms	Shards : des espaces pour vous et vos amis, avec salons écrits et vocaux	Shards: Räume für dich und deine Freunde, mit Text- und Sprachräumen	Шарды: пространства для вас и друзей с текстовыми и голосовыми комнатами	Shardy: przestrzenie dla ciebie i znajomych, z pokojami tekstowymi i głosowymi	Shardy: prostory pro vás a přátele s textovými a hlasovými místnostmi
 Stanze vocali sempre aperte: entri ed esci quando vuoi, fino a 4 persone insieme	Always-open voice rooms: drop in and out whenever you like, up to 4 people together	Salons vocaux toujours ouverts : entrez et sortez quand vous voulez, jusqu'à 4 personnes	Immer offene Sprachräume: rein und raus, wann du willst, bis zu 4 Personen	Всегда открытые голосовые комнаты: входите и выходите когда угодно, до 4 человек	Zawsze otwarte pokoje głosowe: wchodź i wychodź kiedy chcesz, do 4 osób	Stále otevřené hlasové místnosti: přicházejte a odcházejte kdykoli, až 4 lidé
 Chi crea lo shard aggiunge stanze, lo rinomina e gestisce i membri; tutti possono invitare amici	The shard's creator adds rooms, renames it and manages members; everyone can invite friends	Le créateur du shard ajoute des salons, le renomme et gère les membres ; tous peuvent inviter des amis	Wer den Shard erstellt, fügt Räume hinzu, benennt ihn um und verwaltet Mitglieder; alle können Freunde einladen	Создатель шарда добавляет комнаты, переименовывает его и управляет участниками; приглашать друзей могут все	Twórca shardu dodaje pokoje, zmienia nazwę i zarządza członkami; każdy może zapraszać znajomych	Zakladatel shardu přidává místnosti, přejmenovává ho a spravuje členy; přátele může zvát každý
+Spese	Expenses	Dépenses	Ausgaben	Расходы	Wydatki	Výdaje
+Album	Albums	Albums	Alben	Альбомы	Albumy	Alba
+Abitudini	Habits	Habitudes	Gewohnheiten	Привычки	Nawyki	Návyky
+Abitudine	Habit	Habitude	Gewohnheit	Привычка	Nawyk	Návyk
+Spese condivise	Shared expenses	Dépenses partagées	Geteilte Ausgaben	Общие расходы	Wspólne wydatki	Sdílené výdaje
+Album condivisi	Shared albums	Albums partagés	Geteilte Alben	Общие альбомы	Wspólne albumy	Sdílená alba
+Abitudini, da soli o insieme	Habits, alone or together	Habitudes, seul ou ensemble	Gewohnheiten, allein oder gemeinsam	Привычки, в одиночку или вместе	Nawyki, w pojedynkę lub razem	Návyky, sami nebo spolu
+Nome	Name	Nom	Name	Название	Nazwa	Název
+Nuove spese condivise	New shared expenses	Nouvelles dépenses partagées	Neue geteilte Ausgaben	Новые общие расходы	Nowe wspólne wydatki	Nové sdílené výdaje
+Per una cena, un viaggio o la casa.	For a dinner, a trip or the house.	Pour un dîner, un voyage ou la maison.	Für ein Abendessen, eine Reise oder die Wohnung.	Для ужина, поездки или дома.	Na kolację, wyjazd albo dom.	Na večeři, výlet nebo domácnost.
+Nessuna spesa condivisa	No shared expenses	Aucune dépense partagée	Keine geteilten Ausgaben	Нет общих расходов	Brak wspólnych wydatków	Žádné sdílené výdaje
+Una cena, un viaggio, la casa: segnate chi paga cosa e Monolith vi dice chi deve quanto a chi.	A dinner, a trip, the house: note who pays for what and Monolith tells you who owes whom.	Un dîner, un voyage, la maison : notez qui paie quoi et Monolith vous dit qui doit combien à qui.	Abendessen, Reise, Wohnung: Notiert, wer was zahlt, und Monolith sagt euch, wer wem wie viel schuldet.	Ужин, поездка, дом: записывайте, кто за что платит, а Monolith скажет, кто кому сколько должен.	Kolacja, wyjazd, dom: zapisujcie, kto za co płaci, a Monolith powie, kto komu ile jest winien.	Večeře, výlet, domácnost: zapisujte, kdo co platí, a Monolith řekne, kdo komu kolik dluží.
+Totale {0} · {1} persone	Total {0} · {1} people	Total {0} · {1} personnes	Gesamt {0} · {1} Personen	Всего {0} · людей: {1}	Razem {0} · osoby: {1}	Celkem {0} · osob: {1}
+ti devono {0}	you're owed {0}	on vous doit {0}	du bekommst {0}	вам должны {0}	należy ci się {0}	dluží vám {0}
+devi {0}	you owe {0}	vous devez {0}	du schuldest {0}	вы должны {0}	jesteś winien {0}	dlužíte {0}
+in pari	settled up	à jour	ausgeglichen	в расчёте	rozliczone	vyrovnáno
+Saldi	Balances	Soldes	Salden	Балансы	Salda	Zůstatky
+Per pareggiare	To settle up	Pour équilibrer	Zum Ausgleichen	Чтобы рассчитаться	Aby się rozliczyć	K vyrovnání
+{0} dà {1} a {2}	{0} gives {1} to {2}	{0} donne {1} à {2}	{0} gibt {2} {1}	{0} отдаёт {1}: {2}	{0} oddaje {1} dla {2}	{0} dá {1} pro {2}
+Rimborso	Refund	Remboursement	Rückzahlung	Возврат	Zwrot	Vrácení
+Ancora niente. Aggiungi la prima spesa.	Nothing yet. Add the first expense.	Rien pour l'instant. Ajoutez la première dépense.	Noch nichts. Füge die erste Ausgabe hinzu.	Пока ничего. Добавьте первый расход.	Na razie nic. Dodaj pierwszy wydatek.	Zatím nic. Přidejte první výdaj.
+Pagato da {0}	Paid by {0}	Payé par {0}	Bezahlt von {0}	Оплатил(а): {0}	Zapłacił(a): {0}	Zaplatil(a): {0}
+diviso tra {0}	split between {0}	partagé entre {0}	geteilt durch {0}	на {0}	podzielone na {0}	rozděleno mezi {0}
+Aggiungi spesa	Add expense	Ajouter une dépense	Ausgabe hinzufügen	Добавить расход	Dodaj wydatek	Přidat výdaj
+Nuova spesa	New expense	Nouvelle dépense	Neue Ausgabe	Новый расход	Nowy wydatek	Nový výdaj
+Per cosa?	What for?	Pour quoi ?	Wofür?	За что?	Za co?	Za co?
+Quanto (€)	How much (€)	Combien (€)	Wie viel (€)	Сколько (€)	Ile (€)	Kolik (€)
+Chi ha pagato	Who paid	Qui a payé	Wer hat bezahlt	Кто заплатил	Kto zapłacił	Kdo zaplatil
+Diviso tra	Split between	Partagé entre	Geteilt zwischen	Разделить между	Podzielone między	Rozdělit mezi
+{0} a testa	{0} each	{0} chacun	{0} pro Kopf	{0} с человека	{0} na osobę	{0} na osobu
+Spesa	Expense	Dépense	Ausgabe	Расход	Wydatek	Výdaj
+Nuovo album	New album	Nouvel album	Neues Album	Новый альбом	Nowy album	Nové album
+Ognuno aggiunge le sue foto.	Everyone adds their own photos.	Chacun ajoute ses photos.	Jeder fügt seine Fotos hinzu.	Каждый добавляет свои фото.	Każdy dodaje swoje zdjęcia.	Každý přidá své fotky.
+Nessun album	No albums	Aucun album	Keine Alben	Нет альбомов	Brak albumów	Žádná alba
+Raccogliete insieme le foto di una serata o di un viaggio: ognuno aggiunge le sue.	Gather the photos of an evening or a trip together: everyone adds their own.	Rassemblez les photos d'une soirée ou d'un voyage : chacun ajoute les siennes.	Sammelt gemeinsam die Fotos eines Abends oder einer Reise: Jeder fügt seine hinzu.	Собирайте вместе фото вечера или поездки: каждый добавляет свои.	Zbierajcie razem zdjęcia z wieczoru lub wyjazdu: każdy dodaje swoje.	Sbírejte spolu fotky z večera nebo výletu: každý přidá své.
+{0} foto · {1} persone	{0} photos · {1} people	{0} photos · {1} personnes	{0} Fotos · {1} Personen	Фото: {0} · людей: {1}	Zdjęcia: {0} · osoby: {1}	Fotek: {0} · osob: {1}
+Commenti	Comments	Commentaires	Kommentare	Комментарии	Komentarze	Komentáře
+Aggiungi foto	Add photos	Ajouter des photos	Fotos hinzufügen	Добавить фото	Dodaj zdjęcia	Přidat fotky
+Esci dall'album	Leave album	Quitter l'album	Album verlassen	Покинуть альбом	Opuść album	Opustit album
+Album vuoto	Empty album	Album vide	Leeres Album	Пустой альбом	Pusty album	Prázdné album
+Tocca l'icona della foto in alto per aggiungere le prime.	Tap the photo icon at the top to add the first ones.	Touchez l'icône photo en haut pour ajouter les premières.	Tippe oben auf das Fotosymbol, um die ersten hinzuzufügen.	Нажмите значок фото вверху, чтобы добавить первые.	Dotknij ikony zdjęcia u góry, aby dodać pierwsze.	Klepnutím na ikonu fotky nahoře přidáte první.
+{0} ti ha invitato nell'album	{0} invited you to the album	{0} vous a invité dans l'album	{0} hat dich ins Album eingeladen	{0} пригласил(а) вас в альбом	{0} zaprosił(a) cię do albumu	{0} vás pozval(a) do alba
+Ti ha invitato in un album condiviso	Invited you to a shared album	Vous a invité dans un album partagé	Hat dich in ein geteiltes Album eingeladen	Пригласил(а) вас в общий альбом	Zaprosił(a) cię do wspólnego albumu	Pozval(a) vás do sdíleného alba
+Nuova abitudine	New habit	Nouvelle habitude	Neue Gewohnheit	Новая привычка	Nowy nawyk	Nový návyk
+Da solo o con gli amici: ognuno spunta la sua giornata.	Alone or with friends: everyone ticks off their own day.	Seul ou avec des amis : chacun coche sa journée.	Allein oder mit Freunden: Jeder hakt seinen Tag ab.	Одному или с друзьями: каждый отмечает свой день.	Samemu lub ze znajomymi: każdy odhacza swój dzień.	Sami nebo s přáteli: každý si odškrtne svůj den.
+Nessuna abitudine	No habits	Aucune habitude	Keine Gewohnheiten	Нет привычек	Brak nawyków	Žádné návyky
+Bere acqua, camminare, leggere: spunta ogni giorno e tieni viva la serie, da solo o con gli amici.	Drink water, walk, read: tick it off every day and keep the streak alive, alone or with friends.	Boire de l'eau, marcher, lire : cochez chaque jour et gardez la série, seul ou avec des amis.	Wasser trinken, gehen, lesen: Hake jeden Tag ab und halte die Serie am Leben, allein oder mit Freunden.	Пить воду, гулять, читать: отмечайте каждый день и держите серию, одному или с друзьями.	Pić wodę, spacerować, czytać: odhaczaj codziennie i utrzymuj serię, sam lub ze znajomymi.	Pít vodu, chodit, číst: odškrtávejte každý den a držte sérii, sami nebo s přáteli.
+🔥 {0} giorni di fila	🔥 {0} days in a row	🔥 {0} jours d'affilée	🔥 {0} Tage am Stück	🔥 {0} дней подряд	🔥 {0} dni z rzędu	🔥 {0} dní v řadě
+Inizia oggi	Start today	Commencez aujourd'hui	Fang heute an	Начните сегодня	Zacznij dziś	Začněte dnes
+🔥 {0}	🔥 {0}	🔥 {0}	🔥 {0}	🔥 {0}	🔥 {0}	🔥 {0}
+{0} ti ha aggiunto a delle spese condivise	{0} added you to shared expenses	{0} vous a ajouté à des dépenses partagées	{0} hat dich zu geteilten Ausgaben hinzugefügt	{0} добавил(а) вас в общие расходы	{0} dodał(a) cię do wspólnych wydatków	{0} vás přidal(a) ke sdíleným výdajům
+{0} ti ha invitato a un'abitudine	{0} invited you to a habit	{0} vous a invité à une habitude	{0} hat dich zu einer Gewohnheit eingeladen	{0} пригласил(а) вас к привычке	{0} zaprosił(a) cię do nawyku	{0} vás pozval(a) k návyku
+Spese condivise: chi ha pagato cosa, saldi e il modo più semplice per pareggiare	Shared expenses: who paid what, balances and the simplest way to settle up	Dépenses partagées : qui a payé quoi, soldes et le moyen le plus simple d'équilibrer	Geteilte Ausgaben: wer was bezahlt hat, Salden und der einfachste Weg zum Ausgleich	Общие расходы: кто за что платил, балансы и самый простой способ рассчитаться	Wspólne wydatki: kto za co zapłacił, salda i najprostszy sposób na rozliczenie	Sdílené výdaje: kdo co zaplatil, zůstatky a nejjednodušší vyrovnání
+Album condivisi: ognuno aggiunge le sue foto, con i commenti	Shared albums: everyone adds their photos, with comments	Albums partagés : chacun ajoute ses photos, avec des commentaires	Geteilte Alben: Jeder fügt seine Fotos hinzu, mit Kommentaren	Общие альбомы: каждый добавляет свои фото, с комментариями	Wspólne albumy: każdy dodaje swoje zdjęcia, z komentarzami	Sdílená alba: každý přidá své fotky, s komentáři
+Abitudini da soli o con gli amici, con la serie di giorni di fila	Habits alone or with friends, with the streak of days in a row	Habitudes seul ou avec des amis, avec la série de jours d'affilée	Gewohnheiten allein oder mit Freunden, mit der Serie von Tagen am Stück	Привычки одному или с друзьями, с серией дней подряд	Nawyki samemu lub ze znajomymi, z serią dni z rzędu	Návyky sami nebo s přáteli, se sérií dní v řadě
