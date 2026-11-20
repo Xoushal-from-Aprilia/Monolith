@@ -356,7 +356,7 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
-        "0.2.0", "2026-11-19",
+        "0.2.0", "2026-11-20",
         listOf(
             "Messaggi vocali: tieni premuto il microfono per registrare",
             "Reazioni con emoji, risposte ai messaggi, modifica ed eliminazione per tutti",
