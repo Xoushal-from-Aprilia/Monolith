@@ -118,6 +118,8 @@ import org.osmdroid.views.CustomZoomButtonsController
 import org.osmdroid.views.MapView
 import org.osmdroid.views.overlay.Marker
 import org.osmdroid.views.overlay.Polygon
+import com.monolith.app.ui.components.MonoSheet
+import com.monolith.app.ui.components.MonoDialog
 
 private fun metres(a: Location?, lat: Double, lon: Double): Float? {
     a ?: return null
@@ -516,7 +518,7 @@ fun MapScreen(nav: NavHostController) {
     }
 
     if (askBackground) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { askBackground = false },
             icon = { Icon(Icons.Rounded.AddLocationAlt, null) },
             title = { Text(t("Avvisi anche ad app chiusa")) },
@@ -755,7 +757,7 @@ private fun PlaceRow(p: Place, names: Map<String, String>, me: Location?, myPub:
 private fun PlaceDetailsSheet(d: PlaceDraft, friends: List<Friend>, onChange: (PlaceDraft) -> Unit, onBack: () -> Unit, onSave: (PlaceDraft) -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var picker by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onBack, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onBack, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).imePadding().verticalScroll(rememberScrollState())) {
             Text(if (d.id == null) t("Nuovo luogo comune") else t("Modifica luogo"), style = MaterialTheme.typography.titleLarge)
             Text(
@@ -821,7 +823,7 @@ private fun PlaceDetailsSheet(d: PlaceDraft, friends: List<Friend>, onChange: (P
 private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPub: String?, onClose: () -> Unit, onEdit: () -> Unit, onDelete: () -> Unit) {
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var confirm by remember { mutableStateOf(false) }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(p.emoji, 56.dp, online = p.insideNow().isNotEmpty())
@@ -874,7 +876,7 @@ private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPu
         }
     }
     if (confirm) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { confirm = false },
             title = { Text(t("Eliminare il luogo?")) },
             text = { Text(t("Verrà tolto anche a {0}.", membersNames(p, names, myPub))) },
@@ -898,7 +900,7 @@ private fun ShareSheet(friends: List<Friend>, active: Set<String>, onClose: () -
     val last = remember { Graph.prefs.lastShareFriends.toSet() }
     var selected by remember { mutableStateOf(active.ifEmpty { last.filter { pk -> friends.any { it.pubkey == pk } }.toSet() }) }
     var duration by remember { mutableIntStateOf(DURATIONS.indexOf(Graph.prefs.lastShareMinutes).coerceAtLeast(1)) }
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
             Text(t("Posizione in tempo reale"), style = MaterialTheme.typography.titleLarge)
             Text(t("Solo gli amici che scegli vedono dove sei, finché lo decidi tu."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -950,7 +952,7 @@ private fun OnTheWaySheet(friends: List<Friend>, mapCenter: GeoPoint?, onClose: 
     var label by remember { mutableStateOf("") }
     val f = friend
     val friendLive = f != null && f.sharingUntil > now() && f.lat != null
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
             Text(t("Sto arrivando"), style = MaterialTheme.typography.titleLarge)
             Text(t("L'amico vede dove sei, quanto manca e quando arrivi. Si ferma da solo all'arrivo."), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)

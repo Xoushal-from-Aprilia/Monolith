@@ -80,6 +80,7 @@ import com.monolith.app.ui.theme.Motion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import com.monolith.app.ui.components.MonoDialog
 
 @Composable
 fun ListsPane(nav: NavHostController) {
@@ -261,7 +262,7 @@ fun ListDetailScreen(nav: NavHostController, id: String) {
 
     if (picker) EmojiPickerSheet(onDismiss = { picker = false }) { emoji = it; picker = false }
     if (confirmLeave) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { confirmLeave = false },
             title = { Text(t("Uscire dalla lista?")) },
             text = { Text(t("La lista verrà rimossa da questo telefono. Gli altri continueranno a vederla.")) },

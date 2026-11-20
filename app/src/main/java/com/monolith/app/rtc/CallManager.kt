@@ -494,20 +494,9 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
 
     // ================================================================== ringing / ending
 
-    private fun startRinging() {
-        runCatching {
-            val uri = RingtoneManager.getDefaultUri(RingtoneManager.TYPE_RINGTONE)
-            ringtone = RingtoneManager.getRingtone(ctx, uri)?.apply {
-                if (Build.VERSION.SDK_INT >= 28) isLooping = true
-                play()
-            }
-        }
-    }
+    private fun startRinging() = com.monolith.app.audio.Sounds.startRingtone()
 
-    private fun stopRinging() {
-        runCatching { ringtone?.stop() }
-        ringtone = null
-    }
+    private fun stopRinging() = com.monolith.app.audio.Sounds.stopRingtone()
 
     private fun end(reason: String, missed: Boolean = false, declined: Boolean = false) {
         val st = _state.value

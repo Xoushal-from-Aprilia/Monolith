@@ -1,0 +1,3 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- the sounds are picked by name at runtime: never strip them -->
+<resources xmlns:tools="http://schemas.android.com/tools" tools:keep="@raw/*" />

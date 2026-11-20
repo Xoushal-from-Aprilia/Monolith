@@ -129,6 +129,7 @@ import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.util.Calendar
 import java.util.TimeZone
+import com.monolith.app.ui.components.MonoDialog
 
 private const val DAY = 86_400_000L
 
@@ -768,7 +769,7 @@ fun EventEditorScreen(nav: NavHostController, id: String, date: Long) {
     }
 
     if (confirmDelete) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { confirmDelete = false },
             title = { Text(if (invited) t("Rimuovere l'invito?") else t("Eliminare l'evento?")) },
             text = { Text(if (!invited && invitees.isNotEmpty()) t("Gli amici invitati riceveranno l'annullamento.") else t("Non potrai annullare questa azione.")) },

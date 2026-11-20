@@ -13,6 +13,8 @@ import android.graphics.drawable.Icon
 import android.media.AudioAttributes
 import android.os.Build
 import android.os.VibrationEffect
+import com.monolith.app.audio.SoundKind
+import com.monolith.app.audio.Sounds
 import android.os.Vibrator
 import android.os.VibratorManager
 import androidx.core.app.NotificationCompat
@@ -33,9 +35,7 @@ import java.util.concurrent.ConcurrentHashMap
 class Notifier(private val ctx: Context) {
 
     companion object {
-        const val CH_MESSAGES = "messages"
         const val CH_SOCIAL = "social"
-        const val CH_REMINDERS = "reminders"
         const val CH_CALLS = "calls"
         const val CH_SERVICE = "service"
 
@@ -57,16 +57,38 @@ class Notifier(private val ctx: Context) {
 
     fun createChannels() {
         val m = ctx.getSystemService(NotificationManager::class.java)
+        fun withSound(kind: SoundKind, name: String, importance: Int) =
+            NotificationChannel(Sounds.channelId(kind), name, importance).apply {
+                enableVibration(true)
+                val choice = Sounds.soundFor(kind)
+                val attrs = AudioAttributes.Builder()
+                    .setUsage(if (kind == SoundKind.REMINDER) AudioAttributes.USAGE_NOTIFICATION_EVENT else AudioAttributes.USAGE_NOTIFICATION)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build()
+                when (choice) {
+                    Sounds.NONE -> setSound(null, attrs)
+                    Sounds.SYSTEM -> {}
+                    else -> Sounds.uri(choice)?.let { setSound(it, attrs) }
+                }
+            }
         val list = listOf(
-            NotificationChannel(CH_MESSAGES, t("Messaggi"), NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) },
+            withSound(SoundKind.MESSAGE, t("Messaggi"), NotificationManager.IMPORTANCE_HIGH),
+            withSound(SoundKind.MEETING, t("Incontri e arrivi"), NotificationManager.IMPORTANCE_HIGH),
+            withSound(SoundKind.REMINDER, t("Promemoria agenda"), NotificationManager.IMPORTANCE_HIGH),
             NotificationChannel(CH_SOCIAL, t("Amici e inviti"), NotificationManager.IMPORTANCE_DEFAULT),
-            NotificationChannel(CH_REMINDERS, t("Promemoria agenda"), NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) },
             NotificationChannel(CH_CALLS, t("Chiamate"), NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
             },
             NotificationChannel(CH_SERVICE, t("Connessione"), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) },
         )
         m.createNotificationChannels(list)
+        // channels of sounds no longer chosen, and the ones from before the sound kit
+        val keep = list.map { it.id }.toSet()
+        runCatching {
+            m.notificationChannels.forEach { ch ->
+                val stale = ch.id !in keep && (ch.id == "messages" || ch.id == "reminders" || SoundKind.entries.any { ch.id.startsWith(Sounds.prefix(it)) })
+                if (stale) m.deleteNotificationChannel(ch.id)
+            }
+        }
     }
 
     private fun allowed(): Boolean {
@@ -119,6 +141,7 @@ class Notifier(private val ctx: Context) {
         isGroup: Boolean,
         groupEmoji: String?,
         nudge: Boolean,
+        meeting: Boolean = false,
     ) {
         if (nudge) vibrateNudge()
         val lines = history.getOrPut(conv) { mutableListOf() }
@@ -149,7 +172,7 @@ class Notifier(private val ctx: Context) {
             0, t("Segna come letto"),
             action(code + 1, ActionReceiver.ACTION_READ) { putExtra(ActionReceiver.EXTRA_CONV, conv) }
         ).build()
-        val n = base(CH_MESSAGES)
+        val n = base(Sounds.channelId(if (meeting) SoundKind.MEETING else SoundKind.MESSAGE))
             .setStyle(style)
             .setContentTitle(title)
             .setContentText(text)
@@ -182,8 +205,8 @@ class Notifier(private val ctx: Context) {
 
     // ------------------------------------------------------------------ social
 
-    private fun simple(id: Int, title: String, text: String, emoji: String, intent: PendingIntent? = null) {
-        val b = base(CH_SOCIAL).setContentTitle(title).setContentText(text).setLargeIcon(emojiIcon(emoji))
+    private fun simple(id: Int, title: String, text: String, emoji: String, intent: PendingIntent? = null, channel: String = CH_SOCIAL) {
+        val b = base(channel).setContentTitle(title).setContentText(text).setLargeIcon(emojiIcon(emoji))
         intent?.let { b.setContentIntent(it) }
         post(id, b.build())
     }
@@ -215,10 +238,14 @@ class Notifier(private val ctx: Context) {
         )
 
     fun arrival(name: String, emoji: String, place: String) =
-        simple(("arr$name$place").hashCode(), t("{0} è arrivato", name), place, emoji, openApp(13) { putExtra(EXTRA_TAB, 2) })
+        simple(("arr$name$place").hashCode(), t("{0} è arrivato", name), place, emoji, openApp(13) { putExtra(EXTRA_TAB, 2) }, Sounds.channelId(SoundKind.MEETING))
+
+    /** I walked into a common place where friends already are */
+    fun together(names: String, place: String, emoji: String) =
+        simple(("tog$place").hashCode(), t("Sei con {0}", names), place, emoji, openApp(16) { putExtra(EXTRA_TAB, 2) }, Sounds.channelId(SoundKind.MEETING))
 
     fun arrivedSelf(name: String, place: String) =
-        simple(("me-arr$place").hashCode(), t("Sei arrivato"), t("Ho avvisato {0} e fermato la condivisione", name), "📍")
+        simple(("me-arr$place").hashCode(), t("Sei arrivato"), t("Ho avvisato {0} e fermato la condivisione", name), "📍", null, Sounds.channelId(SoundKind.MEETING))
 
     fun placeShared(from: String, place: String) =
         simple(("place$place").hashCode(), t("{0} ha aggiunto un luogo comune", from), place, "📍", openApp(15) { putExtra(EXTRA_TAB, 2) })
@@ -274,7 +301,7 @@ class Notifier(private val ctx: Context) {
             putExtra(EXTRA_EVENT, ev.id)
         }
         val pi = PendingIntent.getActivity(ctx, ev.id.hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
-        val n = Notification.Builder(ctx, CH_REMINDERS)
+        val n = Notification.Builder(ctx, Sounds.channelId(SoundKind.REMINDER))
             .setSmallIcon(small)
             .setLargeIcon(large)
             .setContentTitle("${ev.emoji}  ${ev.title}")

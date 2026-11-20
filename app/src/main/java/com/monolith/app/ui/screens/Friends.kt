@@ -96,6 +96,7 @@ import com.monolith.app.ui.components.bounceClick
 import com.monolith.app.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import com.monolith.app.ui.components.MonoDialog
 
 fun copyText(ctx: Context, label: String, text: String) {
     val cm = ctx.getSystemService(ClipboardManager::class.java)
@@ -108,7 +109,7 @@ fun copyText(ctx: Context, label: String, text: String) {
 fun MyQrDialog(onDismiss: () -> Unit) {
     val profile by Graph.identity.profile.collectAsState()
     val pub = Graph.identity.keys?.pub ?: ""
-    AlertDialog(
+    MonoDialog(
         onDismissRequest = onDismiss,
         title = { Text(t("Il mio codice QR")) },
         text = {
@@ -312,7 +313,7 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
 
     if (showQr) MyQrDialog { showQr = false }
     remove?.let { f ->
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { remove = null },
             title = { Text(t("Rimuovere {0}?", f.displayName)) },
             text = { Text(t("Non potrete più scrivervi finché non vi aggiungerete di nuovo.")) },

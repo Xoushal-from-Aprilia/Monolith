@@ -186,6 +186,8 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import org.json.JSONObject
 import java.io.File
+import com.monolith.app.ui.components.MonoSheet
+import com.monolith.app.ui.components.MonoDialog
 
 private data class ConvRow(
     val conv: String,
@@ -288,7 +290,7 @@ fun ChatListScreen(nav: NavHostController) {
 
     if (newChat) {
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
-        ModalBottomSheet(onDismissRequest = { newChat = false }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        MonoSheet(onDismissRequest = { newChat = false }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.padding(bottom = 24.dp)) {
                 Text(t("Nuova chat"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
                 Spacer(Modifier.height(8.dp))
@@ -741,7 +743,7 @@ fun ChatScreen(nav: NavHostController, conv: String) {
     actionsFor?.let { m ->
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         val mine = reactions.firstOrNull { it.msgId == m.id && it.sender == myPub }?.emoji
-        ModalBottomSheet(onDismissRequest = { actionsFor = null }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        MonoSheet(onDismissRequest = { actionsFor = null }, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.padding(bottom = 24.dp)) {
                 if (m.kind != "system" && m.kind != "call" && m.kind != "deleted") {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -795,7 +797,7 @@ fun ChatScreen(nav: NavHostController, conv: String) {
     if (shareEvent) {
         val events by remember { Graph.db.agenda().all() }.collectAsState(initial = emptyList())
         val upcoming = events.filter { it.start > now() - 86_400_000L && it.inviteState != InviteState.DECLINED }
-        ModalBottomSheet(onDismissRequest = { shareEvent = false }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        MonoSheet(onDismissRequest = { shareEvent = false }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
             Text(t("Condividi un evento"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
             if (upcoming.isEmpty()) Text(t("Nessun evento in programma"), Modifier.padding(24.dp), color = MaterialTheme.colorScheme.onSurfaceVariant)
             LazyColumn(Modifier.heightIn(max = 420.dp).padding(bottom = 24.dp)) {
@@ -824,7 +826,7 @@ fun ChatScreen(nav: NavHostController, conv: String) {
 
     if (ttlDialog) {
         val options = listOf(0L to t("Disattivati"), 3600L to t("1 ora"), 86400L to t("24 ore"), 604800L to t("7 giorni"))
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { ttlDialog = false },
             title = { Text(t("Messaggi effimeri")) },
             text = {
@@ -848,7 +850,7 @@ fun ChatScreen(nav: NavHostController, conv: String) {
     }
 
     confirm?.let { what ->
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { confirm = null },
             title = {
                 Text(when (what) {
@@ -890,7 +892,7 @@ private fun PollDialog(onDismiss: () -> Unit, onSend: (String, List<String>, Boo
     var q by remember { mutableStateOf("") }
     val opts = remember { mutableStateListOf("", "") }
     var multi by remember { mutableStateOf(false) }
-    AlertDialog(
+    MonoDialog(
         onDismissRequest = onDismiss,
         title = { Text(t("Nuovo sondaggio")) },
         text = {

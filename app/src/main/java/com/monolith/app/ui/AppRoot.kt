@@ -93,6 +93,7 @@ import com.monolith.app.ui.screens.CreditsScreen
 import com.monolith.app.ui.screens.EventEditorScreen
 import com.monolith.app.ui.screens.FriendsScreen
 import com.monolith.app.ui.screens.JournalScreen
+import com.monolith.app.ui.screens.SoundsScreen
 import com.monolith.app.ui.screens.ListDetailScreen
 import com.monolith.app.ui.screens.MapScreen
 import com.monolith.app.ui.screens.NewGroupScreen
@@ -105,6 +106,7 @@ import com.monolith.app.ui.theme.Motion
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.launch
+import com.monolith.app.ui.components.tapSounds
 
 /** navigation requests coming from notifications / intents */
 data class NavRequest(
@@ -188,7 +190,7 @@ fun AppRoot() {
         delay(1450)
         intro = false
     }
-    Box(Modifier.fillMaxSize()) {
+    Box(Modifier.fillMaxSize().tapSounds()) {
         AnimatedContent(
             targetState = when {
                 intro -> 0
@@ -346,6 +348,7 @@ private fun MainNav() {
                 }
                 composable("journal") { JournalScreen(nav) }
                 composable("credits") { CreditsScreen(nav) }
+                composable("sounds") { SoundsScreen(nav) }
                 composable(
                     "permissions?first={first}",
                     arguments = listOf(navArgument("first") { type = NavType.BoolType; defaultValue = false }),

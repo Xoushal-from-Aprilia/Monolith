@@ -46,6 +46,7 @@ import com.monolith.app.ui.components.bounceClick
 import com.monolith.app.ui.theme.LocalDark
 import org.osmdroid.tileprovider.tilesource.TileSourcePolicy
 import org.osmdroid.tileprovider.tilesource.XYTileSource
+import com.monolith.app.ui.components.MonoSheet
 
 /**
  * Free map services that need no account or key, always drawn in Monolith's
@@ -160,7 +161,7 @@ fun MapStyleSheet(onClose: () -> Unit) {
     val styleIdx by Graph.prefs.mapStyle.collectAsState()
     val tone by Graph.prefs.mapTone.collectAsState()
     val mapDark = rememberMapDark()
-    ModalBottomSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
             Text(t("Stile della mappa"), style = MaterialTheme.typography.titleLarge)
             Text(

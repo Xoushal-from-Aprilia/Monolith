@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.HorizontalDivider
@@ -94,10 +95,11 @@ import kotlinx.coroutines.withContext
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
+import com.monolith.app.ui.components.MonoDialog
 
 @Composable
 fun LanguageDialog(onDismiss: () -> Unit, onPick: (String) -> Unit) {
-    AlertDialog(
+    MonoDialog(
         onDismissRequest = onDismiss,
         title = { Text(t("Lingua")) },
         text = {
@@ -195,6 +197,7 @@ fun SettingsScreen(nav: NavHostController) {
             }
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
+            SettingRow(Icons.Rounded.MusicNote, t("Suoni"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
 
             SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 16.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -257,7 +260,7 @@ fun SettingsScreen(nav: NavHostController) {
 
     if (showCode) {
         val code = remember { Graph.identity.recoveryCode() }
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { showCode = false; revealed = false },
             title = { Text(t("Codice di recupero")) },
             text = {
@@ -285,7 +288,7 @@ fun SettingsScreen(nav: NavHostController) {
     }
 
     if (backupDialog) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { backupDialog = false },
             title = { Text(t("Backup cifrato")) },
             text = {
@@ -312,7 +315,7 @@ fun SettingsScreen(nav: NavHostController) {
     }
 
     if (wipe) {
-        AlertDialog(
+        MonoDialog(
             onDismissRequest = { wipe = false },
             title = { Text(t("Eliminare tutto?")) },
             text = { Text(t("Chat, agenda, liste e amici verranno cancellati da questo telefono. Senza il codice di recupero o un backup non potrai recuperare questo profilo.")) },
@@ -362,6 +365,15 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "0.4.0", "2026-11-20",
+        listOf(
+            "Suoni calmi creati per Monolith: tasti leggeri, 5 suonerie, suoni per messaggi, incontri e promemoria",
+            "Nuova pagina Suoni nelle impostazioni, con ascolto di prova",
+            "Toni discreti durante le chiamate: attesa, collegamento e fine",
+            "Avviso «Sei con…» quando raggiungi un luogo comune dove ci sono già amici",
+        ),
+    ),
     Release(
         "0.3.0", "2026-11-20",
         listOf(

@@ -367,7 +367,7 @@ fun EmojiPickerSheet(onDismiss: () -> Unit, onPick: (String) -> Unit) {
     var cat by remember { mutableIntStateOf(0) }
     var custom by remember { mutableStateOf("") }
     val cats = EMOJI_SETS.keys.toList()
-    ModalBottomSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+    MonoSheet(onDismissRequest = onDismiss, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(bottom = 16.dp)) {
             Text(t("Scegli un'emoji"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp))
             Spacer(Modifier.height(12.dp))

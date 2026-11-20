@@ -14,6 +14,7 @@ import com.monolith.app.widget.AgendaWidget
 import com.monolith.app.core.IdentityStore
 import com.monolith.app.core.Prefs
 import com.monolith.app.data.AppDatabase
+import com.monolith.app.audio.Sounds
 import com.monolith.app.data.PlacesStore
 import com.monolith.app.location.LocationShare
 import com.monolith.app.location.PlaceWatcher
@@ -62,11 +63,13 @@ object Graph {
         AppLock.init(prefs)
         identity = IdentityStore(application)
         db = AppDatabase.build(application)
+        Sounds.init(application)
         notifier = Notifier(application).also { it.createChannels() }
         relays = RelayPool(scope) { identity.keys }
         messenger = Messenger(application, scope, db)
         rtc = RtcManager(application, scope)
         calls = CallManager(application, scope)
+        Sounds.watchCalls()
         places = PlacesStore(application)
         location = LocationShare(application, scope)
         placeWatch = PlaceWatcher(application, scope)

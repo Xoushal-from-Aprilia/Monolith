@@ -370,6 +370,7 @@ class Messenger(
                 isGroup = group != null,
                 groupEmoji = group?.emoji,
                 nudge = kind == "nudge",
+                meeting = kind == "place",
             )
         } else if (kind == "nudge") {
             Graph.notifier.vibrateNudge()
@@ -918,6 +919,11 @@ class Messenger(
         val others = p.members.filter { it != k.pub }
         others.forEach { sendStored(it, JSONObject().put("t", "placehere").put("id", p.id).put("in", inside).put("at", at), 2L * 86400) }
         if (inside && notify) {
+            // friends already there: that's a meeting
+            val fresh = places.get(p.id) ?: p
+            val with = fresh.here.filter { (pk, pr) -> pk != k.pub && pr.inside && at - pr.at < 12 * 3_600_000L }.keys
+                .mapNotNull { db.friends().get(it)?.displayName }
+            if (with.isNotEmpty()) Graph.notifier.together(with.joinToString(", "), p.name, p.emoji)
             val ex = JSONObject().put("id", p.id).put("n", p.name).put("e", p.emoji).put("la", p.lat).put("lo", p.lon)
             others.forEach { pk ->
                 if (db.friends().get(pk)?.status == FriendStatus.FRIEND) {
