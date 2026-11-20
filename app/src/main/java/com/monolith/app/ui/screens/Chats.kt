@@ -237,7 +237,7 @@ fun ChatListScreen(nav: NavHostController) {
             val m = lastBy[f.pubkey]
             add(ConvRow(f.pubkey, f.displayName, f.emoji, m, unreadBy[f.pubkey] ?: 0, isOnline(f.pubkey), false, m?.ts ?: 0))
         }
-        groups.forEach { g ->
+        groups.filter { !com.monolith.app.net.Shard.isRoomGroup(it.id) }.forEach { g ->
             val c = "g:" + g.id
             val m = lastBy[c]
             add(ConvRow(c, g.name, g.emoji, m, unreadBy[c] ?: 0, false, true, m?.ts ?: g.createdAt))
@@ -260,6 +260,7 @@ fun ChatListScreen(nav: NavHostController) {
             item(key = "statuses") {
                 StatusStrip(friends, isOnline, onMine = { statusSheet = true }, onFriend = { f, st -> statusOf = f to st })
             }
+            item(key = "shards") { ShardStrip(nav, unreadBy) }
             if (rows.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(
@@ -391,6 +392,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val haptics = LocalHapticFeedback.current
     val uiScope = rememberCoroutineScope()
     val isGroup = conv.startsWith("g:")
+    val isRoom = com.monolith.app.net.Shard.isRoomConv(conv)
     val messages by remember(conv) { Graph.db.messages().conversation(conv) }.collectAsState(initial = emptyList())
     val friend by remember(conv) { Graph.db.friends().observe(conv) }.collectAsState(initial = null)
     val group by remember(conv) { Graph.db.groups().observe(conv.removePrefix("g:")) }.collectAsState(initial = null)
@@ -448,7 +450,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         (friend?.lastSeen ?: 0L) > 0L -> t("ultimo accesso {0}", Fmt.ago(friend?.lastSeen ?: 0L))
         else -> "@" + (friend?.username ?: "")
     }
-    val canCall = if (isGroup) (group?.memberList()?.size ?: 99) <= CallManager.MAX_PEOPLE else friend?.status == FriendStatus.FRIEND
+    val canCall = !isRoom && if (isGroup) (group?.memberList()?.size ?: 99) <= CallManager.MAX_PEOPLE else friend?.status == FriendStatus.FRIEND
     val reactBy = remember(reactions) { reactions.groupBy { it.msgId } }
     val votesBy = remember(votes) { votes.groupBy { it.msgId } }
 
@@ -548,7 +550,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         })
                         DropdownMenuItem(text = { Text(t("Messaggi effimeri")) }, leadingIcon = { Icon(Icons.Rounded.Timer, null) }, onClick = { menu = false; ttlDialog = true })
                         DropdownMenuItem(text = { Text(t("Svuota chat")) }, onClick = { menu = false; confirm = "clear" })
-                        if (isGroup) DropdownMenuItem(text = { Text(t("Lascia il gruppo")) }, onClick = { menu = false; confirm = "leave" })
+                        if (isGroup && !isRoom) DropdownMenuItem(text = { Text(t("Lascia il gruppo")) }, onClick = { menu = false; confirm = "leave" })
                         else if (friend?.status == FriendStatus.FRIEND) DropdownMenuItem(text = { Text(t("Rimuovi amico")) }, onClick = { menu = false; confirm = "unfriend" })
                     }
                 }

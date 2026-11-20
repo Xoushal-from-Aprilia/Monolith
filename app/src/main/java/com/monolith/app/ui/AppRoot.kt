@@ -95,6 +95,7 @@ import com.monolith.app.ui.screens.FriendsScreen
 import com.monolith.app.ui.screens.JournalScreen
 import com.monolith.app.ui.screens.SoundsScreen
 import com.monolith.app.ui.screens.SearchScreen
+import com.monolith.app.ui.screens.ShardScreen
 import com.monolith.app.ui.screens.ListDetailScreen
 import com.monolith.app.ui.screens.MapScreen
 import com.monolith.app.ui.screens.NewGroupScreen
@@ -127,6 +128,7 @@ object NavBus {
 }
 
 object Routes {
+    fun shard(id: String) = "shard/$id"
     fun chat(conv: String, focus: String = "") = "chat/" + Uri.encode(conv) + (if (focus.isNotEmpty()) "?focus=" + Uri.encode(focus) else "")
     fun event(id: String, date: Long = 0L) = "event/" + Uri.encode(id) + "?date=$date"
     fun photo(path: String, key: String) = "photo?path=" + Uri.encode(path) + "&key=" + Uri.encode(key)
@@ -330,6 +332,7 @@ private fun MainNav() {
                     }
                 }
                 composable("search") { SearchScreen(nav) }
+                composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable(
                     "event/{id}?date={date}",
                     arguments = listOf(

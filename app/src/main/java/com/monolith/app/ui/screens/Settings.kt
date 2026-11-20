@@ -403,6 +403,14 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "0.7.0", "2026-11-20",
+        listOf(
+            "Shard: spazi per te e i tuoi amici, con stanze scritte e stanze vocali",
+            "Stanze vocali sempre aperte: entri ed esci quando vuoi, fino a 4 persone insieme",
+            "Chi crea lo shard aggiunge stanze, lo rinomina e gestisce i membri; tutti possono invitare amici",
+        ),
+    ),
+    Release(
         "0.6.0", "2026-11-20",
         listOf(
             "Messaggi programmati: scrivi ora, parte all'ora che scegli",

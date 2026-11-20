@@ -52,6 +52,7 @@ object Graph {
     lateinit var calls: CallManager
     lateinit var location: LocationShare
     lateinit var places: PlacesStore
+    lateinit var shards: com.monolith.app.net.ShardManager
     lateinit var birthdays: BirthdayStore
     lateinit var done: DoneStore
     lateinit var scheduled: ScheduledStore
@@ -85,6 +86,7 @@ object Graph {
         rtc = RtcManager(application, scope)
         calls = CallManager(application, scope)
         Sounds.watchCalls()
+        shards = com.monolith.app.net.ShardManager(application, scope)
         places = PlacesStore(application)
         location = LocationShare(application, scope)
         placeWatch = PlaceWatcher(application, scope)
@@ -139,6 +141,7 @@ object Graph {
             engineStarted = true
             messenger.start()
             placeWatch.start()
+            shards.start()
         }
         MonolithService.start(app)
     }

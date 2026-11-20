@@ -155,6 +155,34 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
         }, 45, TimeUnit.SECONDS)
     }
 
+    /**
+     * Voice room of a shard: nobody rings. I'm in the room right away; whoever is already there
+     * answers my "join" and connects to me.
+     */
+    fun joinRoom(cid: String, members: List<String>, groupId: String) {
+        val task = object : Runnable {
+            override fun run() {
+                if (_state.value.phase == CallPhase.ENDED) {
+                    // the previous call is still letting go of the microphone
+                    exec.schedule(this, 700, TimeUnit.MILLISECONDS)
+                    return
+                }
+                if (inCall) return
+                declined.clear()
+                setupLocalMedia(false)
+                _state.value = CallUi(
+                    phase = CallPhase.ACTIVE, cid = cid, caller = myPub(), members = members, group = groupId,
+                    video = false, since = now(),
+                )
+                others().forEach { send(it, "join", cid) }
+                MonolithService.refresh(ctx)
+            }
+        }
+        exec.execute(task)
+    }
+
+    private fun isRoom(st: CallUi = _state.value) = st.cid?.startsWith("room.") == true
+
     fun accept() {
         exec.execute {
             val st = _state.value
@@ -278,6 +306,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
 
     private fun checkEmpty() {
         val st = _state.value
+        if (isRoom(st)) return   // a voice room stays open even when I'm alone in it
         if (links.isEmpty() && st.participants.isEmpty() && (st.phase == CallPhase.ACTIVE || st.phase == CallPhase.CONNECTING)) {
             end(t("Chiamata terminata"))
         }
@@ -512,7 +541,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
             links.keys.toList().forEach { closeLink(it) }
             releaseLocalMedia()
         }, 400, TimeUnit.MILLISECONDS)
-        val conv = st.group?.let { "g:$it" } ?: st.peer
+        val conv = if (isRoom(st)) null else st.group?.let { "g:$it" } ?: st.peer
         if (conv != null) {
             scope.launch {
                 val kind = if (st.video) t("Videochiamata") else t("Chiamata vocale")

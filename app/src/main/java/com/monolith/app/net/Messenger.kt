@@ -236,6 +236,10 @@ class Messenger(
             "ack" -> onAck(p)
             "react" -> onReact(from, p, friend)
             "pin" -> onPin(from, p, friend)
+            "shard" -> Graph.shards.onShard(from, p, isFriend)
+            "shardleave" -> Graph.shards.onLeave(from, p)
+            "vroom" -> Graph.shards.onVoice(from, p)
+            "vwho" -> Graph.shards.onWho(from, p)
             "status" -> if (friend?.status == FriendStatus.FRIEND) {
                 val u = p.optLong("u")
                 Graph.statuses.setFriend(from, if (u > now()) com.monolith.app.data.Status(p.optString("e").take(8), p.optString("x").take(80), minOf(u, now() + 86_400_000L)) else null)
