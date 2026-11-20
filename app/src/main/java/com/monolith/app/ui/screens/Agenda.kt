@@ -130,6 +130,8 @@ import org.json.JSONObject
 import java.util.Calendar
 import java.util.TimeZone
 import com.monolith.app.ui.components.MonoDialog
+import androidx.compose.material.icons.rounded.Check
+import androidx.compose.ui.draw.alpha
 
 private const val DAY = 86_400_000L
 
@@ -193,6 +195,12 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
     val events by remember { Graph.db.agenda().all() }.collectAsState(initial = emptyList())
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
     var monthOpen by rememberSaveable { mutableStateOf(false) }
+    var dayMode by rememberSaveable { mutableIntStateOf(0) }          // 0 = list, 1 = hour by hour
+    var noteDialog by remember { mutableStateOf(false) }
+    val bdays by Graph.birthdays.friends.collectAsState()
+    val doneV by Graph.done.version.collectAsState()
+    val placeNotes by Graph.places.notes.collectAsState()
+    val places by Graph.places.all.collectAsState()
     val today = Fmt.startOfDay(now())
 
     val visible = events.filter { it.inviteState != InviteState.DECLINED }
@@ -200,15 +208,17 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
     val confirmed = visible.filter { it.inviteState != InviteState.PENDING }
     val dayEvents = confirmed.mapNotNull { e -> Recur.occurrenceOn(e, selected)?.let { e to it } }.sortedBy { it.second }
     val upcoming = Recur.upcoming(confirmed, selected + DAY, 8)
-    val eventDays = remember(confirmed, selected) {
+    val friendBdays = remember(bdays, friends) { bdays.filterKeys { pk -> friends.any { it.pubkey == pk && it.status == FriendStatus.FRIEND } } }
+    val eventDays = remember(confirmed, selected, friendBdays) {
         val set = HashSet<Long>()
         for (i in -45..120) {
             val d = dayOffset(selected, i)
-            if (confirmed.any { Recur.occursOn(it, d) }) set.add(d)
+            if (confirmed.any { Recur.occursOn(it, d) } || friendBdays.values.any { it.isOn(d) }) set.add(d)
         }
         set
     }
     val names = remember(friends) { friends.associateBy { it.pubkey } }
+    val dayBirthdays = friends.filter { f -> friendBdays[f.pubkey]?.isOn(selected) == true }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
         item(key = "month") {
@@ -247,15 +257,35 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
             }
         }
         item(key = "dayLabel") {
-            SectionLabel(if (selected == today) t("Oggi") else Fmt.dayShort(selected), Modifier.padding(top = 12.dp))
+            Row(Modifier.fillMaxWidth().padding(top = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(if (selected == today) t("Oggi") else Fmt.dayShort(selected), Modifier.weight(1f))
+                SingleChoiceSegmentedButtonRow {
+                    listOf(t("Elenco"), t("Ore")).forEachIndexed { i, label ->
+                        SegmentedButton(
+                            selected = dayMode == i, onClick = { dayMode = i },
+                            shape = SegmentedButtonDefaults.itemShape(i, 2),
+                            colors = SegmentedButtonDefaults.colors(activeContainerColor = MaterialTheme.colorScheme.primary, activeContentColor = MaterialTheme.colorScheme.onPrimary),
+                            icon = {},
+                        ) { Text(label, style = MaterialTheme.typography.labelMedium) }
+                    }
+                }
+            }
         }
-        if (dayEvents.isEmpty()) {
+        items(dayBirthdays, key = { "b" + it.pubkey }) { f ->
+            BirthdayCard(f, Modifier.animateItem()) { nav.navigate(Routes.chat(f.pubkey)) }
+        }
+        if (dayMode == 1) {
+            item(key = "timeline") {
+                DayTimeline(dayEvents, selected) { e -> nav.navigate(Routes.event(e.id)) }
+            }
+        } else if (dayEvents.isEmpty() && dayBirthdays.isEmpty()) {
             item(key = "empty") {
                 EmptyState(t("Giornata libera"), t("Tocca + per aggiungere un evento, un promemoria o invitare un amico."), Modifier.animateItem())
             }
         } else {
             items(dayEvents, key = { "d" + it.first.id }) { (e, occ) ->
-                EventCard(e, occ, names, Modifier.animateItem()) { nav.navigate(Routes.event(e.id)) }
+                val done = doneV >= 0 && Graph.done.isDone(e.id, occ)
+                EventCard(e, occ, names, Modifier.animateItem(), done = done, onToggleDone = { Graph.done.set(e.id, occ, !done) }) { nav.navigate(Routes.event(e.id)) }
             }
         }
         if (upcoming.isNotEmpty()) {
@@ -264,7 +294,26 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
                 EventCard(e, occ, names, Modifier.animateItem(), showDate = true, shared = false) { nav.navigate(Routes.event(e.id)) }
             }
         }
+        item(key = "notesLabel") {
+            Row(Modifier.fillMaxWidth().padding(top = 16.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+                SectionLabel(t("Promemoria su luogo"), Modifier.weight(1f))
+                TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
+            }
+        }
+        if (placeNotes.isEmpty()) {
+            item(key = "notesEmpty") {
+                Text(
+                    t("«Quando arrivo a casa ricordami di…»: scatta da solo appena arrivi."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    modifier = Modifier.padding(horizontal = 24.dp),
+                )
+            }
+        }
+        items(placeNotes, key = { "n" + it.id }) { n ->
+            PlaceNoteRow(n, places.firstOrNull { it.id == n.placeId }, Modifier.animateItem())
+        }
     }
+    if (noteDialog) PlaceNoteDialog(places) { noteDialog = false }
 }
 
 @Composable
@@ -381,6 +430,8 @@ private fun EventCard(
     modifier: Modifier = Modifier,
     showDate: Boolean = false,
     shared: Boolean = true,
+    done: Boolean = false,
+    onToggleDone: (() -> Unit)? = null,
     onClick: () -> Unit,
 ) {
     Surface(
@@ -391,12 +442,23 @@ private fun EventCard(
             .bounceClick(0.97f, onClick = onClick),
     ) {
         Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
-            Box(Modifier.size(52.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
-                Text(e.emoji, fontSize = 26.sp)
+            Box(
+                Modifier.size(52.dp).clip(RoundedCornerShape(16.dp))
+                    .background(if (done) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .then(if (onToggleDone != null) Modifier.bounceClick(0.85f) { onToggleDone() } else Modifier),
+                contentAlignment = Alignment.Center,
+            ) {
+                androidx.compose.animation.Crossfade(done, label = "done") { d ->
+                    if (d) Icon(Icons.Rounded.Check, t("Fatto"), tint = MaterialTheme.colorScheme.onPrimary)
+                    else Text(e.emoji, fontSize = 26.sp)
+                }
             }
             Spacer(Modifier.width(14.dp))
-            Column(Modifier.weight(1f)) {
-                Text(e.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
+            Column(Modifier.weight(1f).alpha(if (done) 0.55f else 1f)) {
+                Text(
+                    e.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    textDecoration = if (done) androidx.compose.ui.text.style.TextDecoration.LineThrough else null,
+                )
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Text(
                         (if (showDate) Fmt.dayShort(occ) + " · " else "") + timeText(e, occ),

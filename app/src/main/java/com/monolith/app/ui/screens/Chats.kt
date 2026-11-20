@@ -1085,6 +1085,36 @@ private fun MessageRow(
                     }
                 }
             }
+            "sos" -> {
+                val lat = ex.optDouble("lat")
+                val lon = ex.optDouble("lon")
+                val hasPos = !lat.isNaN() && !lon.isNaN()
+                Surface(
+                    shape = shape, color = MaterialTheme.colorScheme.inverseSurface,
+                    modifier = Modifier.widthIn(max = 280.dp).combinedClickable(
+                        onClick = { if (hasPos) onOpenMap(lat, lon) },
+                        onLongClick = { onLongPress(m) },
+                    ),
+                ) {
+                    val ink = MaterialTheme.colorScheme.inverseOnSurface
+                    Column(Modifier.padding(16.dp)) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text("🆘", fontSize = 26.sp)
+                            Spacer(Modifier.width(10.dp))
+                            Text("SOS", color = ink, style = MaterialTheme.typography.headlineSmall)
+                        }
+                        Text(
+                            if (out) t("Hai chiesto aiuto a tutti i tuoi amici") else t("Ha bisogno di aiuto"),
+                            color = ink, style = MaterialTheme.typography.bodyLarge,
+                        )
+                        if (hasPos) {
+                            Spacer(Modifier.height(6.dp))
+                            Text(t("Tocca per vedere dove si trova"), color = ink.copy(alpha = 0.75f), style = MaterialTheme.typography.labelMedium)
+                        }
+                        MetaLine(m, ink)
+                    }
+                }
+            }
             "loc" -> {
                 val lat = ex.optDouble("lat")
                 val lon = ex.optDouble("lon")

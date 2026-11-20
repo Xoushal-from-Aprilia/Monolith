@@ -313,11 +313,17 @@ class Messenger(
         val prof = Profile.fromJson(p)
         val wasFriend = existing.status == FriendStatus.FRIEND
         db.friends().upsert(existing.copy(status = FriendStatus.FRIEND, username = prof.username, displayName = prof.displayName, emoji = prof.emoji, bio = prof.bio))
-        if (!wasFriend) Graph.notifier.friendAccepted(prof.displayName, prof.emoji)
+        readBirthday(from, p)
+        if (!wasFriend) {
+            Graph.notifier.friendAccepted(prof.displayName, prof.emoji)
+            // the request carried no birthday: send it now that we are friends
+            if (Graph.birthdays.mine.value != null) sendStored(from, profilePayload("prof"))
+        }
     }
 
     private suspend fun onProfile(friend: Friend, p: JSONObject) {
         val prof = Profile.fromJson(p)
+        readBirthday(friend.pubkey, p)
         db.friends().upsert(friend.copy(username = prof.username, displayName = prof.displayName, emoji = prof.emoji, bio = prof.bio))
     }
 
@@ -371,6 +377,7 @@ class Messenger(
                 groupEmoji = group?.emoji,
                 nudge = kind == "nudge",
                 meeting = kind == "place",
+                sos = kind == "sos",
             )
         } else if (kind == "nudge") {
             Graph.notifier.vibrateNudge()
@@ -386,6 +393,7 @@ class Messenger(
         "poll" -> "📊 " + (runCatching { JSONObject(m.extra ?: "{}").optString("q") }.getOrNull() ?: t("Sondaggio"))
         "call" -> "📞 " + m.text
         "deleted" -> "🚫 " + t("Messaggio eliminato")
+        "sos" -> "🆘 " + if (m.outgoing) t("Hai chiesto aiuto") else t("Ha bisogno di aiuto")
         "place" -> {
             val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
             "📍 " + if (m.outgoing) t("Hai raggiunto {0}", name) else t("Ha raggiunto {0}", name)
@@ -741,7 +749,22 @@ class Messenger(
 
     fun profilePayload(type: String): JSONObject {
         val p = identity.profile.value ?: Profile("", "", "🙂")
-        return p.toJson().put("t", type)
+        val j = p.toJson().put("t", type)
+        // the birthday only goes to friends, never to a stranger with a request
+        if (type != "freq") j.put("bd", Graph.birthdays.mine.value?.code() ?: "")
+        return j
+    }
+
+    private fun readBirthday(pk: String, p: JSONObject) {
+        if (!p.has("bd")) return
+        Graph.birthdays.setFriend(pk, com.monolith.app.data.Birthday.parse(p.optString("bd")))
+    }
+
+    /** my birthday (day and month), shared privately with my friends */
+    suspend fun setMyBirthday(b: com.monolith.app.data.Birthday?) {
+        Graph.birthdays.setMine(b)
+        val payload = profilePayload("prof")
+        db.friends().friendsNow().forEach { sendStored(it.pubkey, payload) }
     }
 
     suspend fun publishProfile() {
@@ -897,6 +920,21 @@ class Messenger(
         }
         Graph.placeWatch.refresh()
         return p.id
+    }
+
+    /**
+     * SOS: every friend gets an alarm-like message with where I am, and my live position for an hour.
+     * Returns how many friends were reached.
+     */
+    suspend fun sendSos(lat: Double?, lon: Double?, accuracy: Float?): Int {
+        val friends = db.friends().friendsNow().filter { it.status == FriendStatus.FRIEND }
+        val ex = JSONObject()
+        if (lat != null && lon != null) ex.put("lat", lat).put("lon", lon).put("acc", (accuracy ?: 0f).toDouble())
+        friends.forEach { f ->
+            deliver(newOutgoing(f.pubkey, "sos", t("SOS"), JSONObject(ex.toString())) ?: return@forEach)
+        }
+        if (friends.isNotEmpty()) Graph.location.startSharing(friends.map { it.pubkey }, 60, remember = false)
+        return friends.size
     }
 
     /** a common place is common: deleting it removes it for everyone */

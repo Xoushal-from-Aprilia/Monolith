@@ -271,6 +271,13 @@ place(tr, glass(note("B6"), 1.0) * 0.7, 0.16)
 place(tr, glass(note("E7"), 1.0) * 0.45, 0.32)
 S["rem_chiaro"] = finish(reverb(tr, 1.4, 0.3, 6000), -7, 2.0)
 
+# ---------------------------------------------------------------- SOS: clear but not harsh
+tr = canvas(3.2)
+for k in range(2):
+    for i in range(3):
+        place(tr, bell(note("E6"), 0.5) * 0.9 + marimba(note("E5"), 0.5) * 0.5, k * 1.5 + i * 0.16)
+S["sos"] = finish(reverb(tr, 0.8, 0.15), -2, 3.2)
+
 total = 0
 for name, x in S.items():
     o = save(name, x)

@@ -15,6 +15,8 @@ import com.monolith.app.core.IdentityStore
 import com.monolith.app.core.Prefs
 import com.monolith.app.data.AppDatabase
 import com.monolith.app.audio.Sounds
+import com.monolith.app.data.BirthdayStore
+import com.monolith.app.data.DoneStore
 import com.monolith.app.data.PlacesStore
 import com.monolith.app.location.LocationShare
 import com.monolith.app.location.PlaceWatcher
@@ -47,6 +49,8 @@ object Graph {
     lateinit var calls: CallManager
     lateinit var location: LocationShare
     lateinit var places: PlacesStore
+    lateinit var birthdays: BirthdayStore
+    lateinit var done: DoneStore
     lateinit var placeWatch: PlaceWatcher
 
     @Volatile
@@ -63,6 +67,8 @@ object Graph {
         AppLock.init(prefs)
         identity = IdentityStore(application)
         db = AppDatabase.build(application)
+        birthdays = BirthdayStore(application)
+        done = DoneStore(application)
         Sounds.init(application)
         notifier = Notifier(application).also { it.createChannels() }
         relays = RelayPool(scope) { identity.keys }

@@ -38,6 +38,7 @@ class Notifier(private val ctx: Context) {
         const val CH_SOCIAL = "social"
         const val CH_CALLS = "calls"
         const val CH_SERVICE = "service"
+        const val CH_SOS = "sos"
 
         const val ID_SERVICE = 1
         const val ID_CALL = 2
@@ -79,6 +80,14 @@ class Notifier(private val ctx: Context) {
                 setSound(null, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
             },
             NotificationChannel(CH_SERVICE, t("Connessione"), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) },
+            NotificationChannel(CH_SOS, "SOS", NotificationManager.IMPORTANCE_HIGH).apply {
+                enableVibration(true)
+                vibrationPattern = longArrayOf(0, 600, 250, 600, 250, 600)
+                setBypassDnd(true)
+                Sounds.uri("sos")?.let {
+                    setSound(it, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_ALARM).setContentType(AudioAttributes.CONTENT_TYPE_SONIFICATION).build())
+                }
+            },
         )
         m.createNotificationChannels(list)
         // channels of sounds no longer chosen, and the ones from before the sound kit
@@ -142,6 +151,7 @@ class Notifier(private val ctx: Context) {
         groupEmoji: String?,
         nudge: Boolean,
         meeting: Boolean = false,
+        sos: Boolean = false,
     ) {
         if (nudge) vibrateNudge()
         val lines = history.getOrPut(conv) { mutableListOf() }
@@ -172,7 +182,7 @@ class Notifier(private val ctx: Context) {
             0, t("Segna come letto"),
             action(code + 1, ActionReceiver.ACTION_READ) { putExtra(ActionReceiver.EXTRA_CONV, conv) }
         ).build()
-        val n = base(Sounds.channelId(if (meeting) SoundKind.MEETING else SoundKind.MESSAGE))
+        val n = base(if (sos) CH_SOS else Sounds.channelId(if (meeting) SoundKind.MEETING else SoundKind.MESSAGE))
             .setStyle(style)
             .setContentTitle(title)
             .setContentText(text)
@@ -311,8 +321,53 @@ class Notifier(private val ctx: Context) {
             .setAutoCancel(true)
             .setCategory(Notification.CATEGORY_REMINDER)
             .setColor(INK)
+            .addAction(reminderAction(ev.id, occurrence, 10, t("+10 min")))
+            .addAction(reminderAction(ev.id, occurrence, 60, t("+1 ora")))
+            .addAction(reminderAction(ev.id, occurrence, 0, t("Fatto")))
             .build()
-        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(("rem" + ev.id).hashCode(), n) }
+        runCatching { ctx.getSystemService(NotificationManager::class.java).notify(reminderId(ev.id), n) }
+    }
+
+    fun reminderId(eventId: String) = ("rem$eventId").hashCode()
+
+    /** snooze ([minutes] > 0) or done ([minutes] = 0) */
+    private fun reminderAction(id: String, occ: Long, minutes: Int, label: String): Notification.Action {
+        val i = Intent(ctx, ReminderReceiver::class.java)
+            .setAction(if (minutes > 0) ReminderReceiver.ACTION_SNOOZE + minutes else ReminderReceiver.ACTION_DONE)
+            .putExtra("id", id).putExtra("occ", occ).putExtra("snooze", minutes)
+        val pi = PendingIntent.getBroadcast(ctx, ("$id|$minutes").hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        return Notification.Action.Builder(null as android.graphics.drawable.Icon?, label, pi).build()
+    }
+
+    fun cancelReminder(eventId: String) {
+        runCatching { ctx.getSystemService(NotificationManager::class.java).cancel(reminderId(eventId)) }
+    }
+
+    /** "when I get there, remind me to…" */
+    fun placeNotes(place: String, notes: List<String>) {
+        val text = notes.joinToString("\n") { "• $it" }
+        val n = base(Sounds.channelId(SoundKind.REMINDER))
+            .setContentTitle(t("Sei a {0}", place))
+            .setContentText(notes.joinToString(" · "))
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setLargeIcon(emojiIcon("📍"))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openApp(17) { putExtra(EXTRA_TAB, 0) })
+            .build()
+        post(("notes$place").hashCode(), n)
+    }
+
+    fun birthday(pk: String, name: String, emoji: String) {
+        val n = base(Sounds.channelId(SoundKind.REMINDER))
+            .setContentTitle(t("Oggi è il compleanno di {0}", name))
+            .setContentText(t("Mandagli gli auguri 🎂"))
+            .setLargeIcon(emojiIcon(emoji))
+            .setCategory(NotificationCompat.CATEGORY_REMINDER)
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setContentIntent(openApp(("bday$pk").hashCode()) { putExtra(EXTRA_CONV, pk) })
+            .build()
+        post(("bday$pk").hashCode(), n)
     }
 
     // ------------------------------------------------------------------ calls

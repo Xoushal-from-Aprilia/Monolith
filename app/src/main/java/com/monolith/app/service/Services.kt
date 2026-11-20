@@ -156,6 +156,23 @@ object ReminderScheduler {
 
     suspend fun rescheduleAll(ctx: Context) {
         Graph.db.agenda().allNow().forEach { schedule(ctx, it) }
+        BirthdayAlarm.schedule(ctx)
+        // a birthday today that nobody announced yet (phone was off at nine)
+        if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 9) BirthdayAlarm.fire(ctx)
+    }
+
+    fun snooze(ctx: Context, id: String, occ: Long, minutes: Int) {
+        val at = now() + minutes.coerceIn(1, 24 * 60) * 60_000L
+        val i = Intent(ctx, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_SNOOZED + "." + id)
+            .putExtra("id", id).putExtra("occ", occ)
+        val pi = PendingIntent.getBroadcast(ctx, ("snz$id").hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+            else am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        } catch (_: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, at, pi)
+        }
     }
 
     // ---- "already shown" memory, so the same reminder never appears twice
@@ -181,27 +198,78 @@ object ReminderScheduler {
 }
 
 class ReminderReceiver : BroadcastReceiver() {
+    companion object {
+        const val ACTION_SNOOZE = "monolith.reminder.SNOOZE_"
+        const val ACTION_DONE = "monolith.reminder.DONE"
+        const val ACTION_SNOOZED = "monolith.reminder.SNOOZED"
+        const val ACTION_BIRTHDAYS = "monolith.reminder.BIRTHDAYS"
+    }
+
     override fun onReceive(context: Context, intent: Intent) {
-        val id = intent.getStringExtra("id") ?: return
+        val action = intent.action.orEmpty()
+        val id = intent.getStringExtra("id")
         val occ = intent.getLongExtra("occ", 0L)
-        val minutes = intent.getIntExtra("min", -1)
-        val trigger = intent.getLongExtra("trig", 0L)
         val pending = goAsync()
         Graph.scope.launch {
             try {
-                val ev = Graph.db.agenda().get(id)
-                if (ev != null && ev.inviteState != InviteState.DECLINED && ev.inviteState != InviteState.PENDING) {
-                    // skip duplicates, and reminders that come very late (phone was off for hours)
-                    val fresh = trigger <= 0L || now() - trigger < 6 * 3_600_000L
-                    if (fresh && ReminderScheduler.markShown(context, id, occ, minutes)) {
-                        Graph.notifier.reminder(ev, if (occ > 0) occ else ev.start)
+                when {
+                    action == ACTION_BIRTHDAYS -> BirthdayAlarm.fire(context)
+                    action.startsWith(ACTION_SNOOZE) && id != null -> {
+                        Graph.notifier.cancelReminder(id)
+                        ReminderScheduler.snooze(context, id, occ, intent.getIntExtra("snooze", 10))
                     }
-                    ReminderScheduler.schedule(context, ev)
+                    action == ACTION_DONE && id != null -> {
+                        Graph.notifier.cancelReminder(id)
+                        Graph.done.set(id, occ, true)
+                    }
+                    action.startsWith(ACTION_SNOOZED) && id != null -> {
+                        val ev = Graph.db.agenda().get(id)
+                        if (ev != null && !Graph.done.isDone(id, occ)) Graph.notifier.reminder(ev, if (occ > 0) occ else ev.start)
+                    }
+                    id != null -> {
+                        val minutes = intent.getIntExtra("min", -1)
+                        val trigger = intent.getLongExtra("trig", 0L)
+                        val ev = Graph.db.agenda().get(id)
+                        if (ev != null && ev.inviteState != InviteState.DECLINED && ev.inviteState != InviteState.PENDING) {
+                            // skip duplicates, done events, and reminders that come very late (phone was off for hours)
+                            val fresh = trigger <= 0L || now() - trigger < 6 * 3_600_000L
+                            val o = if (occ > 0) occ else ev.start
+                            if (fresh && !Graph.done.isDone(id, o) && ReminderScheduler.markShown(context, id, occ, minutes)) {
+                                Graph.notifier.reminder(ev, o)
+                            }
+                            ReminderScheduler.schedule(context, ev)
+                        }
+                    }
                 }
             } finally {
                 pending.finish()
             }
         }
+    }
+}
+
+/** once a day, at nine: friends' birthdays */
+object BirthdayAlarm {
+    fun schedule(ctx: Context) {
+        val c = java.util.Calendar.getInstance().apply {
+            set(java.util.Calendar.HOUR_OF_DAY, 9); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0)
+            if (timeInMillis <= now()) add(java.util.Calendar.DAY_OF_YEAR, 1)
+        }
+        val i = Intent(ctx, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_BIRTHDAYS)
+        val pi = PendingIntent.getBroadcast(ctx, 9090, i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+        runCatching { ctx.getSystemService(AlarmManager::class.java).setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, c.timeInMillis, pi) }
+    }
+
+    suspend fun fire(ctx: Context) {
+        val today = com.monolith.app.core.Fmt.startOfDay(now())
+        val year = java.util.Calendar.getInstance().get(java.util.Calendar.YEAR)
+        Graph.birthdays.on(today).forEach { pk ->
+            val f = Graph.db.friends().get(pk) ?: return@forEach
+            if (f.status == com.monolith.app.data.FriendStatus.FRIEND && Graph.birthdays.markAnnounced(pk, year)) {
+                Graph.notifier.birthday(pk, f.displayName, f.emoji)
+            }
+        }
+        schedule(ctx)
     }
 }
 

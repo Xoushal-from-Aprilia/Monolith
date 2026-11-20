@@ -40,6 +40,9 @@ data class Place(
     }
 }
 
+/** "when I get there, remind me to…": personal, never shared */
+data class PlaceNote(val id: String, val placeId: String, val text: String, val createdAt: Long)
+
 /** my own geofence state for one place (never shared) */
 data class GeoState(val inside: Boolean? = null, val since: Long = 0L, val lastArrival: Long = 0L)
 
@@ -49,6 +52,8 @@ class PlacesStore(ctx: Context) {
     private val geo = HashMap<String, GeoState>()
     private val _all = MutableStateFlow<List<Place>>(emptyList())
     val all: StateFlow<List<Place>> = _all.asStateFlow()
+    private val _notes = MutableStateFlow<List<PlaceNote>>(emptyList())
+    val notes: StateFlow<List<PlaceNote>> = _notes.asStateFlow()
 
     init {
         runCatching {
@@ -56,6 +61,11 @@ class PlacesStore(ctx: Context) {
                 val root = JSONObject(file.readText())
                 val a = root.optJSONArray("places") ?: JSONArray()
                 _all.value = (0 until a.length()).mapNotNull { a.optJSONObject(it)?.let(::placeFrom) }
+                root.optJSONArray("notes")?.let { n ->
+                    _notes.value = (0 until n.length()).mapNotNull { i ->
+                        n.optJSONObject(i)?.let { o -> PlaceNote(o.optString("id"), o.optString("p"), o.optString("x"), o.optLong("c")) }
+                    }
+                }
                 root.optJSONObject("geo")?.let { g ->
                     g.keys().forEach { k ->
                         val o = g.optJSONObject(k) ?: return@forEach
@@ -80,8 +90,33 @@ class PlacesStore(ctx: Context) {
     @Synchronized
     fun delete(id: String) {
         _all.value = _all.value.filter { it.id != id }
+        _notes.value = _notes.value.filter { it.placeId != id }
         geo.remove(id)
         save()
+    }
+
+    @Synchronized
+    fun addNote(placeId: String, text: String) {
+        if (text.isBlank()) return
+        _notes.value = _notes.value + PlaceNote(java.util.UUID.randomUUID().toString(), placeId, text.trim(), com.monolith.app.core.now())
+        save()
+    }
+
+    @Synchronized
+    fun removeNote(id: String) {
+        _notes.value = _notes.value.filter { it.id != id }
+        save()
+    }
+
+    /** the notes for a place, removed once handed out */
+    @Synchronized
+    fun takeNotes(placeId: String): List<PlaceNote> {
+        val mine = _notes.value.filter { it.placeId == placeId }
+        if (mine.isNotEmpty()) {
+            _notes.value = _notes.value - mine.toSet()
+            save()
+        }
+        return mine
     }
 
     /** record where [pk] is for place [id]; older reports never overwrite newer ones */
@@ -123,6 +158,7 @@ class PlacesStore(ctx: Context) {
 
     @Synchronized
     fun clear() {
+        _notes.value = emptyList()
         _all.value = emptyList()
         geo.clear()
         runCatching { file.delete() }
@@ -136,7 +172,9 @@ class PlacesStore(ctx: Context) {
                 s.inside?.let { o.put("in", it) }
                 g.put(k, o)
             }
-            val root = JSONObject().put("places", exportJson()).put("geo", g)
+            val n = JSONArray()
+            _notes.value.forEach { n.put(JSONObject().put("id", it.id).put("p", it.placeId).put("x", it.text).put("c", it.createdAt)) }
+            val root = JSONObject().put("places", exportJson()).put("geo", g).put("notes", n)
             val tmp = File(file.parentFile, file.name + ".tmp")
             tmp.writeText(root.toString())
             if (!tmp.renameTo(file)) {

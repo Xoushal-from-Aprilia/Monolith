@@ -186,6 +186,8 @@ class PlaceWatcher(private val ctx: Context, private val scope: CoroutineScope) 
                         val notify = now() - st.lastArrival > 10 * 60_000L
                         Graph.places.setGeo(p.id, GeoState(true, now(), if (notify) now() else st.lastArrival))
                         Graph.messenger.placePresence(p, true, notify)
+                        val notes = Graph.places.takeNotes(p.id)
+                        if (notes.isNotEmpty()) Graph.notifier.placeNotes(p.emoji + " " + p.name, notes.map { it.text })
                     } else streak[p.id] = n
                 }
                 st.inside == true && clearlyOut -> {

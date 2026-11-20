@@ -165,6 +165,7 @@ fun MapScreen(nav: NavHostController) {
     var shareSheet by remember { mutableStateOf(false) }
     var otwSheet by remember { mutableStateOf(false) }
     var styleSheet by remember { mutableStateOf(false) }
+    var sosSheet by remember { mutableStateOf(false) }
     var panel by rememberSaveable { mutableIntStateOf(0) }          // 0 = people, 1 = common places
     var draft by remember { mutableStateOf<PlaceDraft?>(null) }
     var draftDetails by remember { mutableStateOf(false) }
@@ -365,6 +366,15 @@ fun MapScreen(nav: NavHostController) {
                 }
             }
             Spacer(Modifier.weight(1f))
+            Surface(
+                shape = CircleShape, color = MaterialTheme.colorScheme.inverseSurface, shadowElevation = 6.dp,
+                modifier = Modifier.height(48.dp).bounceClick(0.9f) { sosSheet = true },
+            ) {
+                Box(Modifier.padding(horizontal = 16.dp), contentAlignment = Alignment.Center) {
+                    Text("SOS", style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.inverseOnSurface)
+                }
+            }
+            Spacer(Modifier.width(10.dp))
             RoundAction(Icons.Rounded.Layers, t("Stile della mappa"), size = 48.dp) { styleSheet = true }
             Spacer(Modifier.width(10.dp))
             RoundAction(Icons.Rounded.MyLocation, t("La mia posizione"), size = 48.dp) {
@@ -478,6 +488,7 @@ fun MapScreen(nav: NavHostController) {
     }
 
     if (styleSheet) MapStyleSheet { styleSheet = false }
+    if (sosSheet) SosSheet { sosSheet = false }
     if (shareSheet) ShareSheet(friends.filter { it.status == FriendStatus.FRIEND }, iShareWith.map { it.pubkey }.toSet()) { shareSheet = false }
     if (otwSheet) OnTheWaySheet(friends.filter { it.status == FriendStatus.FRIEND }, center(), onClose = { otwSheet = false })
 
@@ -737,7 +748,11 @@ private fun PlaceRow(p: Place, names: Map<String, String>, me: Location?, myPub:
         Column(Modifier.weight(1f)) {
             Text(p.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
             Text(
-                if (inside.isNotEmpty()) t("Qui ora: {0}", inside) else t("{0} · con {1}", "${p.radius} m", membersNames(p, names, myPub)),
+                when {
+                    inside.isNotEmpty() -> t("Qui ora: {0}", inside)
+                    p.members.none { it != myPub } -> t("{0} · solo tu", "${p.radius} m")
+                    else -> t("{0} · con {1}", "${p.radius} m", membersNames(p, names, myPub))
+                },
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 maxLines = 1, overflow = TextOverflow.Ellipsis,
             )
@@ -792,7 +807,13 @@ private fun PlaceDetailsSheet(d: PlaceDraft, friends: List<Friend>, onChange: (P
             Spacer(Modifier.height(16.dp))
             Text(t("Con chi lo condividi"), style = MaterialTheme.typography.titleSmall)
             Spacer(Modifier.height(6.dp))
-            if (friends.isEmpty()) Text(t("Aggiungi prima un amico."), color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (d.members.isEmpty()) {
+                Text(
+                    t("Nessuno scelto: il luogo è solo tuo, utile per i promemoria quando arrivi."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(6.dp))
+            }
             FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                 friends.forEach { f ->
                     val sel = f.pubkey in d.members
@@ -810,7 +831,7 @@ private fun PlaceDetailsSheet(d: PlaceDraft, friends: List<Friend>, onChange: (P
                 OutlinedButton(onClick = onBack, modifier = Modifier.weight(1f).height(52.dp), shape = CircleShape) { Text(t("Indietro")) }
                 Button(
                     onClick = { onSave(d) },
-                    enabled = d.name.isNotBlank() && d.members.isNotEmpty() && d.lat != null,
+                    enabled = d.name.isNotBlank() && d.lat != null,
                     modifier = Modifier.weight(1f).height(52.dp), shape = CircleShape,
                 ) { Text(t("Salva")) }
             }
@@ -824,7 +845,7 @@ private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPu
     val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
     var confirm by remember { mutableStateOf(false) }
     MonoSheet(onDismissRequest = onClose, sheetState = state, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp)) {
+        Column(Modifier.padding(horizontal = 24.dp).padding(bottom = 28.dp).imePadding().verticalScroll(rememberScrollState())) {
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Avatar(p.emoji, 56.dp, online = p.insideNow().isNotEmpty())
                 Spacer(Modifier.width(14.dp))
@@ -864,10 +885,14 @@ private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPu
                 }
             }
             Spacer(Modifier.height(10.dp))
-            Text(
-                t("Quando qualcuno arriva qui, gli altri ricevono un messaggio in chat e una notifica."),
-                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            )
+            if (p.members.any { it != myPub }) {
+                Text(
+                    t("Quando qualcuno arriva qui, gli altri ricevono un messaggio in chat e una notifica."),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+            Spacer(Modifier.height(14.dp))
+            PlaceNotes(p.id)
             Spacer(Modifier.height(18.dp))
             Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 OutlinedButton(onClick = { confirm = true }, modifier = Modifier.weight(1f).height(52.dp), shape = CircleShape) { Text(t("Elimina")) }
@@ -879,7 +904,7 @@ private fun PlaceSheet(p: Place, names: Map<String, String>, me: Location?, myPu
         MonoDialog(
             onDismissRequest = { confirm = false },
             title = { Text(t("Eliminare il luogo?")) },
-            text = { Text(t("Verrà tolto anche a {0}.", membersNames(p, names, myPub))) },
+            text = { Text(if (p.members.none { it != myPub }) t("Il luogo verrà eliminato.") else t("Verrà tolto anche a {0}.", membersNames(p, names, myPub))) },
             confirmButton = { TextButton(onClick = { confirm = false; onDelete() }) { Text(t("Elimina")) } },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text(t("Annulla")) } },
         )
@@ -1002,5 +1027,35 @@ private fun OnTheWaySheet(friends: List<Friend>, mapCenter: GeoPoint?, onClose: 
                 modifier = Modifier.fillMaxWidth().height(52.dp), shape = CircleShape,
             ) { Text(t("Parti")) }
         }
+    }
+}
+
+/** "when I get here, remind me to…" */
+@Composable
+fun PlaceNotes(placeId: String) {
+    val notes by Graph.places.notes.collectAsState()
+    val mine = notes.filter { it.placeId == placeId }
+    var text by remember { mutableStateOf("") }
+    Text(t("Ricordami quando arrivo"), style = MaterialTheme.typography.titleSmall)
+    Spacer(Modifier.height(4.dp))
+    mine.forEach { n ->
+        Row(Modifier.fillMaxWidth().padding(vertical = 2.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text("•", style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.width(10.dp))
+            Text(n.text, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+            TextButton(onClick = { Graph.places.removeNote(n.id) }) { Text(t("Togli")) }
+        }
+    }
+    Row(verticalAlignment = Alignment.CenterVertically) {
+        OutlinedTextField(
+            text, { text = it.take(120) },
+            placeholder = { Text(t("es. prendere le chiavi")) }, singleLine = true,
+            modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium,
+        )
+        Spacer(Modifier.width(8.dp))
+        Button(
+            onClick = { Graph.places.addNote(placeId, text); text = "" },
+            enabled = text.isNotBlank(), shape = CircleShape,
+        ) { Text(t("Aggiungi")) }
     }
 }

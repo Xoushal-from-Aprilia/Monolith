@@ -39,6 +39,7 @@ import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Map
+import androidx.compose.material.icons.rounded.Cake
 import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -133,6 +134,8 @@ fun SettingsScreen(nav: NavHostController) {
     var showQr by remember { mutableStateOf(false) }
     var langDialog by remember { mutableStateOf(false) }
     var mapSheet by remember { mutableStateOf(false) }
+    val myBday by Graph.birthdays.mine.collectAsState()
+    var bdayPicker by remember { mutableStateOf(false) }
     val mapStyleIdx by Graph.prefs.mapStyle.collectAsState()
     val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
@@ -184,6 +187,10 @@ fun SettingsScreen(nav: NavHostController) {
                 OutlinedTextField(bio, { bio = it.take(140) }, label = { Text(t("Bio")) }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, minLines = 2)
             }
             SettingRow(Icons.Rounded.QrCode2, t("Il mio codice QR"), t("Fatti aggiungere di persona")) { showQr = true }
+            SettingRow(
+                Icons.Rounded.Cake, t("Il tuo compleanno"),
+                myBday?.let { birthdayText(it) + " · " + t("visibile solo agli amici") } ?: t("Non impostato"),
+            ) { bdayPicker = true }
 
             SectionLabel(t("Aspetto"), Modifier.padding(top = 16.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
@@ -256,6 +263,35 @@ fun SettingsScreen(nav: NavHostController) {
     if (picker) EmojiPickerSheet(onDismiss = { picker = false }) { emoji = it; picker = false }
     if (showQr) MyQrDialog { showQr = false }
     if (mapSheet) MapStyleSheet { mapSheet = false }
+    if (bdayPicker) {
+        val init = myBday?.let {
+            java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(2000, it.month - 1, it.day) }.timeInMillis
+        }
+        val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = init, initialDisplayedMonthMillis = init)
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { bdayPicker = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    bdayPicker = false
+                    state.selectedDateMillis?.let { ms ->
+                        val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = ms }
+                        val b = com.monolith.app.data.Birthday(c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH))
+                        Graph.scope.launch { Graph.messenger.setMyBirthday(b) }
+                    }
+                }) { Text(t("Salva")) }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    bdayPicker = false
+                    if (myBday != null) Graph.scope.launch { Graph.messenger.setMyBirthday(null) }
+                }) { Text(if (myBday != null) t("Togli") else t("Annulla")) }
+            },
+        ) {
+            androidx.compose.material3.DatePicker(state, showModeToggle = false, title = {
+                Text(t("Il tuo compleanno"), modifier = Modifier.padding(start = 24.dp, top = 16.dp), style = MaterialTheme.typography.titleMedium)
+            })
+        }
+    }
     if (langDialog) LanguageDialog(onDismiss = { langDialog = false }) { I18n.set(ctx, it); langDialog = false }
 
     if (showCode) {
@@ -365,6 +401,18 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "0.5.0", "2026-11-20",
+        listOf(
+            "Promemoria: «+10 min», «+1 ora» e «Fatto» direttamente dalla notifica",
+            "Eventi da spuntare come fatti toccando la loro emoji",
+            "Vista a ore della giornata, con gli eventi come blocchi",
+            "Compleanni degli amici in agenda, con un avviso alle 9 del giorno giusto",
+            "Promemoria su luogo: «quando arrivo a casa ricordami di…»",
+            "Luoghi anche solo tuoi, senza amici",
+            "Tasto SOS sulla mappa: tieni premuto e tutti i tuoi amici ricevono un avviso con la tua posizione",
+        ),
+    ),
     Release(
         "0.4.0", "2026-11-20",
         listOf(
@@ -546,4 +594,10 @@ fun CreditsScreen(nav: NavHostController) {
             Spacer(Modifier.height(32.dp))
         }
     }
+}
+
+/** "14 marzo" in the app's language */
+fun birthdayText(b: com.monolith.app.data.Birthday): String {
+    val c = java.util.Calendar.getInstance().apply { clear(); set(2000, b.month - 1, b.day) }
+    return java.text.SimpleDateFormat("d MMMM", java.util.Locale(com.monolith.app.core.I18n.lang)).format(c.time)
 }
