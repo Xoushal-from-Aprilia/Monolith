@@ -235,7 +235,6 @@ fun AgendaScreen(nav: NavHostController) {
         ) { n, e, f -> Graph.scope.launch { Graph.together.saveHabit(null, n, e, f) } }
         else -> {}
     }
-    }
 }
 
 @Composable
