@@ -191,6 +191,7 @@ import com.monolith.app.ui.components.MonoDialog
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Schedule
 import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.AutoAwesome
 
 private data class ConvRow(
     val conv: String,
@@ -258,7 +259,11 @@ fun ChatListScreen(nav: NavHostController) {
                 }
             }
             item(key = "statuses") {
-                StatusStrip(friends, isOnline, onMine = { statusSheet = true }, onFriend = { f, st -> statusOf = f to st })
+                StatusStrip(
+                    friends, isOnline,
+                    onMine = { Graph.identity.keys?.pub?.let { nav.navigate(Routes.profile(it)) } },
+                    onFriend = { f, _ -> nav.navigate(Routes.profile(f.pubkey)) },
+                )
             }
             item(key = "shards") { ShardStrip(nav, unreadBy) }
             if (rows.isEmpty()) {
@@ -422,6 +427,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     var recCancel by remember { mutableStateOf(false) }
     val recorder = remember { VoiceRecorder(ctx) }
     var scheduleDialog by remember { mutableStateOf(false) }
+    var scratchDialog by remember { mutableStateOf(false) }
     val pins by Graph.pins.pins.collectAsState()
     val scheduledAll by Graph.scheduled.all.collectAsState()
     val scheduledHere = scheduledAll.filter { it.conv == conv }
@@ -516,9 +522,13 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
-                Avatar(emoji, 42.dp, Modifier.sharedElementKey("avatar-$conv"), online = isOn)
+                Avatar(
+                    emoji, 42.dp,
+                    Modifier.sharedElementKey("avatar-$conv").bounceClick(0.9f) { if (!isGroup) nav.navigate(Routes.profile(conv)) },
+                    online = isOn,
+                )
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f)) {
+                Column(Modifier.weight(1f).bounceClick(0.99f) { if (!isGroup) nav.navigate(Routes.profile(conv)) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (friend?.verified == true) {
@@ -665,6 +675,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                         attach = false; locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                                     })
                                     DropdownMenuItem(text = { Text(t("Evento dall'agenda")) }, leadingIcon = { Icon(Icons.Rounded.Event, null) }, onClick = { attach = false; shareEvent = true })
+                                    DropdownMenuItem(text = { Text(t("Messaggio da grattare")) }, leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null) }, onClick = { attach = false; scratchDialog = true })
                                     DropdownMenuItem(text = { Text(t("Programma messaggio")) }, leadingIcon = { Icon(Icons.Rounded.Schedule, null) }, onClick = { attach = false; scheduleDialog = true })
                                 }
                             }
@@ -818,6 +829,25 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                 }
             }
         }
+    }
+    if (scratchDialog) {
+        var sx by remember { mutableStateOf(text) }
+        MonoDialog(
+            onDismissRequest = { scratchDialog = false },
+            icon = { Icon(Icons.Rounded.AutoAwesome, null) },
+            title = { Text(t("Messaggio da grattare")) },
+            text = {
+                Column {
+                    Text(t("Arriva coperto: si legge strisciando col dito."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    androidx.compose.material3.OutlinedTextField(sx, { sx = it.take(300) }, label = { Text(t("Messaggio")) }, modifier = Modifier.fillMaxWidth(), maxLines = 4)
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = { scratchDialog = false; text = ""; Graph.scope.launch { Graph.messenger.sendScratch(conv, sx) } }, enabled = sx.isNotBlank()) { Text(t("Invia")) }
+            },
+            dismissButton = { TextButton(onClick = { scratchDialog = false }) { Text(t("Annulla")) } },
+        )
     }
     if (scheduleDialog) {
         ScheduleDialog(text, onClose = { scheduleDialog = false }) { tx, at ->
@@ -1087,6 +1117,17 @@ private fun MessageRow(
                         }, shape = CircleShape) { Text(t("Aggiungi all'agenda")) }
                     }
                     MetaLine(m, textColor)
+                }
+            }
+            "scratch" -> {
+                Surface(
+                    shape = shape, color = bubbleColor,
+                    modifier = Modifier.widthIn(min = 180.dp, max = 280.dp).combinedClickable(onClick = {}, onLongClick = { onLongPress(m) }),
+                ) {
+                    Column {
+                        ScratchCard(m, textColor, bubbleColor)
+                        Box(Modifier.padding(start = 14.dp, end = 14.dp, bottom = 8.dp)) { MetaLine(m, textColor) }
+                    }
                 }
             }
             "place" -> {

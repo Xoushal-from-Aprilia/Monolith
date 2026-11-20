@@ -403,6 +403,15 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "0.9.0", "2026-11-20",
+        listOf(
+            "Profili: tocca un amico per vedere bio, stato, compleanno e storie",
+            "Storie di 24 ore, con foto o solo testo, che vedono i tuoi amici",
+            "Legame: per ogni amico un monolite che cresce con i giorni in cui vi sentite",
+            "Messaggio da grattare: arriva coperto e si scopre strisciando col dito",
+        ),
+    ),
+    Release(
         "0.8.0", "2026-11-20",
         listOf(
             "Spese condivise: chi ha pagato cosa, saldi e il modo più semplice per pareggiare",

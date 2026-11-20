@@ -130,6 +130,8 @@ object NavBus {
 object Routes {
     fun shard(id: String) = "shard/$id"
     fun bill(id: String) = "bill/$id"
+    fun profile(pk: String) = "profile/$pk"
+    fun stories(pk: String) = "stories/$pk"
     fun album(id: String) = "album/" + Uri.encode(id)
     fun chat(conv: String, focus: String = "") = "chat/" + Uri.encode(conv) + (if (focus.isNotEmpty()) "?focus=" + Uri.encode(focus) else "")
     fun event(id: String, date: Long = 0L) = "event/" + Uri.encode(id) + "?date=$date"
@@ -335,6 +337,8 @@ private fun MainNav() {
                 }
                 composable("search") { SearchScreen(nav) }
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
+                composable("profile/{pk}") { entry -> com.monolith.app.ui.screens.ProfileScreen(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("stories/{pk}") { entry -> com.monolith.app.ui.screens.StoryViewer(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("bill/{id}") { entry -> com.monolith.app.ui.screens.BillScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("album/{id}") { entry -> com.monolith.app.ui.screens.AlbumScreen(nav, Uri.decode(entry.arguments?.getString("id") ?: "")) }
                 composable(

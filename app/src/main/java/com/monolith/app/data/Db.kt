@@ -272,6 +272,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages")
     suspend fun allNow(): List<Message>
 
+    @Query("SELECT ts FROM messages WHERE convId = :conv AND kind NOT IN ('system', 'deleted', 'call') AND ts > :since")
+    suspend fun timestamps(conv: String, since: Long): List<Long>
+
     @Query("SELECT * FROM messages WHERE text LIKE '%' || :q || '%' AND kind NOT IN ('deleted', 'system', 'call') ORDER BY ts DESC LIMIT 150")
     suspend fun search(q: String): List<Message>
 

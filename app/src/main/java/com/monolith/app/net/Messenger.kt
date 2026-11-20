@@ -406,6 +406,7 @@ class Messenger(
         "poll" -> "📊 " + (runCatching { JSONObject(m.extra ?: "{}").optString("q") }.getOrNull() ?: t("Sondaggio"))
         "call" -> "📞 " + m.text
         "deleted" -> "🚫 " + t("Messaggio eliminato")
+        "scratch" -> "✨ " + t("Messaggio da grattare")
         "sos" -> "🆘 " + if (m.outgoing) t("Hai chiesto aiuto") else t("Ha bisogno di aiuto")
         "place" -> {
             val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
@@ -532,7 +533,7 @@ class Messenger(
         }
         val group = Group(gid, p.optString("name", t("Gruppo")), p.optString("e", "💬"), members.joinToString(","), from, existing?.createdAt ?: now())
         db.groups().upsert(group)
-        if (existing == null) {
+        if (existing == null && !gid.startsWith(Shard.STORY)) {
             val creator = db.friends().get(from)
             val name = creator?.displayName ?: t("Qualcuno")
             val album = gid.startsWith(Shard.ALBUM)
@@ -1024,6 +1025,13 @@ class Messenger(
         deliver(newOutgoing(conv, "text", tx, reply = reply) ?: return)
     }
 
+    /** a message to scratch off with a finger */
+    suspend fun sendScratch(conv: String, text: String) {
+        val tx = text.trim()
+        if (tx.isEmpty()) return
+        deliver(newOutgoing(conv, "scratch", tx) ?: return)
+    }
+
     suspend fun sendNudge(conv: String) {
         deliver(newOutgoing(conv, "nudge") ?: return)
     }
@@ -1209,7 +1217,7 @@ class Messenger(
         return gid
     }
 
-    private suspend fun broadcastGroup(g: Group) {
+    suspend fun broadcastGroup(g: Group) {
         val k = me() ?: return
         val mp = JSONObject()
         mp.put(k.pub, identity.profile.value?.toJson() ?: JSONObject())

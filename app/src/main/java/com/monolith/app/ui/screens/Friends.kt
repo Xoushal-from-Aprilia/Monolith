@@ -290,7 +290,7 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
                 Modifier.fillMaxWidth().animateItem().combinedClickable(onClick = { onOpenChat(f.pubkey) }, onLongClick = { remove = f }).padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalAlignment = Alignment.CenterVertically,
             ) {
-                Avatar(f.emoji, 48.dp, online = isOn)
+                Avatar(f.emoji, 48.dp, Modifier.bounceClick(0.9f) { nav.navigate(com.monolith.app.ui.Routes.profile(f.pubkey)) }, online = isOn)
                 Spacer(Modifier.width(14.dp))
                 Column(Modifier.weight(1f)) {
                     Row(verticalAlignment = Alignment.CenterVertically) {

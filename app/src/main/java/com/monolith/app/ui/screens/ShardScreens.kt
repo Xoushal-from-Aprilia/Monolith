@@ -344,7 +344,10 @@ fun ShardScreen(nav: NavHostController, id: String) {
             item(key = "membersLabel") { SectionLabel(t("Membri"), Modifier.padding(top = 10.dp)) }
             items(s.members.sortedBy { if (it == s.owner) 0 else 1 }, key = { "m$it" }) { pk ->
                 val f = byPk[pk]
-                Row(Modifier.fillMaxWidth().animateItem().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Row(
+                    Modifier.fillMaxWidth().animateItem().bounceClick(0.98f) { nav.navigate(Routes.profile(pk)) }.padding(horizontal = 20.dp, vertical = 6.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
                     Avatar(if (pk == me) Graph.identity.profile.value?.emoji ?: "🗿" else f?.emoji ?: "🙂", 38.dp)
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {

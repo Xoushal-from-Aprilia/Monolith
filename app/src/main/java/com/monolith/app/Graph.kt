@@ -81,6 +81,7 @@ object Graph {
         pins = PinStore(application)
         statuses = StatusStore(application)
         Sounds.init(application)
+        com.monolith.app.net.Stories.init(application)
         notifier = Notifier(application).also { it.createChannels() }
         relays = RelayPool(scope) { identity.keys }
         messenger = Messenger(application, scope, db)

@@ -176,10 +176,18 @@ fun StatusStrip(friends: List<Friend>, isOnline: (String) -> Boolean, onMine: ()
     val mine by Graph.statuses.mine.collectAsState()
     val statuses by Graph.statuses.friends.collectAsState()
     val profile by Graph.identity.profile.collectAsState()
+    val last by remember { Graph.db.messages().lastMessages() }.collectAsState(initial = emptyList())
+    val seen by com.monolith.app.net.Stories.seen.collectAsState()
     LaunchedEffect(Unit) { while (true) { Graph.statuses.refresh(); delay(60_000) } }
     val pals = friends.filter { it.status == FriendStatus.FRIEND }
-    val withStatus = pals.filter { statuses[it.pubkey]?.active == true }.sortedByDescending { statuses[it.pubkey]?.until ?: 0 }
-    val onlineOnly = pals.filter { statuses[it.pubkey]?.active != true && isOnline(it.pubkey) }
+    // latest story of each friend in the last 24 hours
+    val storyAt = pals.associate { f ->
+        f.pubkey to (last.firstOrNull { it.convId == com.monolith.app.net.Stories.convOf(f.pubkey) && it.sender == f.pubkey && it.ts > now() - 86_400_000L && (it.kind == "photo" || it.kind == "text") }?.ts ?: 0L)
+    }
+    val unseen = { pk: String -> (storyAt[pk] ?: 0L) > (seen[pk] ?: 0L) }
+    val withStory = pals.filter { (storyAt[it.pubkey] ?: 0L) > 0L }.sortedByDescending { if (unseen(it.pubkey)) 1 else 0 }
+    val withStatus = pals.filter { it !in withStory && statuses[it.pubkey]?.active == true }.sortedByDescending { statuses[it.pubkey]?.until ?: 0 }
+    val onlineOnly = pals.filter { it !in withStory && statuses[it.pubkey]?.active != true && isOnline(it.pubkey) }
     LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(14.dp), modifier = Modifier.padding(vertical = 8.dp)) {
         item(key = "me") {
             Column(Modifier.width(66.dp).bounceClick(onClick = onMine), horizontalAlignment = Alignment.CenterHorizontally) {
@@ -200,11 +208,11 @@ fun StatusStrip(friends: List<Friend>, isOnline: (String) -> Boolean, onMine: ()
                 )
             }
         }
-        items(withStatus + onlineOnly, key = { it.pubkey }) { f ->
+        items(withStory + withStatus + onlineOnly, key = { it.pubkey }) { f ->
             val st = statuses[f.pubkey]?.takeIf { it.active }
             Column(Modifier.width(66.dp).animateItem().bounceClick { onFriend(f, st) }, horizontalAlignment = Alignment.CenterHorizontally) {
                 Box {
-                    Avatar(f.emoji, 58.dp, online = isOnline(f.pubkey), ring = st != null)
+                    Avatar(f.emoji, 58.dp, online = isOnline(f.pubkey), ring = unseen(f.pubkey) || (st != null && (storyAt[f.pubkey] ?: 0L) == 0L))
                     if (st != null) {
                         Box(
                             Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(24.dp).clip(CircleShape)
