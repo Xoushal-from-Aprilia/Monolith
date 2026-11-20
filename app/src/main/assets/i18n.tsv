@@ -588,3 +588,32 @@ Compleanni degli amici in agenda, con un avviso alle 9 del giorno giusto	Friends
 Promemoria su luogo: «quando arrivo a casa ricordami di…»	Location reminders: "when I get home, remind me to…"	Rappels de lieu : « quand j'arrive à la maison, rappelle-moi de… »	Ortserinnerungen: „wenn ich zu Hause bin, erinnere mich an…“	Напоминания по месту: «когда приду домой, напомни…»	Przypomnienia o miejscu: „gdy dotrę do domu, przypomnij mi…”	Připomínky podle místa: „až dorazím domů, připomeň mi…“
 Luoghi anche solo tuoi, senza amici	Places just for you, without friends	Des lieux rien que pour vous, sans amis	Orte auch nur für dich, ohne Freunde	Места только для себя, без друзей	Miejsca tylko dla ciebie, bez znajomych	Místa jen pro vás, bez přátel
 Tasto SOS sulla mappa: tieni premuto e tutti i tuoi amici ricevono un avviso con la tua posizione	SOS button on the map: hold it and all your friends get an alert with your location	Bouton SOS sur la carte : maintenez-le et tous vos amis reçoivent une alerte avec votre position	SOS-Taste auf der Karte: gedrückt halten, und alle deine Freunde bekommen einen Alarm mit deinem Standort	Кнопка SOS на карте: удерживайте, и все друзья получат тревогу с вашей геопозицией	Przycisk SOS na mapie: przytrzymaj, a wszyscy znajomi dostaną alarm z twoją lokalizacją	Tlačítko SOS na mapě: podržte ho a všichni přátelé dostanou upozornění s vaší polohou
+Cerca nei messaggi	Search messages	Rechercher dans les messages	Nachrichten durchsuchen	Поиск по сообщениям	Szukaj w wiadomościach	Hledat ve zprávách
+Il tuo stato	Your status	Votre statut	Dein Status	Ваш статус	Twój status	Váš stav
+Cosa stai facendo?	What are you up to?	Que faites-vous ?	Was machst du gerade?	Чем занимаетесь?	Co porabiasz?	Co děláte?
+Una frase per oggi: la vedono i tuoi amici e sparisce dopo 24 ore.	A line for today: your friends see it and it disappears after 24 hours.	Une phrase pour aujourd'hui : vos amis la voient et elle disparaît après 24 heures.	Ein Satz für heute: Deine Freunde sehen ihn, und nach 24 Stunden verschwindet er.	Фраза на сегодня: её видят друзья, через 24 часа она исчезнет.	Zdanie na dziś: widzą je znajomi, a po 24 godzinach znika.	Věta pro dnešek: vidí ji přátelé a po 24 hodinách zmizí.
+Visibile agli amici fino alle {0}	Visible to friends until {0}	Visible par vos amis jusqu'à {0}	Für Freunde sichtbar bis {0}	Видно друзьям до {0}	Widoczne dla znajomych do {0}	Přátelé uvidí do {0}
+Pubblica	Post	Publier	Veröffentlichen	Опубликовать	Opublikuj	Zveřejnit
+fino alle {0}	until {0}	jusqu'à {0}	bis {0}	до {0}	do {0}	do {0}
+Online adesso	Online now	En ligne maintenant	Gerade online	Сейчас в сети	Teraz online	Teď online
+Scrivi	Write	Écrire	Schreiben	Написать	Napisz	Napsat
+Programma messaggio	Schedule message	Programmer un message	Nachricht planen	Запланировать сообщение	Zaplanuj wiadomość	Naplánovat zprávu
+Programma	Schedule	Programmer	Planen	Запланировать	Zaplanuj	Naplánovat
+Tra 1 ora	In 1 hour	Dans 1 heure	In 1 Stunde	Через 1 час	Za 1 godzinę	Za 1 hodinu
+Stasera alle 20	Tonight at 8 pm	Ce soir à 20 h	Heute um 20 Uhr	Сегодня в 20:00	Dziś o 20:00	Dnes ve 20:00
+Domani alle 9	Tomorrow at 9 am	Demain à 9 h	Morgen um 9 Uhr	Завтра в 9:00	Jutro o 9:00	Zítra v 9:00
+Domani alle 20	Tomorrow at 8 pm	Demain à 20 h	Morgen um 20 Uhr	Завтра в 20:00	Jutro o 20:00	Zítra ve 20:00
+Scegli…	Choose…	Choisir…	Auswählen…	Выбрать…	Wybierz…	Vybrat…
+Partirà {0} alle {1}	Will be sent {0} at {1}	Partira {0} à {1}	Wird {0} um {1} gesendet	Будет отправлено {0} в {1}	Zostanie wysłana {0} o {1}	Odejde {0} v {1}
+A che ora?	What time?	À quelle heure ?	Um wie viel Uhr?	Во сколько?	O której?	V kolik?
+Messaggio programmato	Message scheduled	Message programmé	Nachricht geplant	Сообщение запланировано	Wiadomość zaplanowana	Zpráva naplánována
+1 messaggio programmato · {0}	1 scheduled message · {0}	1 message programmé · {0}	1 geplante Nachricht · {0}	1 запланированное сообщение · {0}	1 zaplanowana wiadomość · {0}	1 naplánovaná zpráva · {0}
+{0} messaggi programmati	{0} scheduled messages	{0} messages programmés	{0} geplante Nachrichten	Запланировано сообщений: {0}	Zaplanowane wiadomości: {0}	Naplánované zprávy: {0}
+Vedi	View	Voir	Ansehen	Показать	Pokaż	Zobrazit
+Messaggio fissato	Pinned message	Message épinglé	Angeheftete Nachricht	Закреплённое сообщение	Przypięta wiadomość	Připnutá zpráva
+Fissa in alto	Pin to top	Épingler en haut	Oben anheften	Закрепить	Przypnij u góry	Připnout nahoru
+Togli dalla cima	Unpin	Désépingler	Lösen	Открепить	Odepnij	Odepnout
+Messaggi programmati: scrivi ora, parte all'ora che scegli	Scheduled messages: write now, it goes out when you choose	Messages programmés : écrivez maintenant, il part à l'heure choisie	Geplante Nachrichten: jetzt schreiben, zur gewählten Zeit senden	Отложенные сообщения: пишите сейчас, отправится в выбранное время	Zaplanowane wiadomości: napisz teraz, wyślą się o wybranej porze	Naplánované zprávy: napište teď, odejde ve zvolený čas
+Cerca nei messaggi di tutte le chat	Search messages across all chats	Recherche dans les messages de tous les chats	Suche in den Nachrichten aller Chats	Поиск по сообщениям во всех чатах	Szukaj w wiadomościach wszystkich czatów	Hledání ve zprávách všech chatů
+Messaggi fissati in cima alla chat, per tutti	Messages pinned to the top of the chat, for everyone	Messages épinglés en haut du chat, pour tous	Nachrichten oben im Chat anheften, für alle	Сообщения, закреплённые вверху чата для всех	Wiadomości przypięte na górze czatu, dla wszystkich	Zprávy připnuté nahoře v chatu pro všechny
+Stato di 24 ore: un'emoji e una frase che vedono gli amici	24-hour status: an emoji and a line your friends can see	Statut de 24 heures : un emoji et une phrase que vos amis voient	24-Stunden-Status: ein Emoji und ein Satz, den deine Freunde sehen	Статус на 24 часа: эмодзи и фраза, которые видят друзья	Status na 24 godziny: emoji i zdanie widoczne dla znajomych	Stav na 24 hodin: emoji a věta, kterou vidí přátelé

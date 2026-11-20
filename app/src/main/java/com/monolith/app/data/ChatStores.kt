@@ -74,8 +74,15 @@ class StatusStore(ctx: Context) {
 
     private fun enc(s: Status) = JSONObject().put("e", s.emoji).put("x", s.text).put("u", s.until).toString()
 
-    private fun load(): Map<String, Status> =
-        sp.all.filterKeys { it != "__me" }.mapNotNull { (k, v) -> parse(v as? String)?.let { k to it } }.filterValues { it.active }.toMap()
+    private fun load(): Map<String, Status> {
+        val out = HashMap<String, Status>()
+        for ((k, v) in sp.all) {
+            if (k == "__me") continue
+            val st = parse(v as? String) ?: continue
+            if (st.active) out[k] = st
+        }
+        return out
+    }
 
     fun setFriend(pk: String, s: Status?) {
         if (s == null || !s.active) sp.edit().remove(pk).apply() else sp.edit().putString(pk, enc(s)).apply()
