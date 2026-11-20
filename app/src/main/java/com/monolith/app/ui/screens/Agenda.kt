@@ -132,6 +132,9 @@ import java.util.TimeZone
 import com.monolith.app.ui.components.MonoDialog
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.ui.draw.alpha
+import androidx.compose.foundation.horizontalScroll
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
 
 private const val DAY = 86_400_000L
 
@@ -141,29 +144,38 @@ private fun dayOffset(base: Long, days: Int): Long =
 @Composable
 fun AgendaScreen(nav: NavHostController) {
     var mode by rememberSaveable { mutableIntStateOf(0) }
+    var newSheet by remember { mutableStateOf<Int?>(null) }
     val profile by Graph.identity.profile.collectAsState()
     var selected by rememberSaveable { mutableLongStateOf(Fmt.startOfDay(now())) }
 
     Box(Modifier.fillMaxSize()) {
         Column(Modifier.fillMaxSize().statusBarsPadding()) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BigTitle(t("Agenda"), Modifier.weight(1f), subtitle = if (mode == 0) Fmt.dayLong(selected) else t("Liste condivise"))
+                BigTitle(
+                    t("Agenda"), Modifier.weight(1f),
+                    subtitle = when (mode) {
+                        0 -> Fmt.dayLong(selected)
+                        1 -> t("Liste condivise")
+                        2 -> t("Spese condivise")
+                        3 -> t("Album condivisi")
+                        else -> t("Abitudini, da soli o insieme")
+                    },
+                )
                 Avatar(
                     profile?.emoji ?: "🗿", 44.dp,
                     Modifier.padding(end = 20.dp).sharedBoundsKey("me-avatar").bounceClick { nav.navigate("settings") },
                 )
             }
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)) {
-                listOf(t("Eventi"), t("Liste")).forEachIndexed { i, label ->
-                    SegmentedButton(
-                        selected = mode == i,
-                        onClick = { mode = i },
-                        shape = SegmentedButtonDefaults.itemShape(i, 2),
-                        colors = SegmentedButtonDefaults.colors(
-                            activeContainerColor = MaterialTheme.colorScheme.primary,
-                            activeContentColor = MaterialTheme.colorScheme.onPrimary,
-                        ),
-                    ) { Text(label) }
+            Row(
+                Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp),
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                listOf(t("Eventi"), t("Liste"), t("Spese"), t("Album"), t("Abitudini")).forEachIndexed { i, label ->
+                    FilterChip(
+                        selected = mode == i, onClick = { mode = i }, label = { Text(label) },
+                        shape = CircleShape,
+                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = MaterialTheme.colorScheme.onPrimary),
+                    )
                 }
             }
             AnimatedContent(
@@ -175,18 +187,54 @@ fun AgendaScreen(nav: NavHostController) {
                 label = "agendaMode",
                 modifier = Modifier.weight(1f),
             ) { m ->
-                if (m == 0) EventsPane(nav, selected) { selected = it } else ListsPane(nav)
+                when (m) {
+                    0 -> EventsPane(nav, selected) { selected = it }
+                    1 -> ListsPane(nav)
+                    2 -> BillsPane(nav)
+                    3 -> AlbumsPane(nav)
+                    else -> HabitsPane(nav)
+                }
             }
         }
         ExtendedFloatingActionButton(
-            onClick = { if (mode == 0) nav.navigate(Routes.event("new", selected)) else nav.navigate(Routes.list("new")) },
+            onClick = {
+                when (mode) {
+                    0 -> nav.navigate(Routes.event("new", selected))
+                    1 -> nav.navigate(Routes.list("new"))
+                    else -> newSheet = mode
+                }
+            },
             icon = { Icon(Icons.Rounded.Add, null) },
-            text = { AnimatedContent(mode, label = "fab") { Text(if (it == 0) t("Evento") else t("Lista")) } },
+            text = {
+                AnimatedContent(mode, label = "fab") {
+                    Text(
+                        when (it) {
+                            0 -> t("Evento"); 1 -> t("Lista"); 2 -> t("Spese"); 3 -> t("Album"); else -> t("Abitudine")
+                        }
+                    )
+                }
+            },
             containerColor = MaterialTheme.colorScheme.primary,
             contentColor = MaterialTheme.colorScheme.onPrimary,
             shape = RoundedCornerShape(20.dp),
-            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).sharedBoundsKey(if (mode == 0) "event-new" else "list-new"),
+            modifier = Modifier.align(Alignment.BottomEnd).padding(20.dp).sharedBoundsKey(if (mode == 0) "event-new" else if (mode == 1) "list-new" else "together-new"),
         )
+    }
+    when (newSheet) {
+        2 -> TogetherNewSheet(
+            t("Nuove spese condivise"), t("Per una cena, un viaggio o la casa."), listOf("💶", "🍕", "✈️", "🏠", "🛒", "🎉", "⛽", "🎁"),
+            friendsRequired = true, onClose = { newSheet = null },
+        ) { n, e, f -> Graph.scope.launch { Graph.together.saveBill(null, n, e, f)?.let { id -> withContext(Dispatchers.Main) { nav.navigate(Routes.bill(id)) } } } }
+        3 -> TogetherNewSheet(
+            t("Nuovo album"), t("Ognuno aggiunge le sue foto."), listOf("📸", "🏖️", "🎉", "🏔️", "🎂", "🌆", "🍷", "💛"),
+            friendsRequired = true, onClose = { newSheet = null },
+        ) { n, e, f -> createAlbum(nav, n, e, f) }
+        4 -> TogetherNewSheet(
+            t("Nuova abitudine"), t("Da solo o con gli amici: ognuno spunta la sua giornata."), listOf("💧", "🚶", "📚", "🧘", "🏃", "🥗", "😴", "✍️"),
+            friendsRequired = false, onClose = { newSheet = null },
+        ) { n, e, f -> Graph.scope.launch { Graph.together.saveHabit(null, n, e, f) } }
+        else -> {}
+    }
     }
 }
 

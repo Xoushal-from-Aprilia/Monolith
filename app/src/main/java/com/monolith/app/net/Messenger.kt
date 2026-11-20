@@ -237,6 +237,10 @@ class Messenger(
             "react" -> onReact(from, p, friend)
             "pin" -> onPin(from, p, friend)
             "shard" -> Graph.shards.onShard(from, p, isFriend)
+            "bill" -> Graph.together.onBill(from, p)
+            "bexp" -> Graph.together.onExpense(from, p)
+            "habit" -> Graph.together.onHabit(from, p)
+            "hcheck" -> Graph.together.onCheck(from, p)
             "shardleave" -> Graph.shards.onLeave(from, p)
             "vroom" -> Graph.shards.onVoice(from, p)
             "vwho" -> Graph.shards.onWho(from, p)
@@ -371,7 +375,7 @@ class Messenger(
         if (kind == "photo" || kind == "voice") tryAssemble(id)
         sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
         // an arrival that reaches me hours later is history, not news: keep it in the chat, silently
-        val stale = kind == "place" && now() - ts > 2 * 3_600_000L
+        val stale = (kind == "place" && now() - ts > 2 * 3_600_000L) || Shard.isQuietConv(conv)
         if (!isActive && !stale) {
             val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
             val title = group?.name ?: friend?.displayName ?: "Monolith"
@@ -531,8 +535,9 @@ class Messenger(
         if (existing == null) {
             val creator = db.friends().get(from)
             val name = creator?.displayName ?: t("Qualcuno")
-            db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = t("{0} ti ha aggiunto al gruppo", name), status = MsgStatus.READ))
-            Graph.notifier.message("g:$gid", group.name, name, creator?.emoji ?: "🙂", t("Ti ha aggiunto al gruppo"), true, group.emoji, false)
+            val album = gid.startsWith(Shard.ALBUM)
+            db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = if (album) t("{0} ti ha invitato nell'album", name) else t("{0} ti ha aggiunto al gruppo", name), status = MsgStatus.READ))
+            Graph.notifier.message("g:$gid", group.name, name, creator?.emoji ?: "🙂", if (album) t("Ti ha invitato in un album condiviso") else t("Ti ha aggiunto al gruppo"), true, group.emoji, false)
         }
     }
 
@@ -1193,9 +1198,9 @@ class Messenger(
 
     // ================================================================== groups
 
-    suspend fun createGroup(name: String, emoji: String, members: List<String>): String? {
+    suspend fun createGroup(name: String, emoji: String, members: List<String>, idPrefix: String = ""): String? {
         val k = me() ?: return null
-        val gid = newId()
+        val gid = idPrefix + newId()
         val all = (members + k.pub).distinct()
         val g = Group(gid, name.trim().ifBlank { t("Gruppo") }, emoji, all.joinToString(","), k.pub, now())
         db.groups().upsert(g)

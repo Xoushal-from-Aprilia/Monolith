@@ -46,6 +46,12 @@ data class Shard(
         /** true for the hidden groups that back shard rooms */
         fun isRoomGroup(groupId: String) = groupId.startsWith(PREFIX)
         fun isRoomConv(conv: String) = conv.startsWith("g:$PREFIX")
+        const val ALBUM = "album."
+        const val STORY = "story."
+        /** groups that never appear in the chat list: shard rooms, albums, stories */
+        fun isHiddenGroup(groupId: String) = groupId.startsWith(PREFIX) || groupId.startsWith(ALBUM) || groupId.startsWith(STORY)
+        /** conversations that add up silently, without notifications */
+        fun isQuietConv(conv: String) = conv.startsWith("g:$ALBUM") || conv.startsWith("g:$STORY")
     }
 }
 

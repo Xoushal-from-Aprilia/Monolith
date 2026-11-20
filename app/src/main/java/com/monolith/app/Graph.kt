@@ -53,6 +53,7 @@ object Graph {
     lateinit var location: LocationShare
     lateinit var places: PlacesStore
     lateinit var shards: com.monolith.app.net.ShardManager
+    lateinit var together: com.monolith.app.net.Together
     lateinit var birthdays: BirthdayStore
     lateinit var done: DoneStore
     lateinit var scheduled: ScheduledStore
@@ -87,6 +88,7 @@ object Graph {
         calls = CallManager(application, scope)
         Sounds.watchCalls()
         shards = com.monolith.app.net.ShardManager(application, scope)
+        together = com.monolith.app.net.Together(application)
         places = PlacesStore(application)
         location = LocationShare(application, scope)
         placeWatch = PlaceWatcher(application, scope)

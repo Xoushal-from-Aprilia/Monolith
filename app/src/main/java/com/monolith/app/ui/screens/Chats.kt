@@ -237,7 +237,7 @@ fun ChatListScreen(nav: NavHostController) {
             val m = lastBy[f.pubkey]
             add(ConvRow(f.pubkey, f.displayName, f.emoji, m, unreadBy[f.pubkey] ?: 0, isOnline(f.pubkey), false, m?.ts ?: 0))
         }
-        groups.filter { !com.monolith.app.net.Shard.isRoomGroup(it.id) }.forEach { g ->
+        groups.filter { !com.monolith.app.net.Shard.isHiddenGroup(it.id) }.forEach { g ->
             val c = "g:" + g.id
             val m = lastBy[c]
             add(ConvRow(c, g.name, g.emoji, m, unreadBy[c] ?: 0, false, true, m?.ts ?: g.createdAt))

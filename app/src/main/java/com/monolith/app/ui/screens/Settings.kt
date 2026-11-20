@@ -362,7 +362,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear()
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear()
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false
@@ -402,6 +402,14 @@ private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onCli
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "0.8.0", "2026-11-20",
+        listOf(
+            "Spese condivise: chi ha pagato cosa, saldi e il modo più semplice per pareggiare",
+            "Album condivisi: ognuno aggiunge le sue foto, con i commenti",
+            "Abitudini da soli o con gli amici, con la serie di giorni di fila",
+        ),
+    ),
     Release(
         "0.7.0", "2026-11-20",
         listOf(

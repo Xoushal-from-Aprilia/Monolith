@@ -257,6 +257,10 @@ class Notifier(private val ctx: Context) {
     fun arrivedSelf(name: String, place: String) =
         simple(("me-arr$place").hashCode(), t("Sei arrivato"), t("Ho avvisato {0} e fermato la condivisione", name), "📍", null, Sounds.channelId(SoundKind.MEETING))
 
+    /** kind: 0 = expenses, 1 = habit */
+    fun togetherShared(from: String, what: String, kind: Int) =
+        simple(("tog$kind$what").hashCode(), if (kind == 0) t("{0} ti ha aggiunto a delle spese condivise", from) else t("{0} ti ha invitato a un'abitudine", from), what, if (kind == 0) "💶" else "✅", openApp(19) { putExtra(EXTRA_TAB, 0) })
+
     fun shardInvite(from: String, shard: String) =
         simple(("shard$shard").hashCode(), t("{0} ti ha invitato in uno shard", from), shard, "🪨", openApp(18) { putExtra(EXTRA_TAB, 1) })
 

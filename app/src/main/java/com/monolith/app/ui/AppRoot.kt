@@ -129,6 +129,8 @@ object NavBus {
 
 object Routes {
     fun shard(id: String) = "shard/$id"
+    fun bill(id: String) = "bill/$id"
+    fun album(id: String) = "album/" + Uri.encode(id)
     fun chat(conv: String, focus: String = "") = "chat/" + Uri.encode(conv) + (if (focus.isNotEmpty()) "?focus=" + Uri.encode(focus) else "")
     fun event(id: String, date: Long = 0L) = "event/" + Uri.encode(id) + "?date=$date"
     fun photo(path: String, key: String) = "photo?path=" + Uri.encode(path) + "&key=" + Uri.encode(key)
@@ -333,6 +335,8 @@ private fun MainNav() {
                 }
                 composable("search") { SearchScreen(nav) }
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
+                composable("bill/{id}") { entry -> com.monolith.app.ui.screens.BillScreen(nav, entry.arguments?.getString("id") ?: "") }
+                composable("album/{id}") { entry -> com.monolith.app.ui.screens.AlbumScreen(nav, Uri.decode(entry.arguments?.getString("id") ?: "")) }
                 composable(
                     "event/{id}?date={date}",
                     arguments = listOf(
@@ -408,7 +412,7 @@ private val TABS = listOf(
 private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
     val unread by remember { Graph.db.messages().unread() }.collectAsState(initial = emptyList())
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
-    val unreadTotal = unread.sumOf { it.n }
+    val unreadTotal = unread.filter { !com.monolith.app.net.Shard.isQuietConv(it.convId) }.sumOf { it.n }
     val requests = friends.count { it.status == FriendStatus.INCOMING }
 
     Scaffold(
