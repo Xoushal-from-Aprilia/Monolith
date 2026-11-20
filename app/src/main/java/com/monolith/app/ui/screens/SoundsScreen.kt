@@ -71,7 +71,7 @@ fun SoundsScreen(nav: NavHostController) {
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
                 Text(
-                    t("Suoni calmi creati per Monolith, leggerissimi. Tocca un suono per ascoltarlo."),
+                    t("Di serie Monolith usa i suoni del telefono. Qui puoi scegliere i suoni calmi creati per l'app: tocca un suono per ascoltarlo."),
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 4.dp),
                 )
@@ -101,6 +101,16 @@ fun SoundsScreen(nav: NavHostController) {
                     SoundRow(t("Suoneria del telefono"), s.ringtone == Sounds.SYSTEM, false, translate = false) {
                         Sounds.stopPreview(); playing = null
                         Sounds.update { it.copy(ringtone = Sounds.SYSTEM) }
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t("Toni delle chiamate"), style = MaterialTheme.typography.bodyLarge)
+                            Text(t("Attesa, collegamento e fine chiamata"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        Switch(
+                            checked = s.callTones, onCheckedChange = { on -> Sounds.update { it.copy(callTones = on) } },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
+                        )
                     }
                 }
             }

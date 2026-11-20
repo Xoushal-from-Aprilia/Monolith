@@ -409,6 +409,8 @@ private val JOURNAL = listOf(
             "Cerca nei messaggi di tutte le chat",
             "Messaggi fissati in cima alla chat, per tutti",
             "Stato di 24 ore: un'emoji e una frase che vedono gli amici",
+            "Agenda più semplice: i promemoria su luogo ora stanno nella scheda del luogo, sulla mappa",
+            "Suoni spenti di serie: si attivano da Impostazioni → Suoni",
         ),
     ),
     Release(

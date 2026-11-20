@@ -195,12 +195,8 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
     val events by remember { Graph.db.agenda().all() }.collectAsState(initial = emptyList())
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
     var monthOpen by rememberSaveable { mutableStateOf(false) }
-    var dayMode by rememberSaveable { mutableIntStateOf(0) }          // 0 = list, 1 = hour by hour
-    var noteDialog by remember { mutableStateOf(false) }
     val bdays by Graph.birthdays.friends.collectAsState()
     val doneV by Graph.done.version.collectAsState()
-    val placeNotes by Graph.places.notes.collectAsState()
-    val places by Graph.places.all.collectAsState()
     val today = Fmt.startOfDay(now())
 
     val visible = events.filter { it.inviteState != InviteState.DECLINED }
@@ -257,28 +253,12 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
             }
         }
         item(key = "dayLabel") {
-            Row(Modifier.fillMaxWidth().padding(top = 12.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel(if (selected == today) t("Oggi") else Fmt.dayShort(selected), Modifier.weight(1f))
-                SingleChoiceSegmentedButtonRow {
-                    listOf(t("Elenco"), t("Ore")).forEachIndexed { i, label ->
-                        SegmentedButton(
-                            selected = dayMode == i, onClick = { dayMode = i },
-                            shape = SegmentedButtonDefaults.itemShape(i, 2),
-                            colors = SegmentedButtonDefaults.colors(activeContainerColor = MaterialTheme.colorScheme.primary, activeContentColor = MaterialTheme.colorScheme.onPrimary),
-                            icon = {},
-                        ) { Text(label, style = MaterialTheme.typography.labelMedium) }
-                    }
-                }
-            }
+            SectionLabel(if (selected == today) t("Oggi") else Fmt.dayShort(selected), Modifier.padding(top = 12.dp))
         }
         items(dayBirthdays, key = { "b" + it.pubkey }) { f ->
             BirthdayCard(f, Modifier.animateItem()) { nav.navigate(Routes.chat(f.pubkey)) }
         }
-        if (dayMode == 1) {
-            item(key = "timeline") {
-                DayTimeline(dayEvents, selected) { e -> nav.navigate(Routes.event(e.id)) }
-            }
-        } else if (dayEvents.isEmpty() && dayBirthdays.isEmpty()) {
+        if (dayEvents.isEmpty() && dayBirthdays.isEmpty()) {
             item(key = "empty") {
                 EmptyState(t("Giornata libera"), t("Tocca + per aggiungere un evento, un promemoria o invitare un amico."), Modifier.animateItem())
             }
@@ -294,26 +274,7 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
                 EventCard(e, occ, names, Modifier.animateItem(), showDate = true, shared = false) { nav.navigate(Routes.event(e.id)) }
             }
         }
-        item(key = "notesLabel") {
-            Row(Modifier.fillMaxWidth().padding(top = 16.dp, end = 12.dp), verticalAlignment = Alignment.CenterVertically) {
-                SectionLabel(t("Promemoria su luogo"), Modifier.weight(1f))
-                TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
-            }
-        }
-        if (placeNotes.isEmpty()) {
-            item(key = "notesEmpty") {
-                Text(
-                    t("«Quando arrivo a casa ricordami di…»: scatta da solo appena arrivi."),
-                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    modifier = Modifier.padding(horizontal = 24.dp),
-                )
-            }
-        }
-        items(placeNotes, key = { "n" + it.id }) { n ->
-            PlaceNoteRow(n, places.firstOrNull { it.id == n.placeId }, Modifier.animateItem())
-        }
     }
-    if (noteDialog) PlaceNoteDialog(places) { noteDialog = false }
 }
 
 @Composable

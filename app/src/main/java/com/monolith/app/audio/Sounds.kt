@@ -26,13 +26,15 @@ data class SoundDef(val id: String, val res: Int, val name: String)
 
 enum class SoundKind { MESSAGE, MEETING, REMINDER }
 
+/** out of the box Monolith is quiet: phone sounds, no key taps, no call tones */
 data class SoundSettings(
-    val taps: Boolean = true,
+    val taps: Boolean = false,
     val tap: String = "tap_goccia",
-    val ringtone: String = "ring_alba",
-    val message: String = "msg_goccia",
-    val meeting: String = "inc_ritrovo",
-    val reminder: String = "rem_mattino",
+    val ringtone: String = Sounds.SYSTEM,
+    val message: String = Sounds.SYSTEM,
+    val meeting: String = Sounds.SYSTEM,
+    val reminder: String = Sounds.SYSTEM,
+    val callTones: Boolean = false,
 )
 
 /**
@@ -100,6 +102,7 @@ object Sounds {
             message = sp.getString("msg", d.message) ?: d.message,
             meeting = sp.getString("meet", d.meeting) ?: d.meeting,
             reminder = sp.getString("rem", d.reminder) ?: d.reminder,
+            callTones = sp.getBoolean("calltones", d.callTones),
         )
         runCatching {
             pool = SoundPool.Builder()
@@ -121,7 +124,9 @@ object Sounds {
             Graph.calls.state.collect { st ->
                 val ph = st.phase
                 if (ph != prev) {
-                    if (ph == CallPhase.OUTGOING) startRingback() else if (prev == CallPhase.OUTGOING) stopRingback()
+                    if (prev == CallPhase.OUTGOING) stopRingback()
+                    if (!_settings.value.callTones) { prev = ph; return@collect }
+                    if (ph == CallPhase.OUTGOING) startRingback()
                     if (ph == CallPhase.ACTIVE && prev != CallPhase.ACTIVE) oneShot(R.raw.call_connesso, signalling = true)
                     if (ph == CallPhase.ENDED && (prev == CallPhase.ACTIVE || prev == CallPhase.CONNECTING || prev == CallPhase.OUTGOING)) {
                         oneShot(R.raw.call_fine, signalling = true)
@@ -139,6 +144,7 @@ object Sounds {
         sp.edit()
             .putBoolean("taps", s.taps).putString("tap", s.tap).putString("ring", s.ringtone)
             .putString("msg", s.message).putString("meet", s.meeting).putString("rem", s.reminder)
+            .putBoolean("calltones", s.callTones)
             .apply()
         // notification channels carry their sound: a new choice means a new channel
         if (s.message != old.message || s.meeting != old.meeting || s.reminder != old.reminder) {
