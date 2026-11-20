@@ -11,6 +11,7 @@ import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -374,7 +375,7 @@ fun ScratchCard(m: Message, ink: Color, bubble: Color, modifier: Modifier = Modi
                 Modifier.matchParentSize()
                     .graphicsLayer { compositingStrategy = CompositingStrategy.Offscreen; alpha = cover }
                     .pointerInput(m.id) {
-                        androidx.compose.foundation.gestures.detectDragGestures(
+                        detectDragGestures(
                             onDragStart = { o -> path.moveTo(o.x, o.y) },
                             onDrag = { change, _ ->
                                 val p = change.position
