@@ -1,5 +1,7 @@
 package com.monolith.app.ui.screens
 
+import androidx.compose.ui.draw.drawBehind
+
 import android.content.Intent
 import androidx.compose.animation.animateColorAsState
 import androidx.compose.animation.core.Animatable
@@ -170,14 +172,16 @@ fun WrappedScreen(nav: NavHostController) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 slides.forEachIndexed { i, _ ->
-                    Box(Modifier.weight(1f).height(3.dp).clip(CircleShape).background(ink.copy(alpha = 0.25f))) {
-                        val f = when {
-                            i < index -> 1f
-                            i == index -> progress.value
-                            else -> 0f
-                        }
-                        Box(Modifier.fillMaxWidth(f).height(3.dp).background(ink))
-                    }
+                    Box(
+                        Modifier.weight(1f).height(3.dp).clip(CircleShape).background(ink.copy(alpha = 0.25f)).drawBehind {
+                            val f = when {
+                                i < index -> 1f
+                                i == index -> progress.value
+                                else -> 0f
+                            }
+                            drawRect(ink, size = size.copy(width = size.width * f))
+                        },
+                    )
                 }
             }
             Row(verticalAlignment = Alignment.CenterVertically) {

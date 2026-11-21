@@ -323,8 +323,8 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
             }
             if (s.notes.isNotEmpty() || canManage) {
                 item(key = "boardLabel") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionLabel(t("Bacheca"), Modifier.weight(1f).padding(top = 10.dp))
+                    Row(Modifier.padding(top = 10.dp, end = 8.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel(t("Bacheca"), Modifier.weight(1f))
                         if (canManage) TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
                     }
                 }
@@ -335,8 +335,8 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
             }
             val upcoming = s.events.filter { !it.deleted && it.start > now() - 86_400_000L }.sortedBy { it.start }
             item(key = "eventsLabel") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionLabel(t("Eventi"), Modifier.weight(1f).padding(top = 10.dp))
+                Row(Modifier.padding(top = 10.dp, end = 8.dp).heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(t("Eventi"), Modifier.weight(1f))
                     TextButton(onClick = { eventDialog = true }) { Text(t("Nuovo")) }
                 }
             }

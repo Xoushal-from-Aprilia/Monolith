@@ -1,5 +1,7 @@
 package com.monolith.app.ui.screens
 
+import androidx.compose.ui.draw.drawBehind
+
 import android.content.Context
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.foundation.layout.aspectRatio
@@ -512,7 +514,7 @@ private fun friendSinceShort(ts: Long): String {
     if (b.get(java.util.Calendar.DAY_OF_MONTH) < a.get(java.util.Calendar.DAY_OF_MONTH)) months--
     months = months.coerceAtLeast(0)
     return when {
-        months == 0 -> t("poco")
+        months == 0 -> t("pochi giorni")
         months < 12 -> if (months == 1) t("1 mese") else t("{0} mesi", months)
         months < 24 -> t("1 anno")
         else -> t("{0} anni", months / 12)
@@ -595,14 +597,16 @@ fun StoryViewer(nav: NavHostController, pk: String) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 items.forEachIndexed { i, _ ->
-                    Box(Modifier.weight(1f).height(3.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f))) {
-                        val f = when {
-                            i < index -> 1f
-                            i == index -> progress.value
-                            else -> 0f
-                        }
-                        Box(Modifier.fillMaxWidth(f).height(3.dp).background(Color.White))
-                    }
+                    Box(
+                        Modifier.weight(1f).height(3.dp).clip(CircleShape).background(Color.White.copy(alpha = 0.3f)).drawBehind {
+                            val f = when {
+                                i < index -> 1f
+                                i == index -> progress.value
+                                else -> 0f
+                            }
+                            drawRect(Color.White, size = size.copy(width = size.width * f))
+                        },
+                    )
                 }
             }
             Spacer(Modifier.height(10.dp))

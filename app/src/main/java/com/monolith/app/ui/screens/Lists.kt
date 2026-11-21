@@ -205,7 +205,7 @@ fun ListDetailScreen(nav: NavHostController, id: String) {
                             keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                         )
                     }
-                    SectionLabel(t("Condividi con"), Modifier.padding(top = 12.dp))
+                    SectionLabel(t("Condividi con"), Modifier.padding(top = 12.dp), inset = false)
                     FlowRow(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                         people.filter { it.status == FriendStatus.FRIEND }.forEach { f ->
                             val sel = f.pubkey in members

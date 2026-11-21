@@ -127,10 +127,13 @@ class Shots {
     private fun shot(name: String, dark: Boolean = false, act: (() -> Unit)? = null, content: @Composable (NavHostController) -> Unit) {
         compose.setContent {
             MonolithTheme(if (dark) 2 else 1) {
-                val nav = rememberNavController()
-                NavHost(nav, "s") {
-                    composable("s") { content(nav) }
-                    composable("x") { }
+                // like MainActivity: a surface gives the right text colour in dark mode
+                androidx.compose.material3.Surface(androidx.compose.ui.Modifier.fillMaxSize(), color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
+                    val nav = rememberNavController()
+                    NavHost(nav, "s") {
+                        composable("s") { content(nav) }
+                        composable("x") { }
+                    }
                 }
             }
         }

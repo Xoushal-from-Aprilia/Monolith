@@ -1,5 +1,9 @@
 package com.monolith.app.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
+
+import androidx.compose.ui.draw.drawBehind
+
 import android.content.Context
 import androidx.compose.animation.AnimatedContent
 import androidx.compose.animation.animateColorAsState
@@ -84,7 +88,7 @@ private val FILM = listOf(
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
     Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
-    Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi da collezionare" /*i18n*/, "I salvati di ogni amico" /*i18n*/), "profile"),
+    Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Tutto si modifica da un solo tasto" /*i18n*/), "profile"),
     Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
     Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
@@ -175,17 +179,20 @@ fun FeatureFilm(onDone: () -> Unit, doneLabel: String = t("Inizia")) {
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(3.dp)) {
                 FILM.indices.forEach { i ->
-                    Box(Modifier.weight(1f).height(3.dp).clip(CircleShape).background(ink.copy(alpha = 0.22f))) {
-                        val f = when {
-                            i < index -> 1f
-                            i == index -> progress.value
-                            else -> 0f
-                        }
-                        Box(Modifier.fillMaxWidth(f).height(3.dp).background(ink))
-                    }
+                    // the progress is read while drawing: no recomposition at every frame
+                    Box(
+                        Modifier.weight(1f).height(3.dp).clip(CircleShape).background(ink.copy(alpha = 0.22f)).drawBehind {
+                            val f = when {
+                                i < index -> 1f
+                                i == index -> progress.value
+                                else -> 0f
+                            }
+                            drawRect(ink, size = size.copy(width = size.width * f))
+                        },
+                    )
                 }
             }
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            Row(Modifier.heightIn(min = 48.dp), verticalAlignment = Alignment.CenterVertically) {
                 Text("MONOLITH", color = ink.copy(alpha = 0.5f), style = MaterialTheme.typography.labelMedium, letterSpacing = 2.sp, modifier = Modifier.weight(1f).padding(start = 4.dp))
                 if (index < last) TextButton(onClick = onDone) { Text(t("Salta"), color = ink) }
             }

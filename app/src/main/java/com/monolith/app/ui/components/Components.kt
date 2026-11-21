@@ -269,10 +269,10 @@ fun StatusTicks(status: Int, tint: Color, modifier: Modifier = Modifier) {
 }
 
 @Composable
-fun SectionLabel(text: String, modifier: Modifier = Modifier) {
+fun SectionLabel(text: String, modifier: Modifier = Modifier, inset: Boolean = true) {
     Text(
         text.uppercase(),
-        modifier = modifier.padding(horizontal = 24.dp, vertical = 8.dp),
+        modifier = modifier.padding(horizontal = if (inset) 24.dp else 0.dp, vertical = 8.dp),
         style = MaterialTheme.typography.labelMedium,
         color = MaterialTheme.colorScheme.onSurfaceVariant,
         letterSpacing = 1.4.sp,

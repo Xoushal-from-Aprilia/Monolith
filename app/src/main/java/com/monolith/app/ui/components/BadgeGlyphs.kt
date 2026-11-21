@@ -200,17 +200,14 @@ internal fun DrawScope.badgeGlyph(id: String, c: Offset, g: Float, ink: Color, b
                 sparkle(0f, -0.72f, 0.22f)
             }
             "highfive" -> {
-                ds.rotate(-16f, p(-0.38f, 0.5f)) {
-                    box(-0.66f, -0.5f, -0.1f, 0.86f, 0.28f)
-                    seg(-0.38f, -0.22f, -0.38f, 0.2f, sw * 0.5f)
+                // an open hand with two motion lines
+                box(-0.52f, -0.08f, 0.4f, 0.86f, 0.32f)
+                listOf(-0.34f to -0.7f, -0.11f to -0.86f, 0.12f to -0.8f, 0.34f to -0.58f).forEach { (x, top) ->
+                    seg(x, -0.06f, x, top, sw * 1.15f)
                 }
-                ds.rotate(16f, p(0.38f, 0.5f)) {
-                    box(0.1f, -0.5f, 0.66f, 0.86f, 0.28f)
-                    seg(0.38f, -0.22f, 0.38f, 0.2f, sw * 0.5f)
-                }
-                seg(0f, -0.92f, 0f, -0.74f)
-                seg(-0.3f, -0.84f, -0.2f, -0.68f)
-                seg(0.3f, -0.84f, 0.2f, -0.68f)
+                seg(-0.5f, 0.34f, -0.84f, 0.02f, sw * 1.15f)
+                seg(0.6f, -0.5f, 0.86f, -0.66f)
+                seg(0.64f, -0.18f, 0.92f, -0.22f)
             }
             "first_place" -> {
                 ds.drawPath(path(-0.5f to -0.12f, 0.5f to -0.12f, 0f to 0.88f), ink)
@@ -329,9 +326,12 @@ internal fun DrawScope.badgeGlyph(id: String, c: Offset, g: Float, ink: Color, b
                 dot(0f, 0f, 0.14f)
             }
             "habit30" -> {
-                box(-0.92f, -0.26f, -0.06f, 0.26f, 0.26f)
-                box(-0.42f, -0.26f, 0.42f, 0.26f, 0.26f)
-                box(0.06f, -0.26f, 0.92f, 0.26f, 0.26f)
+                // three links of a chain, one after the other
+                ds.rotate(-35f, c) {
+                    box(-0.94f, -0.24f, -0.18f, 0.24f, 0.24f)
+                    box(-0.38f, -0.24f, 0.38f, 0.24f, 0.24f, fill = null)
+                    box(0.18f, -0.24f, 0.94f, 0.24f, 0.24f)
+                }
             }
             "accountant" -> {
                 seg(0f, -0.76f, 0f, 0.72f)

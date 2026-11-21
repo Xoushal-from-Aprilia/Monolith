@@ -411,6 +411,20 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.3.0", "2026-11-21",
+        listOf(
+            "Profilo rifatto: copertina, immagine e informazioni più ordinate, con i numeri in evidenza e i tasti ben separati",
+            "Tasto Modifica in alto a destra nel tuo profilo: immagine, nome, bio, stato, compleanno, copertina e distintivi in un'unica schermata",
+            "Distintivi disegnati a mano uno per uno, e fino a 3 in vetrina sotto al tuo nome",
+            "Dal profilo di un amico scrivi, chiami o videochiami con un tocco; legame e amico nei paraggi stanno nella parte Voi due",
+            "Nuova storia da un unico tasto: foto, testo o canzone dal telefono",
+            "Clubhouse ora si chiama Chat e nella barra in basso non c'è più la linea prima di Shard",
+            "Impostazioni divise in gruppi chiari: Aspetto, Funzioni, Privacy e sicurezza, Connessione",
+            "Spaziature e allineamenti sistemati in Chat, Shard, Liste, storie e filmato",
+            "Più fluida: l'effetto inclinazione e le barre di avanzamento non ridisegnano più tutta la schermata",
+        ),
+    ),
+    Release(
         "2.2.0", "2026-11-21",
         listOf(
             "Un filmato animato alla prima apertura racconta tutte le funzioni; lo rivedi quando vuoi dalle Impostazioni",
