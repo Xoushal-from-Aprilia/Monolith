@@ -39,6 +39,7 @@ class Notifier(private val ctx: Context) {
         const val CH_CALLS = "calls"
         const val CH_SERVICE = "service"
         const val CH_SOS = "sos"
+        const val CH_LIVE = "live"
 
         const val ID_SERVICE = 1
         const val ID_CALL = 2
@@ -77,6 +78,7 @@ class Notifier(private val ctx: Context) {
             withSound(SoundKind.MEETING, t("Incontri e arrivi"), NotificationManager.IMPORTANCE_HIGH),
             withSound(SoundKind.REMINDER, t("Promemoria agenda"), NotificationManager.IMPORTANCE_HIGH),
             NotificationChannel(CH_SOCIAL, t("Amici e inviti"), NotificationManager.IMPORTANCE_DEFAULT),
+            NotificationChannel(CH_LIVE, t("Arrivi in diretta"), NotificationManager.IMPORTANCE_LOW).apply { setShowBadge(false) },
             NotificationChannel(CH_CALLS, t("Chiamate"), NotificationManager.IMPORTANCE_HIGH).apply {
                 setSound(null, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
             },
@@ -253,6 +255,35 @@ class Notifier(private val ctx: Context) {
 
     fun screenshot(conv: String, name: String, emoji: String) =
         simple(("shot$conv").hashCode(), t("{0} ha fatto uno screenshot", name), t("della vostra chat"), emoji, openApp(("s$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
+
+    private val otwStart = HashMap<String, Int>()
+
+    /** a friend on the way: a notification with a bar that fills as they get closer */
+    fun arrivingLive(pk: String, name: String, emoji: String, dist: Int, etaSec: Int) {
+        val start = synchronized(otwStart) {
+            val s0 = otwStart[pk]
+            if (s0 == null || dist > s0) { otwStart[pk] = dist.coerceAtLeast(1); dist.coerceAtLeast(1) } else s0
+        }
+        val progress = ((1f - dist.toFloat() / start) * 100).toInt().coerceIn(0, 100)
+        val eta = if (etaSec < 60) t("meno di 1 min") else if (etaSec < 3600) "${etaSec / 60} min" else "${etaSec / 3600} h ${(etaSec % 3600) / 60} min"
+        val n = base(CH_LIVE)
+            .setContentTitle(t("{0} sta arrivando", name))
+            .setContentText(Fmt.distance(dist.toFloat()) + " · " + t("circa {0}", eta))
+            .setLargeIcon(emojiIcon(emoji))
+            .setProgress(100, progress, false)
+            .setOngoing(true)
+            .setOnlyAlertOnce(true)
+            .setAutoCancel(false)
+            .setCategory(NotificationCompat.CATEGORY_NAVIGATION)
+            .setContentIntent(openApp(("otw$pk").hashCode()) { putExtra(EXTRA_TAB, 2) })
+            .build()
+        post(("otw$pk").hashCode(), n)
+    }
+
+    fun cancelArriving(pk: String) {
+        synchronized(otwStart) { otwStart.remove(pk) }
+        nm.cancel(("otw$pk").hashCode())
+    }
 
     /** a move in a game played in a chat */
     fun game(conv: String, title: String, text: String) =

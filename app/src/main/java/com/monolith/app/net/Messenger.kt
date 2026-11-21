@@ -271,7 +271,7 @@ class Messenger(
             "placehere" -> onPlaceHere(from, p)
             "loc" -> if (isFriend) onLocation(friend!!, p)
             "locstart" -> if (isFriend) onLocStart(friend!!, p)
-            "locstop" -> if (isFriend) db.friends().sharing(from, 0)
+            "locstop" -> if (isFriend) { db.friends().sharing(from, 0); Graph.notifier.cancelArriving(from) }
             "pres" -> if (isFriend) onPresence(from, p)
             "typing" -> onTyping(from, p, isFriend)
             "rtc" -> if (isFriend) Graph.rtc.onSignal(from, p)
@@ -577,6 +577,10 @@ class Messenger(
             friend.pubkey, lat, lon, p.optDouble("acc", 0.0).toFloat(), p.optLong("at", now()), until,
             p.optInt("dist", -1), p.optInt("eta", -1),
         )
+        val dist = p.optInt("dist", -1)
+        val eta = p.optInt("eta", -1)
+        if (dist >= 0 && eta >= 0 && dist > 120) Graph.notifier.arrivingLive(friend.pubkey, friend.displayName, friend.emoji, dist, eta)
+        else if (dist in 0..120) Graph.notifier.cancelArriving(friend.pubkey)
         if (p.has("bat") && com.monolith.app.data.FriendBattery.update(friend.pubkey, p.optInt("bat", -1), p.optBoolean("chg"))) {
             Graph.notifier.batteryLow(friend.pubkey, friend.displayName, friend.emoji, p.optInt("bat"))
         }

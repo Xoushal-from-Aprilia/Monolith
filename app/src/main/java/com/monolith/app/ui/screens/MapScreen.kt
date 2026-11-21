@@ -49,6 +49,7 @@ import androidx.compose.material.icons.rounded.LocationOn
 import androidx.compose.material.icons.rounded.MyLocation
 import androidx.compose.material.icons.rounded.NearMe
 import androidx.compose.material.icons.rounded.Place
+import androidx.compose.material.icons.rounded.Explore
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
@@ -466,6 +467,7 @@ fun MapScreen(nav: NavHostController) {
                                 onFriend = { f -> mapView?.controller?.animateTo(GeoPoint(f.lat!!, f.lon!!), 16.5, 700L) },
                                 onShare = { shareSheet = true },
                                 onOtw = { otwSheet = true },
+                                onCompass = { f -> nav.navigate("compass/" + f.pubkey) },
                             )
                         } else {
                             PlacesPanel(
@@ -604,6 +606,7 @@ private fun PeoplePanel(
     onFriend: (Friend) -> Unit,
     onShare: () -> Unit,
     onOtw: () -> Unit,
+    onCompass: (Friend) -> Unit = {},
 ) {
     Column {
         AnimatedVisibility(otw != null, enter = expandVertically() + fadeIn(), exit = shrinkVertically() + fadeOut()) {
@@ -638,7 +641,7 @@ private fun PeoplePanel(
             SectionLabel(t("Condividono con te"))
             LazyColumn(Modifier.heightIn(max = 210.dp)) {
                 items(sharingWithMe, key = { it.pubkey }) { f ->
-                    FriendLocationRow(f, me, Modifier.animateItem()) { onFriend(f) }
+                    FriendLocationRow(f, me, Modifier.animateItem(), onCompass = { onCompass(f) }) { onFriend(f) }
                 }
             }
         } else if (iShareWith.isEmpty() && otw == null) {
@@ -664,7 +667,7 @@ private fun PeoplePanel(
 }
 
 @Composable
-private fun FriendLocationRow(f: Friend, me: Location?, modifier: Modifier, onClick: () -> Unit) {
+private fun FriendLocationRow(f: Friend, me: Location?, modifier: Modifier, onCompass: () -> Unit = {}, onClick: () -> Unit) {
     com.monolith.app.data.FriendBattery.all.collectAsState().value
     Row(modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
         Avatar(f.emoji, 42.dp, online = now() - f.locAt < 60_000)
@@ -678,6 +681,7 @@ private fun FriendLocationRow(f: Friend, me: Location?, modifier: Modifier, onCl
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }
+        IconButton(onClick = onCompass) { Icon(Icons.Rounded.Explore, t("Bussola")) }
     }
 }
 

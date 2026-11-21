@@ -102,6 +102,7 @@ import com.monolith.app.ui.Routes
 import com.monolith.app.ui.components.Avatar
 import com.monolith.app.ui.components.MonoDialog
 import com.monolith.app.ui.components.bounceClick
+import com.monolith.app.ui.components.tiltDepth
 import kotlinx.coroutines.launch
 import java.io.File
 
@@ -187,7 +188,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
         }
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(132.dp).clip(CircleShape)
+                Modifier.size(132.dp).tiltDepth(8f, 10f).clip(CircleShape)
                     .then(if (stories.isNotEmpty()) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
                     .bounceClick(0.95f) { if (stories.isNotEmpty()) nav.navigate(Routes.stories(pk)) },
                 contentAlignment = Alignment.Center,
@@ -263,7 +264,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 modifier = Modifier.fillMaxWidth().padding(16.dp),
             ) {
                 Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BondStone(b, Modifier.size(90.dp, 120.dp))
+                    BondStone(b, Modifier.size(90.dp, 120.dp).tiltDepth(6f, 12f))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
                         Text(t("Legame"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)

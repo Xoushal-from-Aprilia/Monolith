@@ -57,6 +57,22 @@ class MainActivity : FragmentActivity() {
         }
     }
 
+    /** leaving the app during a video call keeps the video in a small window */
+    override fun onUserLeaveHint() {
+        super.onUserLeaveHint()
+        val st = Graph.calls.state.value
+        val hasVideo = st.phase == CallPhase.ACTIVE && (st.video || st.participants.values.any { it.video != null && it.camOn })
+        if (!hasVideo || com.monolith.app.ui.NavBus.route.value != "call") return
+        runCatching {
+            enterPictureInPictureMode(android.app.PictureInPictureParams.Builder().setAspectRatio(android.util.Rational(9, 16)).build())
+        }
+    }
+
+    override fun onPictureInPictureModeChanged(isInPictureInPictureMode: Boolean, newConfig: android.content.res.Configuration) {
+        super.onPictureInPictureModeChanged(isInPictureInPictureMode, newConfig)
+        com.monolith.app.ui.NavBus.pip.value = isInPictureInPictureMode
+    }
+
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)

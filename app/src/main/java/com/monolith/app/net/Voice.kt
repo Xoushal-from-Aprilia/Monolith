@@ -90,22 +90,36 @@ object VoicePlayer {
         player?.let { p -> runCatching { p.playbackParams = p.playbackParams.setSpeed(next) } }
     }
 
+    private var currentPath: String? = null
+    private var earpiece = false
+
     fun toggle(id: String, path: String) {
         if (_playing.value == id) {
             stop()
             return
         }
         stop()
+        play(id, path, 0)
+    }
+
+    private fun play(id: String, path: String, from: Int) {
         try {
             val p = MediaPlayer()
-            p.setAudioAttributes(AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_MEDIA).setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build())
+            p.setAudioAttributes(
+                AudioAttributes.Builder()
+                    .setUsage(if (earpiece) AudioAttributes.USAGE_VOICE_COMMUNICATION else AudioAttributes.USAGE_MEDIA)
+                    .setContentType(AudioAttributes.CONTENT_TYPE_SPEECH).build(),
+            )
             p.setDataSource(path)
             p.setOnCompletionListener { stop() }
             p.prepare()
+            if (from > 0) p.seekTo(from)
             p.start()
             if (_speed.value != 1f) runCatching { p.playbackParams = p.playbackParams.setSpeed(_speed.value) }
             player = p
+            currentPath = path
             _playing.value = id
+            ticker?.cancel()
             ticker = scope.launch {
                 while (isActive) {
                     val pl = player ?: break
@@ -117,6 +131,26 @@ object VoicePlayer {
         } catch (e: Exception) {
             stop()
         }
+    }
+
+    /** phone at the ear: the voice message moves to the earpiece, and back to the speaker when it leaves */
+    fun setEarpiece(on: Boolean) {
+        if (on == earpiece || com.monolith.app.Graph.calls.inCall) return
+        earpiece = on
+        val am = com.monolith.app.Graph.app.getSystemService(android.media.AudioManager::class.java)
+        @Suppress("DEPRECATION")
+        runCatching {
+            if (on) { am.mode = android.media.AudioManager.MODE_IN_COMMUNICATION; am.isSpeakerphoneOn = false }
+            else am.mode = android.media.AudioManager.MODE_NORMAL
+        }
+        val p = player ?: return
+        val id = _playing.value ?: return
+        val path = currentPath ?: return
+        val pos = runCatching { p.currentPosition }.getOrDefault(0)
+        ticker?.cancel()
+        runCatching { p.stop() }; runCatching { p.release() }
+        player = null
+        play(id, path, pos)
     }
 
     fun stop() {

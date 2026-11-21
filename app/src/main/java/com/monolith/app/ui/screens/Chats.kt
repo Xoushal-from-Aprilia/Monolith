@@ -463,6 +463,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     }
     LaunchedEffect(conv) { if (!isGroup) Graph.rtc.ensureConnected(conv) }
     ShakeToNudge(conv)
+    EarForVoice()
     val guarded by Graph.guard.blocked.collectAsState()
     SecureScreen(conv in guarded)
     ScreenshotWatcher(conv)

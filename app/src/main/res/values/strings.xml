@@ -7,4 +7,6 @@
     <string name="friends_widget_desc">I tuoi amici, con stato e luogo</string>
     <string name="countdown_widget_label">Conto alla rovescia</string>
     <string name="countdown_widget_desc">I giorni che mancano a un evento</string>
+    <string name="wallpaper_label">Monolith animato</string>
+    <string name="wallpaper_desc">Il monolite tra le stelle, si muove con il telefono</string>
 </resources>

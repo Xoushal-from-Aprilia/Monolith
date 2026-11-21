@@ -153,6 +153,17 @@ fun CallScreen(nav: NavHostController) {
     val ringing = st.phase == CallPhase.OUTGOING || st.phase == CallPhase.INCOMING || st.phase == CallPhase.CONNECTING
     val remotes = st.participants.values.toList()
     val showGrid = st.phase == CallPhase.ACTIVE && (st.video || remotes.size > 1 || remotes.any { it.video != null && it.camOn })
+    CallProximity(!st.video && !st.speaker && !st.sharing && (st.phase == CallPhase.ACTIVE || st.phase == CallPhase.CONNECTING || st.phase == CallPhase.OUTGOING))
+    val pip by com.monolith.app.ui.NavBus.pip.collectAsState()
+    if (pip) {
+        Box(Modifier.fillMaxSize().background(BG), contentAlignment = Alignment.Center) {
+            val main = remotes.firstOrNull { it.video != null && it.camOn }
+            val v = main?.video
+            if (v != null) VideoView(v, mirror = false, modifier = Modifier.fillMaxSize())
+            else Avatar(byPk[remotes.firstOrNull()?.pk ?: ""]?.emoji ?: "🙂", 64.dp)
+        }
+        return
+    }
 
     val inf = rememberInfiniteTransition(label = "rings")
     val ring by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing)), label = "ring")

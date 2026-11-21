@@ -6,4 +6,6 @@
     <string name="friends_widget_desc">Ваши друзья: статус и место</string>
     <string name="countdown_widget_label">Обратный отсчёт</string>
     <string name="countdown_widget_desc">Дни до события</string>
+    <string name="wallpaper_label">Живой Monolith</string>
+    <string name="wallpaper_desc">Монолит среди звёзд, движется вместе с телефоном</string>
 </resources>

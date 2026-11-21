@@ -73,6 +73,7 @@ import com.monolith.app.core.t
 import com.monolith.app.net.WeekRecap
 import com.monolith.app.net.Weekly
 import com.monolith.app.ui.components.bounceClick
+import com.monolith.app.ui.components.tiltDepth
 import com.monolith.app.ui.theme.Motion
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -157,7 +158,7 @@ fun WrappedScreen(nav: NavHostController) {
         )
         key(index) {
             Box(
-                Modifier.fillMaxSize().statusBarsPadding().navigationBarsPadding()
+                Modifier.fillMaxSize().tiltDepth(6f, 3f).statusBarsPadding().navigationBarsPadding()
                     .padding(start = 28.dp, end = 28.dp, top = 72.dp, bottom = 28.dp),
             ) {
                 Slide(id, r, ink, bg, onClose = { nav.popBackStack() }, onShare = {
@@ -329,7 +330,7 @@ private fun Slide(id: String, r: WeekRecap, ink: Color, bg: Color, onClose: () -
             Spacer(Modifier.height(24.dp))
             Rise(350) {
                 Row(verticalAlignment = Alignment.Bottom) {
-                    BondStone(b, Modifier.size(110.dp, 150.dp))
+                    BondStone(b, Modifier.size(110.dp, 150.dp).tiltDepth(8f, 14f))
                     Spacer(Modifier.width(20.dp))
                     Column {
                         Big(b.name, ink, 36.sp)

@@ -6,4 +6,6 @@
     <string name="friends_widget_desc">Your friends, with status and place</string>
     <string name="countdown_widget_label">Countdown</string>
     <string name="countdown_widget_desc">Days left until an event</string>
+    <string name="wallpaper_label">Animated Monolith</string>
+    <string name="wallpaper_desc">The monolith among the stars, moving with your phone</string>
 </resources>

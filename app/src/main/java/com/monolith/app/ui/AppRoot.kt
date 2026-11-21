@@ -126,6 +126,9 @@ object NavBus {
     val openShareSheet = MutableStateFlow(false)
     /** a common place to show on the map (from a chat bubble) */
     val focusPlace = MutableStateFlow<String?>(null)
+    /** the screen on top right now, and whether the app is in a small floating window */
+    val route = MutableStateFlow<String?>(null)
+    val pip = MutableStateFlow(false)
 }
 
 object Routes {
@@ -260,6 +263,7 @@ private fun IntroSplash() {
 private fun MainNav() {
     val ctx = LocalContext.current
     val nav = rememberNavController()
+    LaunchedEffect(nav) { nav.currentBackStackEntryFlow.collect { NavBus.route.value = it.destination.route } }
     val homeTab = rememberSaveable { mutableIntStateOf(0) }
     val req by NavBus.requests.collectAsState()
     val call by Graph.calls.state.collectAsState()
@@ -344,6 +348,8 @@ private fun MainNav() {
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("profile/{pk}") { entry -> com.monolith.app.ui.screens.ProfileScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("stories/{pk}") { entry -> com.monolith.app.ui.screens.StoryViewer(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("compass/{pk}") { entry -> com.monolith.app.ui.screens.CompassScreen(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("highfive") { com.monolith.app.ui.screens.HighFiveScreen(nav) }
                 composable("photoedit") { com.monolith.app.ui.screens.PhotoEditScreen(nav) }
                 composable("diary") { com.monolith.app.ui.screens.DiaryScreen(nav) }
                 composable("once/{id}") { entry -> com.monolith.app.ui.screens.OnceViewer(nav, entry.arguments?.getString("id") ?: "") }

@@ -216,6 +216,10 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
                             Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(t("Scansiona"))
                         }
                     }
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedButton(onClick = { nav.navigate("highfive") }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                        Text("🖐️"); Spacer(Modifier.width(8.dp)); Text(t("Batti cinque per aggiungere"))
+                    }
                 }
             }
         }

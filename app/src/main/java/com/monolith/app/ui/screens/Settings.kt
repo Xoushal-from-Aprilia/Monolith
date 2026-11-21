@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.MedicalServices
 import androidx.compose.material.icons.rounded.Apps
@@ -225,6 +226,14 @@ fun SettingsScreen(nav: NavHostController) {
             }
             SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
             SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
+            SettingRow(Icons.Rounded.Wallpaper, t("Sfondo animato"), t("Il monolite tra le stelle come sfondo del telefono")) {
+                val comp = android.content.ComponentName(ctx, com.monolith.app.widget.MonolithWallpaper::class.java)
+                val i = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
+                    .putExtra(android.app.WallpaperManager.EXTRA_LIVE_WALLPAPER_COMPONENT, comp)
+                runCatching { ctx.startActivity(i) }.onFailure {
+                    runCatching { ctx.startActivity(android.content.Intent(android.app.WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
+                }
+            }
             SettingRow(Icons.Rounded.MedicalServices, t("Scheda medica"), t("Inviata solo insieme all'SOS")) { medSheet = true }
             SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
