@@ -113,6 +113,11 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
     private fun myPub() = Graph.identity.keys?.pub ?: ""
     private fun others() = _state.value.members.filter { it != myPub() }
 
+    /** a small signal to everyone in the call (used to listen to music together) */
+    fun broadcastSignal(type: String, extra: JSONObject.() -> Unit) {
+        exec.execute { _state.value.participants.keys.forEach { send(it, type, extra = extra) } }
+    }
+
     private fun send(to: String, type: String, cid: String? = _state.value.cid, extra: JSONObject.() -> Unit = {}) {
         val p = JSONObject().put("t", "call").put("type", type).put("cid", cid ?: "")
         p.extra()
@@ -258,6 +263,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
                     onOffer(from, p.optString("sdp"))
                 }
                 "answer" -> links[from]?.pc?.setRemoteDescription(SimpleSdp(), SessionDescription(SessionDescription.Type.ANSWER, p.optString("sdp")))
+                "listen", "listenstop" -> com.monolith.app.net.ListenTogether.onSignal(from, type, p)
                 "cam" -> _state.update { s ->
                     val part = s.participants[from] ?: return@update s
                     s.copy(participants = s.participants + (from to part.copy(camOn = p.optBoolean("on", true))))

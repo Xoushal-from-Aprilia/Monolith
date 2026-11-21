@@ -455,6 +455,45 @@ class Messenger(
         else -> "jpg"
     }
 
+    /** sends a copy of [m] to another chat, marked as forwarded */
+    suspend fun forward(m: Message, conv: String) {
+        val ex = runCatching { JSONObject(m.extra ?: "{}") }.getOrDefault(JSONObject())
+        when (m.kind) {
+            "text", "scratch" -> deliver(newOutgoing(conv, "text", m.text, JSONObject().put("fw", true)) ?: return)
+            "photo" -> m.mediaPath?.let { path -> sendPhoto(conv, Uri.fromFile(File(path)), m.text, forwarded = true) }
+            "voice" -> m.mediaPath?.let { path ->
+                val bytes = withContext(Dispatchers.IO) { File(path).readBytes() }
+                sendMedia(conv, "voice", bytes, JSONObject().put("dur", ex.optLong("dur")).put("fw", true), "", null)
+            }
+            "sticker" -> m.mediaPath?.let { path ->
+                val bytes = withContext(Dispatchers.IO) { File(path).readBytes() }
+                sendMedia(conv, "sticker", bytes, JSONObject().put("fw", true), "", null)
+            }
+        }
+    }
+
+    /** a reply (or a reaction) to a friend's story: it arrives in your chat with them, with a small preview */
+    suspend fun replyToStory(story: Message, text: String, reaction: Boolean) {
+        val owner = story.sender
+        if (db.friends().get(owner)?.status != FriendStatus.FRIEND) return
+        val ref = JSONObject().put("id", story.id).put("k", story.kind).put("x", story.text.take(80))
+        if (story.kind == "photo") story.mediaPath?.let { path ->
+            runCatching {
+                withContext(Dispatchers.IO) {
+                    val o = android.graphics.BitmapFactory.Options().apply { inSampleSize = 8 }
+                    val b = android.graphics.BitmapFactory.decodeFile(path, o) ?: return@withContext null
+                    val sc = android.graphics.Bitmap.createScaledBitmap(b, 80, (80f * b.height / b.width).toInt().coerceIn(40, 160), true)
+                    val bos = java.io.ByteArrayOutputStream()
+                    sc.compress(android.graphics.Bitmap.CompressFormat.JPEG, 55, bos)
+                    android.util.Base64.encodeToString(bos.toByteArray(), android.util.Base64.NO_WRAP)
+                }
+            }.getOrNull()?.let { ref.put("th", it) }
+        }
+        val ex = JSONObject().put("story", ref)
+        if (reaction) ex.put("react", true)
+        deliver(newOutgoing(owner, "text", text, ex) ?: return)
+    }
+
     suspend fun sendSticker(conv: String, file: File, reply: ReplyRef? = null) {
         val bytes = withContext(Dispatchers.IO) { file.readBytes() }
         sendMedia(conv, "sticker", bytes, JSONObject(), "", reply)
@@ -1264,9 +1303,10 @@ class Messenger(
         db.messages().insert(Message(newId(), conv, if (outgoing) k.pub else conv, outgoing, now(), "call", text = text, status = MsgStatus.READ))
     }
 
-    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false, music: JSONObject? = null) {
+    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false, music: JSONObject? = null, forwarded: Boolean = false) {
         val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return
         val extra = JSONObject().put("w", compressed.width).put("h", compressed.height)
+        if (forwarded) extra.put("fw", true)
         if (once) extra.put("once", true)
         if (music != null) extra.put("mu", music)
         sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)

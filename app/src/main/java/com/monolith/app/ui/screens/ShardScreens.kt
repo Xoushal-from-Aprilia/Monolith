@@ -39,6 +39,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.Badge
+import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.GraphicEq
 import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PersonAdd
@@ -197,6 +199,9 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     var noteDialog by remember { mutableStateOf(false) }
     var eventDialog by remember { mutableStateOf(false) }
     var memberMenu by remember { mutableStateOf<String?>(null) }
+    var welcomeDialog by remember { mutableStateOf(false) }
+    var titleFor by remember { mutableStateOf<String?>(null) }
+    var roomMenu by remember { mutableStateOf<ShardRoom?>(null) }
     val current = if (voiceMap.isNotEmpty() || call.cid != null) Graph.shards.currentRoom() else null
 
     fun join(r: ShardRoom) {
@@ -229,6 +234,7 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     if (canManage) {
                         DropdownMenuItem(text = { Text(t("Nuova stanza")) }, onClick = { menu = false; roomDialog = true })
                         DropdownMenuItem(text = { Text(t("Nuova nota in bacheca")) }, onClick = { menu = false; noteDialog = true })
+                        DropdownMenuItem(text = { Text(t("Messaggio di benvenuto")) }, onClick = { menu = false; welcomeDialog = true })
                     }
                     DropdownMenuItem(text = { Text(t("Nuovo evento")) }, onClick = { menu = false; eventDialog = true })
                     DropdownMenuItem(text = { Text(t("Esci dallo shard")) }, onClick = { menu = false; confirmLeave = true })
@@ -237,14 +243,16 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
             item(key = "textLabel") { SectionLabel(t("Stanze scritte")) }
-            items(s.rooms.filter { !it.voice }, key = { "t" + it.id }) { r ->
+            items(s.rooms.filter { !it.voice && s.canSee(it, me) }, key = { "t" + it.id }) { r ->
                 val conv = s.conv(r)
                 val n = unreadBy[conv] ?: 0
                 Row(
-                    Modifier.fillMaxWidth().animateItem().bounceClick(0.98f) { nav.navigate(Routes.chat(conv)) }.padding(horizontal = 20.dp, vertical = 10.dp),
+                    Modifier.fillMaxWidth().animateItem()
+                        .combinedClickable(onClick = { nav.navigate(Routes.chat(conv)) }, onLongClick = { if (canManage) roomMenu = r })
+                        .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(Icons.Rounded.Tag, null, Modifier.size(22.dp))
+                    Icon(if (r.only != null) Icons.Rounded.Lock else Icons.Rounded.Tag, null, Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = MaterialTheme.typography.titleMedium)
@@ -263,7 +271,7 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                 }
             }
             item(key = "voiceLabel") { SectionLabel(t("Stanze vocali"), Modifier.padding(top = 10.dp)) }
-            items(s.rooms.filter { it.voice }, key = { "v" + it.id }) { r ->
+            items(s.rooms.filter { it.voice && s.canSee(it, me) }, key = { "v" + it.id }) { r ->
                 val inside = (Graph.shards.inRoom(s.id, r.id) + listOfNotNull(me.takeIf { current == s.id to r.id })).distinct()
                 val mine = current == s.id to r.id
                 Surface(
@@ -272,8 +280,8 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     modifier = Modifier.fillMaxWidth().animateItem().padding(horizontal = 16.dp, vertical = 4.dp),
                 ) {
                     Column(Modifier.padding(14.dp)) {
-                        Row(verticalAlignment = Alignment.CenterVertically) {
-                            Icon(Icons.Rounded.GraphicEq, null, Modifier.size(22.dp))
+                        Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.combinedClickable(onClick = {}, onLongClick = { if (canManage) roomMenu = r })) {
+                            Icon(if (r.only != null) Icons.Rounded.Lock else Icons.Rounded.GraphicEq, null, Modifier.size(22.dp))
                             Spacer(Modifier.width(12.dp))
                             Column(Modifier.weight(1f)) {
                                 Text(r.name, style = MaterialTheme.typography.titleMedium)
@@ -347,17 +355,24 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(if (pk == me) t("Tu") else f?.displayName ?: t("Qualcuno"), style = MaterialTheme.typography.bodyLarge)
-                        val role = when (pk) {
-                            s.owner -> t("Fondatore")
-                            in s.mods -> t("Moderatore")
-                            else -> null
-                        }
+                        val role = listOfNotNull(
+                            when (pk) {
+                                s.owner -> t("Fondatore")
+                                in s.mods -> t("Moderatore")
+                                else -> null
+                            },
+                            s.titles[pk],
+                        ).joinToString(" · ").ifBlank { null }
                         if (role != null) Text(role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     val canTouch = pk != me && pk != s.owner && (isOwner || (canManage && pk !in s.mods))
+                    if (canManage && !canTouch) {
+                        IconButton(onClick = { titleFor = pk }) { Icon(Icons.Rounded.Badge, t("Dai un titolo")) }
+                    }
                     if (canTouch) Box {
                         IconButton(onClick = { memberMenu = pk }) { Icon(Icons.Rounded.MoreVert, t("Altro")) }
                         DropdownMenu(expanded = memberMenu == pk, onDismissRequest = { memberMenu = null }) {
+                            DropdownMenuItem(text = { Text(t("Dai un titolo")) }, onClick = { memberMenu = null; titleFor = pk })
                             if (isOwner) {
                                 val mod = pk in s.mods
                                 DropdownMenuItem(
@@ -374,6 +389,75 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     }
 
     if (editSheet) ShardEditSheet(s, onClose = { editSheet = false })
+    if (welcomeDialog) {
+        var text by remember { mutableStateOf(s.welcome) }
+        MonoDialog(
+            onDismissRequest = { welcomeDialog = false },
+            title = { Text(t("Messaggio di benvenuto")) },
+            text = {
+                Column {
+                    Text(t("Lo legge chi entra nello shard, nella prima stanza scritta."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(text, { text = it.take(400) }, label = { Text(t("Benvenuto")) }, minLines = 3, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = { welcomeDialog = false; Graph.scope.launch { Graph.shards.setWelcome(s.id, text) } }) { Text(t("Salva")) } },
+            dismissButton = { TextButton(onClick = { welcomeDialog = false }) { Text(t("Annulla")) } },
+        )
+    }
+    titleFor?.let { pk ->
+        var text by remember(pk) { mutableStateOf(s.titles[pk] ?: "") }
+        MonoDialog(
+            onDismissRequest = { titleFor = null },
+            title = { Text(t("Titolo di {0}", if (pk == me) t("te") else byPk[pk]?.displayName ?: "")) },
+            text = {
+                Column {
+                    Text(t("Compare accanto al nome nelle stanze, per esempio \"Capitano\" o \"DJ\"."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(8.dp))
+                    OutlinedTextField(text, { text = it.take(24) }, label = { Text(t("Titolo")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                }
+            },
+            confirmButton = { TextButton(onClick = { titleFor = null; Graph.scope.launch { Graph.shards.setTitle(s.id, pk, text) } }) { Text(t("Salva")) } },
+            dismissButton = { TextButton(onClick = { titleFor = null }) { Text(t("Annulla")) } },
+        )
+    }
+    roomMenu?.let { r ->
+        var chosen by remember(r.id) { mutableStateOf(r.only?.toSet() ?: emptySet()) }
+        var private by remember(r.id) { mutableStateOf(r.only != null) }
+        MonoDialog(
+            onDismissRequest = { roomMenu = null },
+            title = { Text((if (r.voice) "🔊 " else "#") + r.name) },
+            text = {
+                Column {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Text(t("Stanza privata"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                        androidx.compose.material3.Switch(checked = private, onCheckedChange = { private = it })
+                    }
+                    if (private) {
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            s.members.filter { it != s.owner && it !in s.mods }.forEach { pk ->
+                                val f = byPk[pk]
+                                if (pk == me) return@forEach
+                                if (f != null) FriendChip(f, pk in chosen) { chosen = if (pk in chosen) chosen - pk else chosen + pk }
+                            }
+                        }
+                    }
+                    if (s.rooms.size > 1) {
+                        Spacer(Modifier.height(10.dp))
+                        TextButton(onClick = { roomMenu = null; Graph.scope.launch { Graph.shards.removeRoom(s.id, r.id) } }) { Text(t("Elimina la stanza")) }
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    roomMenu = null
+                    Graph.scope.launch { Graph.shards.setRoomAccess(s.id, r.id, if (private) (chosen + listOfNotNull(me)).toList() else null) }
+                }) { Text(t("Salva")) }
+            },
+            dismissButton = { TextButton(onClick = { roomMenu = null }) { Text(t("Annulla")) } },
+        )
+    }
     if (noteDialog) {
         var text by remember { mutableStateOf("") }
         MonoDialog(
@@ -411,6 +495,8 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     if (roomDialog) {
         var name by remember { mutableStateOf("") }
         var voice by remember { mutableStateOf(false) }
+        var private by remember { mutableStateOf(false) }
+        var chosen by remember { mutableStateOf(setOf<String>()) }
         MonoDialog(
             onDismissRequest = { roomDialog = false },
             title = { Text(t("Nuova stanza")) },
@@ -427,10 +513,29 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     }
                     Spacer(Modifier.height(12.dp))
                     OutlinedTextField(name, { name = it.take(30) }, label = { Text(t("Nome della stanza")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                    Spacer(Modifier.height(8.dp))
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Column(Modifier.weight(1f)) {
+                            Text(t("Stanza privata"), style = MaterialTheme.typography.titleSmall)
+                            Text(t("La vedono solo i membri scelti, il fondatore e i moderatori"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        androidx.compose.material3.Switch(checked = private, onCheckedChange = { private = it })
+                    }
+                    if (private) {
+                        Spacer(Modifier.height(6.dp))
+                        FlowRow(horizontalArrangement = Arrangement.spacedBy(6.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            s.members.filter { it != me && it != s.owner && it !in s.mods }.forEach { pk ->
+                                byPk[pk]?.let { f -> FriendChip(f, pk in chosen) { chosen = if (pk in chosen) chosen - pk else chosen + pk } }
+                            }
+                        }
+                    }
                 }
             },
             confirmButton = {
-                TextButton(onClick = { roomDialog = false; Graph.scope.launch { Graph.shards.addRoom(s.id, name, voice) } }, enabled = name.isNotBlank()) { Text(t("Crea")) }
+                TextButton(onClick = {
+                    roomDialog = false
+                    Graph.scope.launch { if (private) Graph.shards.addPrivateRoom(s.id, name, voice, chosen.toList()) else Graph.shards.addRoom(s.id, name, voice) }
+                }, enabled = name.isNotBlank()) { Text(t("Crea")) }
             },
             dismissButton = { TextButton(onClick = { roomDialog = false }) { Text(t("Annulla")) } },
         )

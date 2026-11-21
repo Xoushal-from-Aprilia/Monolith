@@ -95,6 +95,8 @@ import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Screenshot
+import androidx.compose.material.icons.rounded.EmojiEmotions
+import androidx.compose.material.icons.automirrored.rounded.Forward
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
@@ -445,6 +447,8 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     var scheduleDialog by remember { mutableStateOf(false) }
     var scratchDialog by remember { mutableStateOf(false) }
     var funSheet by remember { mutableStateOf(false) }
+    var stickerSheet by remember { mutableStateOf(false) }
+    var forwardOf by remember { mutableStateOf<Message?>(null) }
     var hangDialog by remember { mutableStateOf(false) }
     var wallSheet by remember { mutableStateOf(false) }
     val pins by Graph.pins.pins.collectAsState()
@@ -732,6 +736,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                         attach = false; pickOnce.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                     })
                                     DropdownMenuItem(text = { Text(t("Giochi e dadi")) }, leadingIcon = { Icon(Icons.Rounded.SportsEsports, null) }, onClick = { attach = false; funSheet = true })
+                                    DropdownMenuItem(text = { Text(t("Sticker")) }, leadingIcon = { Icon(Icons.Rounded.EmojiEmotions, null) }, onClick = { attach = false; stickerSheet = true })
                                     DropdownMenuItem(text = { Text(t("Messaggio da grattare")) }, leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null) }, onClick = { attach = false; scratchDialog = true })
                                     DropdownMenuItem(text = { Text(t("Programma messaggio")) }, leadingIcon = { Icon(Icons.Rounded.Schedule, null) }, onClick = { attach = false; scheduleDialog = true })
                                 }
@@ -874,6 +879,17 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         android.widget.Toast.makeText(ctx, if (isSaved) t("Tolto dai salvati") else t("Salvato nel profilo"), android.widget.Toast.LENGTH_SHORT).show()
                     }
                 }
+                val isOnce = m.extra?.contains("\"once\":true") == true
+                if (m.kind in setOf("text", "scratch", "photo", "voice", "sticker") && !isOnce && (m.mediaPath != null || m.kind == "text" || m.kind == "scratch")) {
+                    ActionRow(Icons.AutoMirrored.Rounded.Forward, t("Inoltra")) { actionsFor = null; forwardOf = m }
+                }
+                if (m.kind == "sticker" && !m.outgoing && m.mediaPath != null) {
+                    ActionRow(Icons.Rounded.EmojiEmotions, t("Salva tra i miei sticker")) {
+                        actionsFor = null
+                        val ok = Stickers.adopt(m.mediaPath)
+                        Toast.makeText(ctx, if (ok) t("Sticker salvato") else t("Non è stato possibile salvarlo"), Toast.LENGTH_SHORT).show()
+                    }
+                }
                 if (m.text.isNotBlank() && m.kind != "system") {
                     ActionRow(Icons.Rounded.ContentCopy, t("Copia")) {
                         ctx.getSystemService(ClipboardManager::class.java).setPrimaryClip(ClipData.newPlainText("msg", m.text))
@@ -894,6 +910,18 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     Graph.scope.launch { Graph.messenger.deleteForMe(m) }
                 }
             }
+        }
+    }
+    if (stickerSheet) StickerSheet(onDismiss = { stickerSheet = false }) { f ->
+        stickerSheet = false
+        val r = replyRef(); replyTo = null
+        Graph.scope.launch { Graph.messenger.sendSticker(conv, f, r) }
+    }
+    forwardOf?.let { fm ->
+        ForwardSheet(onDismiss = { forwardOf = null }) { targets ->
+            forwardOf = null
+            Graph.scope.launch { targets.forEach { Graph.messenger.forward(fm, it) } }
+            Toast.makeText(ctx, t("Inoltrato"), Toast.LENGTH_SHORT).show()
         }
     }
     if (funSheet) FunSheet(onDismiss = { funSheet = false }) { id ->
@@ -1121,8 +1149,12 @@ private fun MessageRow(
 
     Column(modifier.fillMaxWidth().padding(vertical = 2.dp).then(anim), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         if (showName) {
-            Text((sender?.emoji ?: "") + " " + (sender?.displayName ?: t("Membro")), style = MaterialTheme.typography.labelMedium,
+            val title = if (m.convId.startsWith("g:shard.")) Graph.shards.titleFor(m.convId, m.sender) else null
+            Text((sender?.emoji ?: "") + " " + (sender?.displayName ?: t("Membro")) + (title?.let { "  ·  $it" } ?: ""), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
+        }
+        if (ex.optBoolean("fw")) {
+            Text("↪  " + t("Inoltrato"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp))
         }
         val reply = replyOf(m)
         when (if (m.kind == "photo" && ex.optBoolean("once")) "once" else m.kind) {
@@ -1130,6 +1162,7 @@ private fun MessageRow(
             "game" -> GameBubble(m, myPub, names, shape, onLongPress)
             "dice" -> DiceBubble(m, isNew, shape, onLongPress)
             "board" -> BoardBubble(m, shape, onOpen = { onRoute("board/" + Uri.encode(m.convId)) }, onLongPress = onLongPress)
+            "sticker" -> StickerBubble(m, shape, onLongPress)
             "deleted" -> Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainer, modifier = press) {
                 Text("🚫 " + t("Messaggio eliminato"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
@@ -1300,7 +1333,15 @@ private fun MessageRow(
             else -> Surface(shape = shape, color = bubbleColor, modifier = Modifier.widthIn(max = 300.dp).then(press)) {
                 Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
                     if (reply != null) QuoteBox(reply, names, myPub, out, Modifier) { onQuote(reply.id) }
-                    Text(m.text, color = textColor, style = MaterialTheme.typography.bodyLarge, modifier = Modifier.padding(horizontal = 2.dp))
+                    val story = ex.optJSONObject("story")
+                    if (story != null) StoryRefCard(story, out, textColor)
+                    val react = story != null && ex.optBoolean("react")
+                    Text(
+                        m.text, color = textColor,
+                        style = if (react) MaterialTheme.typography.displaySmall else MaterialTheme.typography.bodyLarge,
+                        modifier = Modifier.padding(horizontal = 2.dp),
+                    )
+                    if (!react) DateChip(m.text, textColor, onAddEvent)
                     MetaLine(m, textColor)
                 }
             }

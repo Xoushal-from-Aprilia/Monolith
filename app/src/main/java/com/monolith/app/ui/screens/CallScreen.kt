@@ -38,6 +38,7 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
+import androidx.compose.material.icons.rounded.MusicNote
 import androidx.compose.material.icons.rounded.StopScreenShare
 import androidx.compose.material.icons.rounded.ScreenShare
 import androidx.compose.material.icons.rounded.Cameraswitch
@@ -55,6 +56,8 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.mutableStateOf
+import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -130,6 +133,12 @@ fun CallScreen(nav: NavHostController) {
             kotlinx.coroutines.delay(500)
         }
     }
+    val track by com.monolith.app.net.ListenTogether.track.collectAsState()
+    var musicSheet by remember { mutableStateOf(false) }
+    if (musicSheet) MusicPickerSheet(onDismiss = { musicSheet = false }, onPick = { s ->
+        musicSheet = false
+        com.monolith.app.net.ListenTogether.start(s.title, s.artist, s.art, s.preview)
+    })
     val shareScreen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
         val d = res.data
         if (res.resultCode == android.app.Activity.RESULT_OK && d != null) Graph.calls.startScreenShare(d)
@@ -195,6 +204,17 @@ fun CallScreen(nav: NavHostController) {
             }
         }
 
+        track?.let { tr ->
+            Row(
+                Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = if (st.sharing) 44.dp else 8.dp)
+                    .clip(CircleShape).background(FG.copy(alpha = 0.92f)).padding(start = 6.dp, end = 14.dp, top = 6.dp, bottom = 6.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (tr.art.isNotBlank()) coil.compose.AsyncImage(tr.art, null, Modifier.size(28.dp).clip(CircleShape))
+                Spacer(Modifier.width(8.dp))
+                Text("♪  " + tr.title + if (tr.artist.isNotBlank()) " · " + tr.artist else "", color = BG, style = MaterialTheme.typography.labelLarge, maxLines = 1)
+            }
+        }
         if (st.sharing) {
             Text(
                 "📱  " + t("Stai mostrando il tuo schermo"), color = BG, style = MaterialTheme.typography.labelLarge,
@@ -232,6 +252,9 @@ fun CallScreen(nav: NavHostController) {
                     }
                     ToggleButton(Icons.AutoMirrored.Rounded.VolumeUp, t("Vivavoce"), st.speaker) { Graph.calls.toggleSpeaker() }
                     if (st.phase == CallPhase.ACTIVE) {
+                        ToggleButton(Icons.Rounded.MusicNote, t("Musica"), track != null) {
+                            if (track != null) com.monolith.app.net.ListenTogether.stop() else musicSheet = true
+                        }
                         ToggleButton(if (st.sharing) Icons.Rounded.StopScreenShare else Icons.Rounded.ScreenShare, t("Schermo"), st.sharing) {
                             if (st.sharing) Graph.calls.stopScreenShare()
                             else {

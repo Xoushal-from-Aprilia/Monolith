@@ -26,7 +26,8 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-data class ShardRoom(val id: String, val name: String, val voice: Boolean)
+/** [only]: a private room, visible to these members only (plus owner and moderators); null = everyone */
+data class ShardRoom(val id: String, val name: String, val voice: Boolean, val only: List<String>? = null)
 
 /** a note pinned on the shard board */
 data class ShardNote(val id: String, val text: String, val by: String, val at: Long)
@@ -57,9 +58,16 @@ data class Shard(
     val mods: List<String> = emptyList(),
     val notes: List<ShardNote> = emptyList(),
     val events: List<ShardEvent> = emptyList(),
+    /** shown to whoever joins */
+    val welcome: String = "",
+    /** custom titles next to names: pk -> title */
+    val titles: Map<String, String> = emptyMap(),
 ) {
     fun conv(room: ShardRoom) = "g:" + groupId(id, room.id)
     fun canManage(pk: String?) = pk != null && (pk == owner || pk in mods)
+    /** who is inside a room: everyone, or for a private room the chosen ones with owner and moderators */
+    fun roomMembers(r: ShardRoom): List<String> = r.only?.let { o -> members.filter { it in o || it == owner || it in mods } } ?: members
+    fun canSee(r: ShardRoom, pk: String?) = pk != null && pk in roomMembers(r)
 
     companion object {
         const val PREFIX = "shard."
@@ -146,7 +154,9 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     private fun toJson(s: Shard): JSONObject = JSONObject()
         .put("id", s.id).put("n", s.name).put("e", s.emoji).put("o", s.owner)
         .put("m", s.members.toJsonArray()).put("u", s.updatedAt).put("md", s.mods.toJsonArray())
-        .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice)) } })
+        .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice).also { j -> r.only?.let { j.put("pm", it.toJsonArray()) } }) } })
+        .put("wl", s.welcome)
+        .put("tt", JSONObject().also { o -> s.titles.forEach { (k, v) -> o.put(k, v) } })
         .put("nb", JSONArray().also { a -> s.notes.forEach { n -> a.put(JSONObject().put("id", n.id).put("x", n.text).put("by", n.by).put("at", n.at)) } })
         .put("ev", JSONArray().also { a -> s.events.filter { now() - it.start < 30L * 86_400_000L }.forEach { a.put(evJson(it)) } })
 
@@ -156,7 +166,12 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             id = o.getString("id"), name = o.optString("n"), emoji = o.optString("e", "🪨"), owner = o.optString("o"),
             members = (o.optJSONArray("m") ?: JSONArray()).strings().filter { Hex.isHex64(it) },
             rooms = (0 until rooms.length()).mapNotNull { i ->
-                rooms.optJSONObject(i)?.let { r -> ShardRoom(r.optString("id").filter { c -> c.isLetterOrDigit() }.take(24), r.optString("n").take(40), r.optBoolean("v")) }
+                rooms.optJSONObject(i)?.let { r ->
+                    ShardRoom(
+                        r.optString("id").filter { c -> c.isLetterOrDigit() }.take(24), r.optString("n").take(40), r.optBoolean("v"),
+                        r.optJSONArray("pm")?.strings()?.filter { Hex.isHex64(it) },
+                    )
+                }
             }.filter { it.id.isNotBlank() }.take(30),
             updatedAt = o.optLong("u"),
             mods = (o.optJSONArray("md") ?: JSONArray()).strings().filter { Hex.isHex64(it) },
@@ -164,6 +179,8 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                 (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { n -> ShardNote(n.optString("id"), n.optString("x").take(500), n.optString("by"), n.optLong("at")) } }
             }.filter { it.id.isNotBlank() }.take(30),
             events = (o.optJSONArray("ev") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let(::evFrom) } }.take(60),
+            welcome = o.optString("wl").take(400),
+            titles = o.optJSONObject("tt")?.let { t -> t.keys().asSequence().filter { Hex.isHex64(it) }.associateWith { t.optString(it).take(24) } } ?: emptyMap(),
         )
     }.getOrNull()
 
@@ -179,7 +196,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             val gid = Shard.groupId(s.id, r.id)
             val existing = db.groups().get(gid)
             val name = s.name + " · " + (if (r.voice) "🔊 " else "#") + r.name
-            db.groups().upsert(Group(gid, name, s.emoji, s.members.joinToString(","), s.owner, existing?.createdAt ?: now()))
+            db.groups().upsert(Group(gid, name, s.emoji, s.roomMembers(r).joinToString(","), s.owner, existing?.createdAt ?: now()))
         }
     }
 
@@ -238,6 +255,8 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                 rooms = incoming.rooms,
                 members = (incoming.members + old.owner + old.mods.filter { it in old.members }).distinct(),
                 notes = incoming.notes,
+                welcome = incoming.welcome,
+                titles = incoming.titles,
                 events = mergeEvents(old.events, incoming.events),
                 updatedAt = incoming.updatedAt,
             )
@@ -246,7 +265,8 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         store(merged, old)
         if (old == null) {
             val who = db.friends().get(from)?.displayName ?: t("Qualcuno")
-            merged.rooms.firstOrNull { !it.voice }?.let { r ->
+            merged.rooms.firstOrNull { !it.voice && merged.canSee(it, k) }?.let { r ->
+                if (merged.welcome.isNotBlank()) db.messages().insert(Message(newId(), merged.conv(r), merged.owner, false, now() + 1, "system", text = "👋  " + merged.welcome, status = MsgStatus.READ))
                 db.messages().insert(Message(newId(), merged.conv(r), from, false, now(), "system", text = t("{0} ti ha invitato in {1}", who, merged.name), status = MsgStatus.READ))
             }
             Graph.notifier.shardInvite(who, merged.emoji + " " + merged.name)
@@ -335,6 +355,51 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val n = s.copy(rooms = s.rooms.filter { it.id != roomId }, updatedAt = now())
         store(n, s)
         broadcast(n)
+    }
+
+    /** owner and moderators: a room for some members only */
+    suspend fun addPrivateRoom(id: String, name: String, voice: Boolean, only: List<String>) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        if (!s.canManage(k)) return
+        val room = ShardRoom(newId().filter { it.isLetterOrDigit() }.take(12), name.trim().take(40).ifBlank { t("Stanza privata") }, voice, (only + k).distinct())
+        val n = s.copy(rooms = s.rooms + room, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun setRoomAccess(id: String, roomId: String, only: List<String>?) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(rooms = s.rooms.map { if (it.id == roomId) it.copy(only = only) else it }, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun setWelcome(id: String, text: String) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(welcome = text.trim().take(400), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun setTitle(id: String, pk: String, title: String) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(titles = if (title.isBlank()) s.titles - pk else s.titles + (pk to title.trim().take(24)), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** the title next to a name in a shard room */
+    fun titleFor(conv: String, pk: String): String? {
+        val s = _all.value.firstOrNull { sh -> sh.rooms.any { sh.conv(it) == conv } } ?: return null
+        return s.titles[pk] ?: when (pk) {
+            s.owner -> t("Fondatore")
+            in s.mods -> t("Moderatore")
+            else -> null
+        }
     }
 
     /** only the owner names moderators */
@@ -505,7 +570,8 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             if (currentRoom() == shard to room) return true
             Graph.calls.hangup()
         }
-        Graph.calls.joinRoom("room.$shard.${r.id}", s.members, Shard.groupId(shard, r.id))
+        if (!s.canSee(r, k)) return false
+        Graph.calls.joinRoom("room.$shard.${r.id}", s.roomMembers(r), Shard.groupId(shard, r.id))
         return true
     }
 }

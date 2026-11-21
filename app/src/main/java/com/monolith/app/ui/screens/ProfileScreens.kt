@@ -355,6 +355,8 @@ fun StoryViewer(nav: NavHostController, pk: String) {
     var lastId by remember { mutableStateOf("") }
     val curEx = remember(cur.id, cur.extra) { runCatching { org.json.JSONObject(cur.extra ?: "{}") }.getOrDefault(org.json.JSONObject()) }
     val curSong = Song.from(curEx.optJSONObject("mu"))
+    val hasBar = pk != myPub && friend?.status == FriendStatus.FRIEND
+    val storyCtx = androidx.compose.ui.platform.LocalContext.current
     StoryMusic(curSong?.takeIf { !it.local }, if (cur.kind == "voice") cur.mediaPath?.takeIf { cur.progress >= 1f || cur.outgoing } else null, paused)
     LaunchedEffect(cur.id, paused) {
         if (lastId != cur.id) { lastId = cur.id; progress.snapTo(0f) }
@@ -379,7 +381,7 @@ fun StoryViewer(nav: NavHostController, pk: String) {
             if (cur.text.isNotBlank()) {
                 Text(
                     cur.text, color = Color.White, style = MaterialTheme.typography.titleMedium, textAlign = TextAlign.Center,
-                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(24.dp)
+                    modifier = Modifier.align(Alignment.BottomCenter).navigationBarsPadding().padding(start = 24.dp, end = 24.dp, top = 24.dp, bottom = if (hasBar) 128.dp else 24.dp)
                         .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
@@ -392,7 +394,14 @@ fun StoryViewer(nav: NavHostController, pk: String) {
             )
         }
         if (curSong != null && cur.kind != "voice") {
-            MusicChip(curSong, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = if (cur.text.isNotBlank() && cur.kind == "photo") 84.dp else 24.dp))
+            MusicChip(curSong, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = (if (cur.text.isNotBlank() && cur.kind == "photo") 84.dp else 24.dp) + (if (hasBar) 108.dp else 0.dp)))
+        }
+        if (hasBar) {
+            StoryReplyBar(friend?.displayName?.substringBefore(' ') ?: "", Modifier.align(Alignment.BottomCenter), onFocus = { paused = it }) { text, react ->
+                val story = cur
+                scope.launch { Graph.messenger.replyToStory(story, text, react) }
+                android.widget.Toast.makeText(storyCtx, if (react) text else t("Inviato in chat"), android.widget.Toast.LENGTH_SHORT).show()
+            }
         }
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
