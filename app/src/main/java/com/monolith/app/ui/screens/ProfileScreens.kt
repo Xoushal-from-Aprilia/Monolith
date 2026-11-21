@@ -824,11 +824,12 @@ private fun BadgesSection(pk: String, mine: Boolean, earnedIds: List<String>, on
         }
     } else {
         LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
-            items(earned, key = { it.id }) { d ->
-                Column(Modifier.width(80.dp).bounceClick(0.92f) { onDetail(d) }, horizontalAlignment = Alignment.CenterHorizontally) {
+            // no keys: a badge earned while the screen is open must not scroll the row
+            items(earned) { d ->
+                Column(Modifier.width(84.dp).bounceClick(0.92f) { onDetail(d) }, horizontalAlignment = Alignment.CenterHorizontally) {
                     com.monolith.app.ui.components.BadgeEmblem(d, true, 64.dp)
                     Spacer(Modifier.height(6.dp))
-                    Text(t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                    Text(t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -852,7 +853,7 @@ private fun BadgesSection(pk: String, mine: Boolean, earnedIds: List<String>, on
                             com.monolith.app.ui.components.BadgeEmblem(d, got, 68.dp)
                             Spacer(Modifier.height(6.dp))
                             Text(
-                                t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                                t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                                 color = if (got) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
                             )
                         }

@@ -1,5 +1,17 @@
 package com.monolith.app.ui.components
 
+import kotlinx.coroutines.flow.collectLatest
+
+import androidx.compose.runtime.remember
+
+import androidx.compose.runtime.State
+
+import androidx.compose.runtime.LaunchedEffect
+
+import androidx.compose.animation.core.VectorConverter
+
+import androidx.compose.animation.core.Animatable
+
 import android.content.Context
 import android.hardware.Sensor
 import android.hardware.SensorEvent
@@ -65,27 +77,40 @@ object Tilt {
     }
 }
 
+/** the tilt as a state: read it inside graphicsLayer / draw blocks so the screen doesn't recompose at every sensor event */
 @Composable
-fun rememberTilt(): Offset {
+fun rememberTiltState(): State<Offset> {
     val ctx = LocalContext.current
     DisposableEffect(Unit) {
         Tilt.acquire(ctx)
         onDispose { Tilt.release() }
     }
-    val v by Tilt.value.collectAsState()
-    return v
+    return Tilt.value.collectAsState()
 }
 
-/** moves and leans the content a little as the phone tilts: [depth] in dp, [lean] in degrees */
+@Composable
+fun rememberTilt(): Offset = rememberTiltState().value
+
+/**
+ * moves and leans the content a little as the phone tilts: [depth] in dp, [lean] in degrees.
+ * The tilt is only read while drawing, so nothing recomposes when the phone moves.
+ */
 fun Modifier.tiltDepth(depth: Float = 10f, lean: Float = 6f): Modifier = composed {
-    val t = rememberTilt()
-    val x by animateFloatAsState(t.x, spring(stiffness = 120f), label = "tx")
-    val y by animateFloatAsState(t.y, spring(stiffness = 120f), label = "ty")
+    val ctx = LocalContext.current
+    DisposableEffect(Unit) {
+        Tilt.acquire(ctx)
+        onDispose { Tilt.release() }
+    }
+    val anim = remember { Animatable(Offset.Zero, Offset.VectorConverter) }
+    LaunchedEffect(Unit) {
+        Tilt.value.collectLatest { anim.animateTo(it, spring(stiffness = 120f)) }
+    }
     graphicsLayer {
-        translationX = x * depth.dp.toPx()
-        translationY = y * depth.dp.toPx()
-        rotationY = x * lean
-        rotationX = -y * lean
+        val v = anim.value
+        translationX = v.x * depth.dp.toPx()
+        translationY = v.y * depth.dp.toPx()
+        rotationY = v.x * lean
+        rotationX = -v.y * lean
         cameraDistance = 16f * density
     }
 }

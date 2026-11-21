@@ -102,6 +102,24 @@ class Shots {
         db.agenda().upsert(com.monolith.app.data.AgendaEvent("e1", "Caffè con Ada", start = today + 9 * 3_600_000L, end = today + 10 * 3_600_000L, emoji = "☕", createdAt = now, updatedAt = now))
         db.agenda().upsert(com.monolith.app.data.AgendaEvent("e2", "Palestra", start = today + 18 * 3_600_000L + 1_800_000L, emoji = "🏋️", createdAt = now, updatedAt = now))
         db.agenda().upsert(com.monolith.app.data.AgendaEvent("e3", "Compleanno di Leo", start = today + 2 * day, allDay = true, emoji = "🎂", createdAt = now, updatedAt = now))
+        // a shard with rooms, messages and a board
+        val sh = JSONObject().put("id", "s1").put("n", "Montagna").put("e", "🏔️").put("o", me).put("u", now)
+            .put("m", org.json.JSONArray().put(me).put(ada).put(leo).put(mia)).put("md", org.json.JSONArray().put(ada))
+            .put("r", org.json.JSONArray()
+                .put(JSONObject().put("id", "gen").put("n", "generale").put("v", false))
+                .put(JSONObject().put("id", "gite").put("n", "gite").put("v", false))
+                .put(JSONObject().put("id", "staff").put("n", "organizzatori").put("v", false).put("pm", org.json.JSONArray().put(me).put(ada)))
+                .put(JSONObject().put("id", "voce").put("n", "chiacchiere").put("v", true)))
+            .put("wl", "Benvenuti! Qui organizziamo le uscite in montagna.")
+            .put("tt", JSONObject().put(ada, "Guida"))
+            .put("nb", org.json.JSONArray().put(JSONObject().put("id", "n1").put("x", "Sabato: ritrovo alle 7 al parcheggio").put("by", ada).put("at", now)))
+        java.io.File(ctx.filesDir, "shards.json").writeText(org.json.JSONArray().put(sh).toString())
+        Graph.shards = com.monolith.app.net.ShardManager(ctx, Graph.scope)
+        val gid = "shard.s1.gen"
+        db.groups().upsert(com.monolith.app.data.Group(gid, "Montagna · #generale", "🏔️", listOf(me, ada, leo, mia).joinToString(","), me, now))
+        listOf(ada to "Chi viene sabato?", leo to "Io ci sono!", me to "Porto il thermos ☕", mia to "Ci sono anche io, ma arrivo alle 8").forEachIndexed { i, (who, tx) ->
+            db.messages().upsert(Message("g$i", "g:$gid", who, who == me, now - (4 - i) * 300_000L, "text", tx, status = MsgStatus.READ))
+        }
         Thread.sleep(300)
     }
 
@@ -152,6 +170,17 @@ class Shots {
     @Test fun chat_dark() = shot("20_chat_dark", dark = true) { com.monolith.app.ui.screens.ChatScreen(it, ada) }
     @Test fun chat_attach() = shot("21_chat_attach", act = { compose.onAllNodesWithContentDescription("Allega").onFirst().performClick() }) { com.monolith.app.ui.screens.ChatScreen(it, ada) }
     @Test fun event_editor() = shot("22_event_editor") { com.monolith.app.ui.screens.EventEditorScreen(it, "e1", 0L) }
+    @Test fun shard() = shot("25_shard") { com.monolith.app.ui.HomeScreen(it, 4) {} }
+    @Test fun onboarding() = shot("26_onboarding") { com.monolith.app.ui.screens.OnboardingFlow() }
+    @Test fun film() = shot("27_film", act = { compose.mainClock.advanceTimeBy(4300L * 6) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
+    @Test fun credits() = shot("28_credits") { com.monolith.app.ui.screens.CreditsScreen(it) }
+    @Test fun list_new() = shot("29_list_new") { com.monolith.app.ui.screens.ListDetailScreen(it, "new") }
+    @Test fun new_group() = shot("30_new_group") { com.monolith.app.ui.screens.NewGroupScreen(it) }
+    @Test fun diary() = shot("31_diary") { com.monolith.app.ui.screens.DiaryScreen(it) }
+    @Test fun permissions() = shot("32_permissions") { com.monolith.app.ui.screens.PermissionsScreen(first = true) {} }
+    @Test fun chat_list_dark() = shot("33_chat_list_dark", dark = true) { com.monolith.app.ui.HomeScreen(it, 1) {} }
+    @Test fun friends_dark() = shot("34_friends_dark", dark = true) { com.monolith.app.ui.HomeScreen(it, 3) {} }
+    @Test fun group_chat() = shot("35_shard_room") { com.monolith.app.ui.screens.ChatScreen(it, "g:shard.s1.gen") }
     @Test fun journal() = shot("23_journal") { com.monolith.app.ui.screens.JournalScreen(it) }
     @Test fun sounds() = shot("24_sounds") { com.monolith.app.ui.screens.SoundsScreen(it) }
     @Test fun badges() = shot("10_badges") { BadgeBoard(false) }

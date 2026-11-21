@@ -211,10 +211,10 @@ fun ChatWallpaper(conv: String, modifier: Modifier) {
     val pattern = walls[conv] ?: "none"
     if (pattern == "none") return
     val ink = MaterialTheme.colorScheme.onSurface.copy(alpha = 0.07f)
-    val tilt = com.monolith.app.ui.components.rememberTilt()
+    val tilt = com.monolith.app.ui.components.rememberTiltState()
     Canvas(modifier.graphicsLayer {
-        translationX = tilt.x * 14.dp.toPx()
-        translationY = tilt.y * 14.dp.toPx()
+        translationX = tilt.value.x * 14.dp.toPx()
+        translationY = tilt.value.y * 14.dp.toPx()
         scaleX = 1.08f
         scaleY = 1.08f
     }) { drawPattern(pattern, ink) }

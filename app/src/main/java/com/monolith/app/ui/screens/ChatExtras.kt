@@ -193,19 +193,18 @@ fun StatusStrip(friends: List<Friend>, isOnline: (String) -> Boolean, onMine: ()
             Column(Modifier.width(66.dp).bounceClick(onClick = onMine), horizontalAlignment = Alignment.CenterHorizontally) {
                 Box {
                     Avatar(profile?.emoji ?: "🗿", 58.dp, ring = mine?.active == true)
+                    val m = mine
+                    val on = m != null && m.active
                     Box(
-                        Modifier.align(Alignment.BottomEnd).size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
+                        Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp).size(24.dp).clip(CircleShape)
+                            .background(if (on) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.primary),
                         contentAlignment = Alignment.Center,
                     ) {
-                        val m = mine
-                        if (m != null && m.active) Text(m.emoji, fontSize = 12.sp) else Icon(Icons.Rounded.Add, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
+                        if (on) Text(m!!.emoji, fontSize = 13.sp) else Icon(Icons.Rounded.Add, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onPrimary)
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(
-                    mine?.takeIf { it.active }?.text?.ifBlank { null } ?: t("Il tuo stato"),
-                    style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis,
-                )
+                Spacer(Modifier.height(6.dp))
+                Text(t("Tu"), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
         items(withStory + withStatus + onlineOnly, key = { it.pubkey }) { f ->
@@ -221,8 +220,8 @@ fun StatusStrip(friends: List<Friend>, isOnline: (String) -> Boolean, onMine: ()
                         ) { Text(st.emoji, fontSize = 13.sp) }
                     }
                 }
-                Spacer(Modifier.height(4.dp))
-                Text(f.displayName, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(6.dp))
+                Text(f.displayName.substringBefore(' '), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
             }
         }
     }

@@ -140,13 +140,13 @@ fun EditProfileScreen(nav: NavHostController) {
             EditSection(t("Informazioni")) {
                 OutlinedTextField(
                     name, { name = it.take(32) }, label = { Text(t("Nome visualizzato")) }, singleLine = true,
-                    supportingText = { Text("${name.length}/32") },
+                    supportingText = { Text("${name.length}/32", Modifier.fillMaxWidth(), textAlign = TextAlign.End) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), shape = MaterialTheme.shapes.medium,
                 )
                 Spacer(Modifier.height(4.dp))
                 OutlinedTextField(
                     bio, { bio = it.take(140) }, label = { Text(t("Bio")) }, minLines = 3, maxLines = 5,
-                    supportingText = { Text("${bio.length}/140") },
+                    supportingText = { Text("${bio.length}/140", Modifier.fillMaxWidth(), textAlign = TextAlign.End) },
                     modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp), shape = MaterialTheme.shapes.medium,
                 )
                 Text(
@@ -224,7 +224,7 @@ fun EditProfileScreen(nav: NavHostController) {
                                 }
                                 Spacer(Modifier.height(4.dp))
                                 Text(
-                                    t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                                    t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 2, minLines = 2, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
                                     fontWeight = if (idx >= 0) FontWeight.SemiBold else FontWeight.Normal,
                                     color = if (idx >= 0) MaterialTheme.colorScheme.onSurface else muted,
                                 )
