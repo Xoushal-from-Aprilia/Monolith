@@ -449,6 +449,23 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.2.0", "2026-11-21",
+        listOf(
+            "Un filmato animato alla prima apertura racconta tutte le funzioni; lo rivedi quando vuoi dalle Impostazioni",
+            "Distintivi: tanti emblemi da sbloccare usando l'app, visibili nel tuo profilo e in quello degli amici",
+            "Copertina del profilo: scegli tra le copertine preimpostate, dietro alla tua foto come su Facebook",
+            "Sticker personali: crea sticker dalle tue foto, con forme, filtri e scritte, e salva quelli che ricevi",
+            "Rispondi alle storie: una risposta o una reazione arriva in chat con l'anteprima della storia",
+            "Inoltra messaggi, foto, vocali e sticker ad altre chat",
+            "Date nei messaggi: «domani alle 9» o «sabato» diventano un tocco per creare l'evento",
+            "Shard: stanze private visibili solo ad alcuni membri, messaggio di benvenuto e titoli personalizzati",
+            "Ascolto insieme: in chiamata scegli una canzone e parte nello stesso momento per tutti",
+            "Anniversari d'amicizia: un avviso nel giorno in cui siete diventati amici, e da quanto nel profilo",
+            "Amico nei paraggi: se lo attivate in due, un avviso quando siete a meno di 500 m",
+            "Backup automatico: ogni settimana un backup cifrato nella cartella che scegli, con le ultime 4 copie",
+        ),
+    ),
+    Release(
         "2.1.0", "2026-11-21",
         listOf(
             "Gli Shard hanno la loro scheda nella barra in basso, separata dalle altre, con l'icona di un frammento di monolite",

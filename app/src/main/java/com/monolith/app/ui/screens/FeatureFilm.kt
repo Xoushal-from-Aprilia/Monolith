@@ -80,11 +80,12 @@ private data class Scene(val kicker: String, val title: String, val lines: List<
 private val FILM = listOf(
     Scene("", "Monolith" /*i18n*/, listOf("Tutto quello che conta, tra amici." /*i18n*/), "intro"),
     Scene("Agenda" /*i18n*/, "Il tuo tempo, condiviso" /*i18n*/, listOf("Eventi e inviti agli amici" /*i18n*/, "Conto alla rovescia e meteo" /*i18n*/, "Compleanni e anniversari d'amicizia" /*i18n*/), "agenda"),
-    Scene("Clubhouse" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Foto a vista unica e sticker" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
+    Scene("Clubhouse" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Sticker, inoltri e foto a vista unica" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
     Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
-    Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Distintivi da collezionare" /*i18n*/), "bond"),
+    Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi da collezionare" /*i18n*/, "I salvati di ogni amico" /*i18n*/), "profile"),
+    Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
     Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Blocco e avviso screenshot" /*i18n*/, "Backup cifrato automatico" /*i18n*/), "safe"),
@@ -369,6 +370,33 @@ private fun SceneArt(art: String, ink: Color, bg: Color, p: Float, clock: Float)
                 val fl = stage(p, 0.7f, 0.9f)
                 drawCircle(ink, 20f * fl, Offset(w * 0.86f, h * 0.06f + 30f))
                 drawCircle(bg, 8f * fl, Offset(w * 0.86f, h * 0.06f + 30f))
+            }
+            "profile" -> {
+                // cover sliding in, avatar popping over it, a row of badges
+                val cv = stage(p, 0f, 0.3f)
+                drawRoundRect(ink.copy(alpha = 0.22f), Offset(0f, h * 0.05f), Size(w * cv, h * 0.34f), CornerRadius(26f))
+                for (k in 0 until 5) {
+                    val y = h * 0.1f + k * h * 0.06f
+                    drawLine(ink.copy(alpha = 0.18f * cv), Offset(w * 0.05f, y + (clock * 40f + k * 13f) % 30f), Offset(w * 0.95f * cv, y), 3f, StrokeCap.Round)
+                }
+                val av = stage(p, 0.25f, 0.45f)
+                drawCircle(bg, w * 0.15f * av, Offset(c.x, h * 0.4f))
+                drawCircle(ink, w * 0.13f * av, Offset(c.x, h * 0.4f), style = Stroke(6f))
+                drawCircle(ink, w * 0.045f * av, Offset(c.x, h * 0.37f))
+                for (k in 0 until 4) {
+                    val s = stage(p, 0.45f + k * 0.08f, 0.62f + k * 0.08f)
+                    val bc = Offset(w * (0.2f + k * 0.2f), h * 0.78f)
+                    val r = w * 0.07f * s
+                    val hex = Path().apply {
+                        for (q in 0 until 6) {
+                            val a = q / 6f * tau - tau / 4
+                            val pt = bc + Offset(cos(a) * r, sin(a) * r)
+                            if (q == 0) moveTo(pt.x, pt.y) else lineTo(pt.x, pt.y)
+                        }
+                        close()
+                    }
+                    if (k % 2 == 0) drawPath(hex, ink) else drawPath(hex, ink, style = Stroke(5f))
+                }
             }
             "shard" -> {
                 val railW = w * 0.2f
