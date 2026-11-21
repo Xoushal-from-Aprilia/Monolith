@@ -29,6 +29,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
@@ -426,13 +427,15 @@ private val TABS = listOf(
     TabSpec("Clubhouse", Icons.Rounded.Forum, Icons.Outlined.Forum),
     TabSpec("Mappa", Icons.Rounded.Map, Icons.Outlined.Map),
     TabSpec("Amici", Icons.Rounded.People, Icons.Outlined.People),
+    TabSpec("Shard", com.monolith.app.ui.components.ShardIcons.Filled, com.monolith.app.ui.components.ShardIcons.Outline),
 )
 
 @Composable
 private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
     val unread by remember { Graph.db.messages().unread() }.collectAsState(initial = emptyList())
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
-    val unreadTotal = unread.filter { !com.monolith.app.net.Shard.isQuietConv(it.convId) }.sumOf { it.n }
+    val unreadTotal = unread.filter { !com.monolith.app.net.Shard.isQuietConv(it.convId) && !it.convId.startsWith("g:shard.") }.sumOf { it.n }
+    val unreadShards = unread.filter { it.convId.startsWith("g:shard.") }.sumOf { it.n }
     val requests = friends.count { it.status == FriendStatus.INCOMING }
 
     Scaffold(
@@ -440,6 +443,13 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
                 TABS.forEachIndexed { i, tb ->
+                    // the Shard tab stands apart, after a thin line
+                    if (i == 4) {
+                        Box(
+                            Modifier.align(Alignment.CenterVertically).width(1.dp).height(30.dp)
+                                .background(MaterialTheme.colorScheme.outlineVariant),
+                        )
+                    }
                     val selected = tab == i
                     val scale by animateFloatAsState(if (selected) 1.12f else 1f, Motion.bouncy(), label = "tabScale")
                     val lift by animateDpAsState(if (selected) (-1).dp else 0.dp, Motion.bouncy(), label = "tabLift")
@@ -450,6 +460,7 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
                             val badge = when (i) {
                                 1 -> unreadTotal
                                 3 -> requests
+                                4 -> unreadShards
                                 else -> 0
                             }
                             val badgeScale by animateFloatAsState(if (badge > 0) 1f else 0f, Motion.bouncy(), label = "badge")
@@ -499,6 +510,7 @@ private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
                 0 -> AgendaScreen(nav)
                 1 -> ChatListScreen(nav)
                 2 -> MapScreen(nav)
+                4 -> com.monolith.app.ui.screens.ShardsHome(nav)
                 else -> FriendsScreen(nav, onOpenChat = { pk -> nav.navigate(Routes.chat(pk)) })
             }
         }

@@ -9,6 +9,8 @@ import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.border
 import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
@@ -90,51 +92,6 @@ import com.monolith.app.ui.components.SectionLabel
 import com.monolith.app.ui.components.bounceClick
 import kotlinx.coroutines.launch
 
-/** the row of shards on top of the Clubhouse */
-@Composable
-fun ShardStrip(nav: NavHostController, unread: Map<String, Int>) {
-    val shards by Graph.shards.all.collectAsState()
-    val voice by Graph.shards.voice.collectAsState()
-    var create by remember { mutableStateOf(false) }
-    Column {
-        SectionLabel(t("Shard"))
-        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp), modifier = Modifier.padding(bottom = 6.dp)) {
-            items(shards.sortedBy { it.name.lowercase() }, key = { it.id }) { s ->
-                val n = s.rooms.sumOf { unread[s.conv(it)] ?: 0 }
-                val live = s.rooms.any { r -> r.voice && Graph.shards.inRoom(s.id, r.id).isNotEmpty() } && voice.isNotEmpty()
-                Column(Modifier.width(72.dp).animateItem().bounceClick { nav.navigate(Routes.shard(s.id)) }, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box {
-                        Box(
-                            Modifier.size(60.dp).clip(RoundedCornerShape(20.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh),
-                            contentAlignment = Alignment.Center,
-                        ) { Text(s.emoji, fontSize = 28.sp) }
-                        if (n > 0) {
-                            Box(
-                                Modifier.align(Alignment.TopEnd).offset(x = 4.dp, y = (-4).dp).size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary),
-                                contentAlignment = Alignment.Center,
-                            ) { Text(if (n > 99) "99+" else "$n", color = MaterialTheme.colorScheme.onPrimary, fontSize = 10.sp) }
-                        }
-                        if (live) Box(Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp)) { PulseDot(size = 12.dp) }
-                    }
-                    Spacer(Modifier.height(4.dp))
-                    Text(s.name, style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                }
-            }
-            item(key = "new") {
-                Column(Modifier.width(72.dp).bounceClick { create = true }, horizontalAlignment = Alignment.CenterHorizontally) {
-                    Box(
-                        Modifier.size(60.dp).clip(RoundedCornerShape(20.dp)).border(1.5.dp, MaterialTheme.colorScheme.outline, RoundedCornerShape(20.dp)),
-                        contentAlignment = Alignment.Center,
-                    ) { Icon(Icons.Rounded.Add, t("Nuovo shard")) }
-                    Spacer(Modifier.height(4.dp))
-                    Text(t("Nuovo"), style = MaterialTheme.typography.labelSmall)
-                }
-            }
-        }
-    }
-    if (create) ShardEditSheet(null, onClose = { create = false }) { id -> nav.navigate(Routes.shard(id)) }
-}
-
 private val SHARD_EMOJI = listOf("🪨", "🎮", "🎧", "📚", "⚽", "🍕", "🎬", "🏔️", "💼", "🎨", "🌙", "🔥")
 
 /** create (shard = null) or edit a shard */
@@ -209,7 +166,11 @@ private fun FriendChip(f: Friend, selected: Boolean, onClick: () -> Unit) {
 }
 
 @Composable
-fun ShardScreen(nav: NavHostController, id: String) {
+fun ShardScreen(nav: NavHostController, id: String) = ShardBody(nav, id, embedded = false)
+
+/** the content of a shard: on its own screen, or next to the rail in the Shard tab ([embedded]) */
+@Composable
+fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     val ctx = LocalContext.current
     val shards by Graph.shards.all.collectAsState()
     val voiceMap by Graph.shards.voice.collectAsState()
@@ -226,7 +187,7 @@ fun ShardScreen(nav: NavHostController, id: String) {
     var confirmLeave by remember { mutableStateOf(false) }
     var pendingRoom by remember { mutableStateOf<String?>(null) }
     LaunchedEffect(id) { Graph.shards.ask(id) }
-    LaunchedEffect(s == null) { if (s == null && shards.isNotEmpty()) nav.popBackStack() }
+    LaunchedEffect(s == null) { if (!embedded && s == null && shards.isNotEmpty()) nav.popBackStack() }
     if (s == null) return
     val byPk = people.associateBy { it.pubkey }
     val unreadBy = unread.associate { it.convId to it.n }
@@ -247,11 +208,13 @@ fun ShardScreen(nav: NavHostController, id: String) {
         pendingRoom = null
     }
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).then(if (embedded) Modifier else Modifier.statusBarsPadding())) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
-            Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-                Text(s.emoji, fontSize = 22.sp)
+            if (!embedded) {
+                IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
+                Box(Modifier.size(44.dp).clip(RoundedCornerShape(14.dp)).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
+                    Text(s.emoji, fontSize = 22.sp)
+                }
             }
             Spacer(Modifier.width(12.dp))
             Column(Modifier.weight(1f)) {
@@ -273,30 +236,7 @@ fun ShardScreen(nav: NavHostController, id: String) {
             }
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-            if (s.notes.isNotEmpty() || canManage) {
-                item(key = "boardLabel") {
-                    Row(verticalAlignment = Alignment.CenterVertically) {
-                        SectionLabel(t("Bacheca"), Modifier.weight(1f))
-                        if (canManage) TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
-                    }
-                }
-                if (s.notes.isEmpty()) item(key = "boardEmpty") {
-                    Text(t("Note e link per tutti: le regole, il prossimo ritrovo, la playlist del gruppo."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                items(s.notes, key = { "n" + it.id }) { n -> ShardNoteCard(n, byPk, me, canManage) { Graph.scope.launch { Graph.shards.removeNote(s.id, n.id) } } }
-            }
-            val upcoming = s.events.filter { !it.deleted && it.start > now() - 86_400_000L }.sortedBy { it.start }
-            item(key = "eventsLabel") {
-                Row(verticalAlignment = Alignment.CenterVertically) {
-                    SectionLabel(t("Eventi"), Modifier.weight(1f))
-                    TextButton(onClick = { eventDialog = true }) { Text(t("Nuovo")) }
-                }
-            }
-            if (upcoming.isEmpty()) item(key = "eventsEmpty") {
-                Text(t("Nessun evento in programma."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            }
-            items(upcoming, key = { "e" + it.id }) { e -> ShardEventCard(s, e, byPk, me) }
-            item(key = "textLabel") { SectionLabel(t("Stanze scritte"), Modifier.padding(top = 10.dp)) }
+            item(key = "textLabel") { SectionLabel(t("Stanze scritte")) }
             items(s.rooms.filter { !it.voice }, key = { "t" + it.id }) { r ->
                 val conv = s.conv(r)
                 val n = unreadBy[conv] ?: 0
@@ -373,6 +313,29 @@ fun ShardScreen(nav: NavHostController, id: String) {
                     }
                 }
             }
+            if (s.notes.isNotEmpty() || canManage) {
+                item(key = "boardLabel") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel(t("Bacheca"), Modifier.weight(1f).padding(top = 10.dp))
+                        if (canManage) TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
+                    }
+                }
+                if (s.notes.isEmpty()) item(key = "boardEmpty") {
+                    Text(t("Note e link per tutti: le regole, il prossimo ritrovo, la playlist del gruppo."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(s.notes, key = { "n" + it.id }) { n -> ShardNoteCard(n, byPk, me, canManage) { Graph.scope.launch { Graph.shards.removeNote(s.id, n.id) } } }
+            }
+            val upcoming = s.events.filter { !it.deleted && it.start > now() - 86_400_000L }.sortedBy { it.start }
+            item(key = "eventsLabel") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(t("Eventi"), Modifier.weight(1f).padding(top = 10.dp))
+                    TextButton(onClick = { eventDialog = true }) { Text(t("Nuovo")) }
+                }
+            }
+            if (upcoming.isEmpty()) item(key = "eventsEmpty") {
+                Text(t("Nessun evento in programma."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            items(upcoming, key = { "e" + it.id }) { e -> ShardEventCard(s, e, byPk, me) }
             item(key = "membersLabel") { SectionLabel(t("Membri"), Modifier.padding(top = 10.dp)) }
             items(s.members.sortedBy { if (it == s.owner) 0 else 1 }, key = { "m$it" }) { pk ->
                 val f = byPk[pk]
@@ -478,7 +441,7 @@ fun ShardScreen(nav: NavHostController, id: String) {
             title = { Text(t("Uscire da {0}?", s.name)) },
             text = { Text(t("Non vedrai più le stanze. Potranno invitarti di nuovo.")) },
             confirmButton = {
-                TextButton(onClick = { confirmLeave = false; Graph.scope.launch { Graph.shards.leave(s.id) }; nav.popBackStack() }) { Text(t("Esci")) }
+                TextButton(onClick = { confirmLeave = false; Graph.scope.launch { Graph.shards.leave(s.id) }; if (!embedded) nav.popBackStack() }) { Text(t("Esci")) }
             },
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(t("Annulla")) } },
         )
@@ -618,5 +581,107 @@ private fun ShardEventDialog(onDismiss: () -> Unit, onCreate: (String, String, L
             },
             text = { androidx.compose.material3.TimePicker(state) },
         )
+    }
+}
+
+
+// ====================================================================== the Shard tab: rail of shards on the left, content on the right
+
+private object ShardTab {
+    private val sp by lazy { Graph.app.getSharedPreferences("shard_tab", android.content.Context.MODE_PRIVATE) }
+    var last: String?
+        get() = sp.getString("last", null)
+        set(v) { sp.edit().putString("last", v).apply() }
+}
+
+/** a shard to open in the tab (from a notification or an invite) */
+object ShardFocus {
+    val id = kotlinx.coroutines.flow.MutableStateFlow<String?>(null)
+}
+
+@Composable
+fun ShardsHome(nav: NavHostController) {
+    val shards by Graph.shards.all.collectAsState()
+    val voice by Graph.shards.voice.collectAsState()
+    val unread by remember { Graph.db.messages().unread() }.collectAsState(initial = emptyList())
+    val focus by ShardFocus.id.collectAsState()
+    val unreadBy = unread.associate { it.convId to it.n }
+    val sorted = shards.sortedBy { it.name.lowercase() }
+    var selected by androidx.compose.runtime.saveable.rememberSaveable { mutableStateOf(ShardTab.last) }
+    LaunchedEffect(focus) { focus?.let { selected = it; ShardTab.last = it; ShardFocus.id.value = null } }
+    val cur = sorted.firstOrNull { it.id == selected } ?: sorted.firstOrNull()
+    var create by remember { mutableStateOf(false) }
+    Row(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background)) {
+        Column(
+            Modifier.width(76.dp).fillMaxHeight().background(MaterialTheme.colorScheme.surfaceContainerLow).statusBarsPadding()
+                .verticalScroll(androidx.compose.foundation.rememberScrollState()).padding(vertical = 10.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
+            verticalArrangement = Arrangement.spacedBy(10.dp),
+        ) {
+            Box(
+                Modifier.size(50.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.primary),
+                contentAlignment = Alignment.Center,
+            ) { Icon(com.monolith.app.ui.components.ShardIcons.Filled, null, Modifier.size(28.dp), tint = MaterialTheme.colorScheme.onPrimary) }
+            Box(Modifier.width(32.dp).height(2.dp).clip(CircleShape).background(MaterialTheme.colorScheme.outlineVariant))
+            sorted.forEach { s ->
+                val n = s.rooms.sumOf { unreadBy[s.conv(it)] ?: 0 }
+                val live = voice.isNotEmpty() && s.rooms.any { r -> r.voice && Graph.shards.inRoom(s.id, r.id).isNotEmpty() }
+                RailItem(s, s.id == cur?.id, n, live) { selected = s.id; ShardTab.last = s.id }
+            }
+            Box(
+                Modifier.size(50.dp).clip(CircleShape).border(1.5.dp, MaterialTheme.colorScheme.outline, CircleShape).bounceClick(0.9f) { create = true },
+                contentAlignment = Alignment.Center,
+            ) { Icon(Icons.Rounded.Add, t("Nuovo shard")) }
+        }
+        Box(Modifier.weight(1f).fillMaxHeight().statusBarsPadding()) {
+            if (cur == null) {
+                Column(Modifier.fillMaxSize().padding(28.dp), verticalArrangement = Arrangement.Center, horizontalAlignment = Alignment.CenterHorizontally) {
+                    Icon(com.monolith.app.ui.components.ShardIcons.Outline, null, Modifier.size(72.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Spacer(Modifier.height(16.dp))
+                    Text(t("Nessuno shard"), style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        t("Uno shard è uno spazio per un gruppo di amici, con stanze scritte e vocali, bacheca ed eventi."),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        textAlign = androidx.compose.ui.text.style.TextAlign.Center,
+                    )
+                    Spacer(Modifier.height(20.dp))
+                    Button(onClick = { create = true }, shape = CircleShape) { Text(t("Crea uno shard")) }
+                }
+            } else {
+                androidx.compose.runtime.key(cur.id) { ShardBody(nav, cur.id, embedded = true) }
+            }
+        }
+    }
+    if (create) ShardEditSheet(null, onClose = { create = false }) { id -> selected = id; ShardTab.last = id }
+}
+
+/** one shard in the rail: a circle that becomes a rounded square when selected, with the pill on the left */
+@Composable
+private fun RailItem(s: Shard, selected: Boolean, unread: Int, live: Boolean, onClick: () -> Unit) {
+    val corner by androidx.compose.animation.core.animateDpAsState(if (selected) 16.dp else 25.dp, com.monolith.app.ui.theme.Motion.bouncy(), label = "corner")
+    val pill by androidx.compose.animation.core.animateDpAsState(if (selected) 36.dp else if (unread > 0) 8.dp else 0.dp, com.monolith.app.ui.theme.Motion.bouncy(), label = "pill")
+    Box(Modifier.fillMaxWidth(), contentAlignment = Alignment.Center) {
+        Box(
+            Modifier.align(Alignment.CenterStart).width(4.dp).height(pill)
+                .clip(RoundedCornerShape(topEnd = 4.dp, bottomEnd = 4.dp)).background(MaterialTheme.colorScheme.onSurface),
+        )
+        Box {
+            Box(
+                Modifier.size(50.dp).clip(RoundedCornerShape(corner))
+                    .background(if (selected) MaterialTheme.colorScheme.primary else MaterialTheme.colorScheme.surfaceContainerHighest)
+                    .bounceClick(0.9f, onClick = onClick),
+                contentAlignment = Alignment.Center,
+            ) { Text(s.emoji, fontSize = 24.sp) }
+            if (unread > 0) {
+                Box(
+                    Modifier.align(Alignment.BottomEnd).offset(x = 4.dp, y = 4.dp).size(20.dp).clip(CircleShape)
+                        .background(MaterialTheme.colorScheme.onSurface).border(2.dp, MaterialTheme.colorScheme.surfaceContainerLow, CircleShape),
+                    contentAlignment = Alignment.Center,
+                ) { Text(if (unread > 9) "9+" else "$unread", color = MaterialTheme.colorScheme.surface, fontSize = 9.sp) }
+            } else if (live) {
+                Box(Modifier.align(Alignment.BottomEnd).offset(x = 3.dp, y = 3.dp)) { PulseDot(size = 12.dp) }
+            }
+        }
     }
 }

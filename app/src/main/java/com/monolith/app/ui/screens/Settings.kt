@@ -446,6 +446,14 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.1.0", "2026-11-21",
+        listOf(
+            "Gli Shard hanno la loro scheda nella barra in basso, separata dalle altre, con l'icona di un frammento di monolite",
+            "Come su Discord: a sinistra la colonna con tutti i tuoi Shard, a destra stanze scritte, vocali, bacheca, eventi e membri",
+            "Gli Shard non sono più in Clubhouse e i loro messaggi da leggere hanno un contatore a parte",
+        ),
+    ),
+    Release(
         "2.0.0", "2026-11-21",
         listOf(
             "Giochi in chat: Tris, Forza 4 e Impiccato a turni, con l'avviso quando tocca a te",

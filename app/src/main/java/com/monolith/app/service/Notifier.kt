@@ -251,7 +251,7 @@ class Notifier(private val ctx: Context) {
         )
 
     fun shardEvent(shard: String, text: String) =
-        simple(("shev$shard$text").hashCode(), t("Nuovo evento in {0}", shard), text, "📅", openApp(22) { putExtra(EXTRA_TAB, 0) })
+        simple(("shev$shard$text").hashCode(), t("Nuovo evento in {0}", shard), text, "📅", openApp(22) { putExtra(EXTRA_TAB, 4) })
 
     fun screenshot(conv: String, name: String, emoji: String) =
         simple(("shot$conv").hashCode(), t("{0} ha fatto uno screenshot", name), t("della vostra chat"), emoji, openApp(("s$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
@@ -312,7 +312,7 @@ class Notifier(private val ctx: Context) {
         simple(("tog$kind$what").hashCode(), if (kind == 0) t("{0} ti ha aggiunto a delle spese condivise", from) else t("{0} ti ha invitato a un'abitudine", from), what, if (kind == 0) "💶" else "✅", openApp(19) { putExtra(EXTRA_TAB, 0) })
 
     fun shardInvite(from: String, shard: String) =
-        simple(("shard$shard").hashCode(), t("{0} ti ha invitato in uno shard", from), shard, "🪨", openApp(18) { putExtra(EXTRA_TAB, 1) })
+        simple(("shard$shard").hashCode(), t("{0} ti ha invitato in uno shard", from), shard, "🪨", openApp(18) { putExtra(EXTRA_TAB, 4) })
 
     fun placeShared(from: String, place: String) =
         simple(("place$place").hashCode(), t("{0} ha aggiunto un luogo comune", from), place, "📍", openApp(15) { putExtra(EXTRA_TAB, 2) })

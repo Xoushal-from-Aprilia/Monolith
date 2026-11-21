@@ -276,7 +276,6 @@ fun ChatListScreen(nav: NavHostController) {
                 )
             }
             if (weeklyReady) item(key = "weekly") { WeeklyCard { nav.navigate("wrapped") } }
-            item(key = "shards") { ShardStrip(nav, unreadBy) }
             if (rows.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(
