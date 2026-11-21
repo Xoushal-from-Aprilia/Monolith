@@ -24,6 +24,20 @@ class ProfileExtras(ctx: Context) {
     /** friends' badges: pk -> badge ids */
     val badges: StateFlow<Map<String, List<String>>> = _badges.asStateFlow()
 
+    private val _featured = MutableStateFlow((sp.getString("featured", "") ?: "").split(',').filter { it.isNotBlank() })
+    /** up to 3 of my badges shown next to my name */
+    val featured: StateFlow<List<String>> = _featured.asStateFlow()
+
+    private val _featuredOf = MutableStateFlow(loadMap("featured_of").mapValues { (_, v) -> v.split(',').filter { it.isNotBlank() } })
+    /** friends' badges in the showcase: pk -> up to 3 ids */
+    val featuredOf: StateFlow<Map<String, List<String>>> = _featuredOf.asStateFlow()
+
+    fun setFeatured(ids: List<String>) {
+        val v = ids.distinct().take(3)
+        sp.edit().putString("featured", v.joinToString(",")).apply()
+        _featured.value = v
+    }
+
     private fun loadMap(key: String): Map<String, String> = runCatching {
         val o = JSONObject(sp.getString(key, "{}") ?: "{}")
         o.keys().asSequence().associateWith { o.optString(it) }
@@ -53,6 +67,11 @@ class ProfileExtras(ctx: Context) {
             _badges.value = _badges.value + (pk to list)
             saveMap("badges", _badges.value.mapValues { it.value.joinToString(",") })
         }
+        if (p.has("bf")) {
+            val list = p.optString("bf").split(',').map { it.trim().take(24) }.filter { it.isNotBlank() }.take(3)
+            _featuredOf.value = _featuredOf.value + (pk to list)
+            saveMap("featured_of", _featuredOf.value.mapValues { it.value.joinToString(",") })
+        }
     }
 
     /** a counter that only goes up (stories posted, drawings sent, high fives…) */
@@ -70,5 +89,7 @@ class ProfileExtras(ctx: Context) {
         _cover.value = "monoliths"
         _covers.value = emptyMap()
         _badges.value = emptyMap()
+        _featured.value = emptyList()
+        _featuredOf.value = emptyMap()
     }
 }

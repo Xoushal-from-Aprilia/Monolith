@@ -66,20 +66,10 @@ fun AutoBackupRow() {
         st.last > 0 -> t("Ultimo: {0}", Fmt.date(st.last) + " " + Fmt.time(st.last)) + " · " + (AutoBackup.folderName(st.folder) ?: "")
         else -> t("Attivo · il primo arriva a breve")
     }
-    Row(
-        Modifier.fillMaxWidth().bounceClick(0.98f) { if (st.on) manage = true else setup = true }.padding(horizontal = 20.dp, vertical = 12.dp),
-        verticalAlignment = Alignment.CenterVertically,
-    ) {
-        Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-            Icon(Icons.Rounded.CloudSync, null, Modifier.size(20.dp))
-        }
-        Spacer(Modifier.width(14.dp))
-        Column(Modifier.weight(1f)) {
-            Text(t("Backup automatico"), style = MaterialTheme.typography.titleMedium)
-            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = if (st.error) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant)
-        }
-        Switch(checked = st.on, onCheckedChange = { v -> if (v) setup = true else AutoBackup.disable(ctx) })
-    }
+    SettingRow(
+        Icons.Rounded.CloudSync, t("Backup automatico"), subtitle,
+        trailing = { Switch(checked = st.on, onCheckedChange = { v -> if (v) setup = true else AutoBackup.disable(ctx) }) },
+    ) { if (st.on) manage = true else setup = true }
 
     if (setup) {
         MonoDialog(

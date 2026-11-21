@@ -348,6 +348,7 @@ private fun MainNav() {
                 composable("search") { SearchScreen(nav) }
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("profile/{pk}") { entry -> com.monolith.app.ui.screens.ProfileScreen(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("editprofile") { com.monolith.app.ui.screens.EditProfileScreen(nav) }
                 composable("stories/{pk}") { entry -> com.monolith.app.ui.screens.StoryViewer(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("film", enterTransition = { fadeIn(tween(400)) }, exitTransition = { fadeOut(tween(300)) }) { com.monolith.app.ui.screens.FilmScreen { nav.popBackStack() } }
                 composable("compass/{pk}") { entry -> com.monolith.app.ui.screens.CompassScreen(nav, entry.arguments?.getString("pk") ?: "") }

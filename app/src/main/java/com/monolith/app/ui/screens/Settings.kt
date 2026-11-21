@@ -1,5 +1,19 @@
 package com.monolith.app.ui.screens
 
+import androidx.compose.foundation.layout.heightIn
+
+import androidx.compose.material.icons.rounded.Wifi
+
+import androidx.compose.material.icons.rounded.Notifications
+
+import androidx.compose.material.icons.rounded.Vibration
+
+import androidx.compose.foundation.shape.RoundedCornerShape
+
+import androidx.compose.material.icons.rounded.Edit
+
+import androidx.compose.material.icons.automirrored.rounded.KeyboardArrowRight
+
 import android.content.Intent
 import android.os.Process
 import android.widget.Toast
@@ -131,10 +145,6 @@ fun SettingsScreen(nav: NavHostController) {
     val theme by Graph.prefs.theme.collectAsState()
     val p = profile ?: Profile("", "", "🗿")
 
-    var emoji by rememberSaveable { mutableStateOf(p.emoji) }
-    var name by rememberSaveable { mutableStateOf(p.displayName) }
-    var bio by rememberSaveable { mutableStateOf(p.bio) }
-    var picker by remember { mutableStateOf(false) }
     var showCode by remember { mutableStateOf(false) }
     var revealed by remember { mutableStateOf(false) }
     var showQr by remember { mutableStateOf(false) }
@@ -154,7 +164,6 @@ fun SettingsScreen(nav: NavHostController) {
     var backupPassword by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
     var wipe by remember { mutableStateOf(false) }
-    val changed = emoji != p.emoji || name.trim() != p.displayName || bio.trim() != p.bio
     val myPub = Graph.identity.keys?.pub ?: ""
 
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
@@ -173,37 +182,30 @@ fun SettingsScreen(nav: NavHostController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding().imePadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
-            Text(t("Profilo e impostazioni"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            AnimatedVisibility(changed) {
-                Button(
-                    onClick = {
-                        val np = p.copy(emoji = emoji, displayName = name.trim().ifBlank { p.displayName }, bio = bio.trim())
-                        Graph.scope.launch { Graph.messenger.updateProfile(np) }
-                    },
-                    shape = CircleShape, modifier = Modifier.padding(end = 8.dp),
-                ) { Text(t("Salva")) }
-            }
+            Text(t("Impostazioni"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.weight(1f).padding(start = 4.dp))
         }
         Column(Modifier.weight(1f).verticalScroll(rememberScrollState())) {
-            Column(Modifier.fillMaxWidth().padding(vertical = 16.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-                Avatar(emoji, 104.dp, Modifier.sharedBoundsKey("me-avatar").bounceClick(0.9f) { picker = true })
-                Spacer(Modifier.height(12.dp))
-                Text(name.ifBlank { p.displayName }, style = MaterialTheme.typography.headlineSmall)
-                Text("@${p.username}  #${tagOf(myPub)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Surface(
+                shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 8.dp, bottom = 8.dp)
+                    .bounceClick(0.98f) { nav.navigate(com.monolith.app.ui.Routes.profile(myPub)) },
+            ) {
+                Row(Modifier.padding(16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(p.emoji, 60.dp, Modifier.sharedBoundsKey("me-avatar"))
+                    Spacer(Modifier.width(16.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(p.displayName, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Text("@${p.username}  ·  #${tagOf(myPub)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(t("Vedi il tuo profilo"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
             }
-            Column(Modifier.padding(horizontal = 20.dp)) {
-                OutlinedTextField(name, { name = it.take(32) }, label = { Text(t("Nome visualizzato")) }, singleLine = true, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium)
-                Spacer(Modifier.height(10.dp))
-                OutlinedTextField(bio, { bio = it.take(140) }, label = { Text(t("Bio")) }, modifier = Modifier.fillMaxWidth(), shape = MaterialTheme.shapes.medium, minLines = 2)
-            }
+            SettingRow(Icons.Rounded.Edit, t("Modifica profilo"), t("Immagine, nome, bio, copertina e distintivi")) { nav.navigate("editprofile") }
             SettingRow(Icons.Rounded.QrCode2, t("Il mio codice QR"), t("Fatti aggiungere di persona")) { showQr = true }
-            SettingRow(
-                Icons.Rounded.Cake, t("Il tuo compleanno"),
-                myBday?.let { birthdayText(it) + " · " + t("visibile solo agli amici") } ?: t("Non impostato"),
-            ) { bdayPicker = true }
 
-            SectionLabel(t("Aspetto"), Modifier.padding(top = 16.dp))
-            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp)) {
+            SectionLabel(t("Aspetto"), Modifier.padding(top = 20.dp))
+            SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
                 listOf(t("Sistema"), t("Chiaro"), t("Scuro")).forEachIndexed { i, label ->
                     SegmentedButton(
                         selected = theme == i, onClick = { Graph.prefs.setTheme(i) },
@@ -215,18 +217,6 @@ fun SettingsScreen(nav: NavHostController) {
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
             SettingRow(Icons.Rounded.MusicNote, t("Suoni"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(t("Scuoti per un trillo"), style = MaterialTheme.typography.titleMedium)
-                    Text(t("In una chat, scuoti il telefono per mandare un trillo"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = shakeOn, onCheckedChange = {
-                    shakeOn = it
-                    com.monolith.app.ui.screens.ChatLooks.shake = it
-                })
-            }
-            SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
-            SettingRow(Icons.Rounded.Movie, t("Rivedi il filmato"), t("Tutte le funzioni di Monolith in un minuto")) { nav.navigate("film") }
             SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
             SettingRow(Icons.Rounded.Wallpaper, t("Sfondo animato"), t("Il monolite tra le stelle come sfondo del telefono")) {
                 val comp = android.content.ComponentName(ctx, com.monolith.app.widget.MonolithWallpaper::class.java)
@@ -236,108 +226,67 @@ fun SettingsScreen(nav: NavHostController) {
                     runCatching { ctx.startActivity(android.content.Intent(android.app.WallpaperManager.ACTION_LIVE_WALLPAPER_CHOOSER)) }
                 }
             }
-            SettingRow(Icons.Rounded.MedicalServices, t("Scheda medica"), t("Inviata solo insieme all'SOS")) { medSheet = true }
-            SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(t("Riepilogo della domenica"), style = MaterialTheme.typography.titleMedium)
-                    Text(t("Una notifica ogni domenica alle 18"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = weeklyOn, onCheckedChange = {
-                    weeklyOn = it
-                    com.monolith.app.net.Weekly.setEnabled(ctx, it)
-                })
-            }
 
-            SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 16.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
-                Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
-                    Icon(Icons.Rounded.Fingerprint, null, Modifier.size(20.dp))
-                }
-                Spacer(Modifier.width(14.dp))
-                Column(Modifier.weight(1f)) {
-                    Text(t("Blocco app"), style = MaterialTheme.typography.titleMedium)
-                    Text(t("Impronta, volto o PIN all'apertura"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = lockOn, onCheckedChange = { on ->
-                    if (!Unlock.available(ctx)) {
-                        Toast.makeText(ctx, t("Imposta prima un blocco schermo sul telefono"), Toast.LENGTH_LONG).show()
-                    } else {
-                        Unlock.prompt(ctx, if (on) t("Attiva il blocco") else t("Disattiva il blocco")) {
-                            lockOn = on
-                            AppLock.setEnabled(on)
-                        }
-                    }
-                })
+            SectionLabel(t("Funzioni"), Modifier.padding(top = 20.dp))
+            SettingSwitch(Icons.Rounded.Vibration, t("Scuoti per un trillo"), t("In una chat, scuoti il telefono per mandare un trillo"), shakeOn) {
+                shakeOn = it
+                com.monolith.app.ui.screens.ChatLooks.shake = it
             }
+            SettingSwitch(Icons.Rounded.Notifications, t("Riepilogo della domenica"), t("Una notifica ogni domenica alle 18"), weeklyOn) {
+                weeklyOn = it
+                com.monolith.app.net.Weekly.setEnabled(ctx, it)
+            }
+            SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
+            SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
+            SettingRow(Icons.Rounded.Movie, t("Rivedi il filmato"), t("Tutte le funzioni di Monolith in un minuto")) { nav.navigate("film") }
+
+            SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 20.dp))
+            SettingSwitch(Icons.Rounded.Fingerprint, t("Blocco app"), t("Impronta, volto o PIN all'apertura"), lockOn) { on ->
+                if (!Unlock.available(ctx)) {
+                    Toast.makeText(ctx, t("Imposta prima un blocco schermo sul telefono"), Toast.LENGTH_LONG).show()
+                } else {
+                    Unlock.prompt(ctx, if (on) t("Attiva il blocco") else t("Disattiva il blocco")) {
+                        lockOn = on
+                        AppLock.setEnabled(on)
+                    }
+                }
+            }
+            SettingRow(Icons.Rounded.MedicalServices, t("Scheda medica"), t("Inviata solo insieme all'SOS")) { medSheet = true }
             SettingRow(Icons.Rounded.Key, t("Codice di recupero"), t("Serve per ripristinare il profilo su un altro telefono")) {
                 if (Unlock.available(ctx)) Unlock.prompt(ctx, t("Mostra il codice di recupero")) { showCode = true } else showCode = true
             }
             SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Salva chat, agenda, liste e amici in un file protetto da password")) { backupDialog = true }
             AutoBackupRow()
 
-            SectionLabel(t("Connessione"), Modifier.padding(top = 16.dp))
-            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                Column(Modifier.weight(1f)) {
-                    Text(t("Sempre attivo"), style = MaterialTheme.typography.titleMedium)
-                    Text(t("Ricevi messaggi e chiamate anche ad app chiusa"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Switch(checked = alwaysOnline, onCheckedChange = {
-                    alwaysOnline = it
-                    Graph.prefs.alwaysOnline = it
-                    if (it) MonolithService.start(ctx) else if (!Graph.location.sharing.value) MonolithService.stop(ctx)
-                })
+            SectionLabel(t("Connessione"), Modifier.padding(top = 20.dp))
+            SettingSwitch(Icons.Rounded.Wifi, t("Sempre attivo"), t("Ricevi messaggi e chiamate anche ad app chiusa"), alwaysOnline) {
+                alwaysOnline = it
+                Graph.prefs.alwaysOnline = it
+                if (it) MonolithService.start(ctx) else if (!Graph.location.sharing.value) MonolithService.stop(ctx)
             }
             SettingRow(Icons.Rounded.Shield, t("Gestisci permessi"), t("Notifiche, posizione, fotocamera, microfono, batteria")) { nav.navigate("permissions?first=false") }
 
-            SectionLabel(t("Monolith"), Modifier.padding(top = 16.dp))
+            SectionLabel(t("Monolith"), Modifier.padding(top = 20.dp))
             SettingRow(Icons.Rounded.AutoStories, t("Journal"), t("Tutte le novità, versione per versione")) { nav.navigate("journal") }
             SettingRow(Icons.Rounded.Favorite, t("Crediti"), "Christian “Xoushal” Vedovi") { nav.navigate("credits") }
             Text(
                 t("Versione {0}", BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                modifier = Modifier.padding(horizontal = 20.dp, vertical = 12.dp),
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
-            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant)
-            TextButton(onClick = { wipe = true }, modifier = Modifier.padding(12.dp)) { Text(t("Esci ed elimina i dati da questo telefono")) }
+            HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 20.dp))
+            TextButton(onClick = { wipe = true }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                Text(t("Esci ed elimina i dati da questo telefono"), color = MaterialTheme.colorScheme.error)
+            }
             Spacer(Modifier.height(24.dp))
         }
     }
 
-    if (picker) EmojiPickerSheet(onDismiss = { picker = false }) { emoji = it; picker = false }
     if (showQr) MyQrDialog { showQr = false }
     if (mapSheet) MapStyleSheet { mapSheet = false }
     if (iconSheet) com.monolith.app.ui.screens.IconSheet { iconSheet = false }
     if (medSheet) com.monolith.app.ui.screens.MedicalSheet { medSheet = false }
-    if (bdayPicker) {
-        val init = myBday?.let {
-            java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(2000, it.month - 1, it.day) }.timeInMillis
-        }
-        val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = init, initialDisplayedMonthMillis = init)
-        androidx.compose.material3.DatePickerDialog(
-            onDismissRequest = { bdayPicker = false },
-            confirmButton = {
-                TextButton(onClick = {
-                    bdayPicker = false
-                    state.selectedDateMillis?.let { ms ->
-                        val c = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = ms }
-                        val b = com.monolith.app.data.Birthday(c.get(java.util.Calendar.MONTH) + 1, c.get(java.util.Calendar.DAY_OF_MONTH))
-                        Graph.scope.launch { Graph.messenger.setMyBirthday(b) }
-                    }
-                }) { Text(t("Salva")) }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    bdayPicker = false
-                    if (myBday != null) Graph.scope.launch { Graph.messenger.setMyBirthday(null) }
-                }) { Text(if (myBday != null) t("Togli") else t("Annulla")) }
-            },
-        ) {
-            androidx.compose.material3.DatePicker(state, showModeToggle = false, title = {
-                Text(t("Il tuo compleanno"), modifier = Modifier.padding(start = 24.dp, top = 16.dp), style = MaterialTheme.typography.titleMedium)
-            })
-        }
-    }
+    if (bdayPicker) BirthdayPickerDialog { bdayPicker = false }
     if (langDialog) LanguageDialog(onDismiss = { langDialog = false }) { I18n.set(ctx, it); langDialog = false }
 
     if (showCode) {
@@ -430,17 +379,30 @@ fun SettingsScreen(nav: NavHostController) {
 }
 
 @Composable
-private fun SettingRow(icon: ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
-    Row(Modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+internal fun SettingRow(icon: ImageVector, title: String, subtitle: String, trailing: @Composable (() -> Unit)? = null, onClick: () -> Unit) {
+    Row(
+        Modifier.fillMaxWidth().heightIn(min = 64.dp).bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
         Box(Modifier.size(40.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh), contentAlignment = Alignment.Center) {
             Icon(icon, null, Modifier.size(20.dp))
         }
-        Spacer(Modifier.width(14.dp))
-        Column {
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
             Text(title, style = MaterialTheme.typography.titleMedium)
             Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
         }
+        if (trailing != null) {
+            Spacer(Modifier.width(12.dp))
+            trailing()
+        }
     }
+}
+
+/** a settings row with a switch: tapping the row flips it too */
+@Composable
+internal fun SettingSwitch(icon: ImageVector, title: String, subtitle: String, checked: Boolean, onChange: (Boolean) -> Unit) {
+    SettingRow(icon, title, subtitle, trailing = { Switch(checked = checked, onCheckedChange = onChange) }) { onChange(!checked) }
 }
 
 // ====================================================================== journal

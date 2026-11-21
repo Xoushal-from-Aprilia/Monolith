@@ -842,7 +842,7 @@ class Messenger(
         val j = p.toJson().put("t", type)
         // the birthday only goes to friends, never to a stranger with a request
         if (type != "freq") j.put("bd", Graph.birthdays.mine.value?.code() ?: "")
-        j.put("cv", Graph.profileExtras.cover.value).put("bg", Badges.ids())
+        j.put("cv", Graph.profileExtras.cover.value).put("bg", Badges.ids()).put("bf", Graph.profileExtras.featured.value.joinToString(","))
         return j
     }
 

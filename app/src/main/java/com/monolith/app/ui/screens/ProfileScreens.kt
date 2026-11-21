@@ -47,6 +47,14 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.Call
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.TextFields
+import androidx.compose.material.icons.rounded.PhotoCamera
+import androidx.compose.material.icons.rounded.Cake
+import androidx.compose.material.icons.rounded.Mood
+import androidx.compose.material.icons.rounded.Add
+import androidx.compose.material.icons.rounded.ChatBubble
+import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.DeleteOutline
 import androidx.compose.material.icons.rounded.Star
@@ -160,39 +168,76 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     val bdays by Graph.birthdays.friends.collectAsState()
     val myBday by Graph.birthdays.mine.collectAsState()
     val storyMsgs by remember(pk) { Graph.db.messages().conversation(Stories.convOf(pk)) }.collectAsState(initial = emptyList())
-    val stories = Stories.visible(storyMsgs).filter { it.sender == pk }
+    val stories = remember(storyMsgs, pk) { Stories.visible(storyMsgs).filter { it.sender == pk } }
     val bond by produceState<Bond?>(null, pk) { if (!mine) value = Bonds.with(pk) }
     val favs by Graph.favorites.all.collectAsState()
     val savedAll by Graph.saved.all.collectAsState()
-    val saved = savedAll.filter { it.owner == pk }.sortedByDescending { it.savedAt }
+    val saved = remember(savedAll, pk) { savedAll.filter { it.owner == pk }.sortedByDescending { it.savedAt } }
+    val friendsList by remember { Graph.db.friends().friends() }.collectAsState(initial = emptyList())
+    val bondDays by Graph.bondDays.days.collectAsState()
+    val earnedMine by com.monolith.app.net.Badges.earned.collectAsState()
+    val theirBadges by Graph.profileExtras.badges.collectAsState()
+    val myFeatured by Graph.profileExtras.featured.collectAsState()
+    val featuredOf by Graph.profileExtras.featuredOf.collectAsState()
+    val myCover by Graph.profileExtras.cover.collectAsState()
+    val covers by Graph.profileExtras.covers.collectAsState()
     var statusSheet by remember { mutableStateOf(false) }
+    var storySheet by remember { mutableStateOf(false) }
     var textStory by remember { mutableStateOf(false) }
+    var badgeDetail by remember { mutableStateOf<com.monolith.app.net.BadgeDef?>(null) }
     var songUri by remember { mutableStateOf<android.net.Uri?>(null) }
     val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u -> if (u != null) songUri = u }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) { PendingPhoto.set(uri, null); nav.navigate("photoedit") }
     }
+    var pendingVideo by remember { mutableStateOf(false) }
+    fun granted(p: String) = androidx.core.content.ContextCompat.checkSelfPermission(ctx, p) == android.content.pm.PackageManager.PERMISSION_GRANTED
+    val callPerms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) {
+        if (granted(android.Manifest.permission.RECORD_AUDIO)) Graph.calls.startCall(pk, pendingVideo)
+    }
+    fun call(video: Boolean) {
+        pendingVideo = video
+        val need = buildList {
+            if (!granted(android.Manifest.permission.RECORD_AUDIO)) add(android.Manifest.permission.RECORD_AUDIO)
+            if (video && !granted(android.Manifest.permission.CAMERA)) add(android.Manifest.permission.CAMERA)
+        }
+        if (need.isEmpty()) Graph.calls.startCall(pk, video) else callPerms.launch(need.toTypedArray())
+    }
 
+    val isFriend = !mine && friend?.status == FriendStatus.FRIEND
     val emoji = if (mine) myProfile?.emoji ?: "🗿" else friend?.emoji ?: "🙂"
     val name = if (mine) myProfile?.displayName ?: "" else friend?.displayName ?: ""
     val user = if (mine) myProfile?.username ?: "" else friend?.username ?: ""
     val bio = if (mine) myProfile?.bio ?: "" else friend?.bio ?: ""
     val status = (if (mine) myStatus else statuses[pk])?.takeIf { it.active }
     val bday = if (mine) myBday else bdays[pk]
-
-    val myCover by Graph.profileExtras.cover.collectAsState()
-    val covers by Graph.profileExtras.covers.collectAsState()
     val cover = if (mine) myCover else covers[pk] ?: "monoliths"
-    var coverSheet by remember { mutableStateOf(false) }
+    val featured = (if (mine) myFeatured else featuredOf[pk] ?: emptyList()).mapNotNull { com.monolith.app.net.Badges.def(it) }
+    val badgeIds: List<String> = if (mine) earnedMine.entries.sortedByDescending { it.value }.map { it.key } else theirBadges[pk] ?: emptyList()
+    val ink = MaterialTheme.colorScheme.onSurface
+    val muted = MaterialTheme.colorScheme.onSurfaceVariant
+
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState())) {
+        // ------------------------------------------------ cover, top bar, picture
         val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
-        Box(Modifier.fillMaxWidth().height(topInset + 262.dp)) {
-            com.monolith.app.ui.components.CoverArt(cover, Modifier.fillMaxWidth().height(topInset + 190.dp))
-            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.fillMaxWidth().height(topInset + 214.dp)) {
+            com.monolith.app.ui.components.CoverArt(cover, Modifier.fillMaxWidth().height(topInset + 156.dp))
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 12.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
                 CoverButton { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) } }
                 Spacer(Modifier.weight(1f))
-                if (mine) CoverButton { IconButton(onClick = { coverSheet = true }) { Icon(Icons.Rounded.Wallpaper, t("Copertina")) } }
-                if (!mine && friend?.status == FriendStatus.FRIEND) {
+                if (mine) {
+                    Surface(
+                        shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f),
+                        modifier = Modifier.bounceClick(0.94f) { nav.navigate("editprofile") },
+                    ) {
+                        Row(Modifier.height(48.dp).padding(start = 14.dp, end = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+                            Icon(Icons.Rounded.Edit, null, Modifier.size(18.dp))
+                            Spacer(Modifier.width(8.dp))
+                            Text(t("Modifica"), style = MaterialTheme.typography.labelLarge)
+                        }
+                    }
+                }
+                if (isFriend) {
                     val fav = pk in favs
                     CoverButton {
                         IconButton(onClick = { Graph.favorites.toggle(pk) }) {
@@ -202,112 +247,183 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 }
             }
             Box(
-                Modifier.align(Alignment.BottomCenter).size(144.dp).tiltDepth(8f, 10f).clip(CircleShape)
-                    .background(MaterialTheme.colorScheme.background).padding(6.dp).clip(CircleShape)
-                    .then(if (stories.isNotEmpty()) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
+                Modifier.align(Alignment.BottomCenter).size(124.dp).tiltDepth(8f, 10f).clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.background).padding(5.dp).clip(CircleShape)
+                    .then(if (stories.isNotEmpty()) Modifier.border(3.dp, ink, CircleShape).padding(5.dp) else Modifier)
                     .bounceClick(0.95f) { if (stories.isNotEmpty()) nav.navigate(Routes.stories(pk)) },
                 contentAlignment = Alignment.Center,
-            ) { Avatar(emoji, 116.dp) }
+            ) { Avatar(emoji, if (stories.isNotEmpty()) 104.dp else 114.dp) }
         }
+
+        // ------------------------------------------------ who
         Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
-            Spacer(Modifier.height(10.dp))
+            Spacer(Modifier.height(12.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
-                Text(name, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                Text(
+                    name, style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
+                    textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
+                )
                 if (!mine) com.monolith.app.ui.components.BondBadge(pk)
             }
-            if (user.isNotBlank()) Text("@$user", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            if (user.isNotBlank()) {
+                Spacer(Modifier.height(2.dp))
+                Text("@$user  ·  #${com.monolith.app.core.tagOf(pk)}", style = MaterialTheme.typography.bodyMedium, color = muted)
+            }
+            if (featured.isNotEmpty()) {
+                Spacer(Modifier.height(14.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                    featured.forEach { d -> com.monolith.app.ui.components.BadgeEmblem(d, true, 38.dp, Modifier.bounceClick(0.9f) { badgeDetail = d }) }
+                }
+            }
             if (bio.isNotBlank()) {
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(14.dp))
                 Text(bio, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             }
-            val since = if (!mine && friend?.status == FriendStatus.FRIEND) friend?.createdAt?.takeIf { it > 0 } else null
-            if (status != null || bday != null || since != null) {
-                Spacer(Modifier.height(12.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    status?.let {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.bounceClick(0.95f) { if (mine) statusSheet = true }) {
-                            Text(it.emoji + "  " + it.text.ifBlank { t("Il tuo stato") }, modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        }
-                    }
-                    bday?.let {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                            Text("🎂  " + birthdayText(it), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
-                        }
-                    }
-                    since?.let {
-                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
-                            Text("🤝  " + friendSince(it), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), maxLines = 1)
-                        }
-                    }
-                }
-            }
-            Spacer(Modifier.height(18.dp))
-            if (!mine && friend?.status == FriendStatus.FRIEND) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { nav.navigate(Routes.chat(pk)) }, shape = CircleShape, modifier = Modifier.height(48.dp)) { Text(t("Scrivi")) }
-                }
-            }
-            if (mine) {
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    Button(onClick = { pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }, shape = CircleShape, modifier = Modifier.height(48.dp)) { Text(t("Storia con foto")) }
-                    OutlinedButton(onClick = { textStory = true }, shape = CircleShape, modifier = Modifier.height(48.dp)) { Text(t("Storia di testo")) }
-                }
-                Spacer(Modifier.height(8.dp))
-                OutlinedButton(onClick = { pickSong.launch("audio/*") }, shape = CircleShape, modifier = Modifier.height(44.dp)) { Text("♪  " + t("Storia con una canzone dal telefono")) }
-                Spacer(Modifier.height(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
-                    TextButton(onClick = { statusSheet = true }) { Text(t("Il tuo stato")) }
-                    TextButton(onClick = { nav.navigate("settings") }) { Text(t("Modifica profilo")) }
+            if (status != null || bday != null) {
+                Spacer(Modifier.height(16.dp))
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp, Alignment.CenterHorizontally),
+                    verticalArrangement = Arrangement.spacedBy(8.dp),
+                ) {
+                    status?.let { InfoChip(it.emoji, null, it.text.ifBlank { t("Il tuo stato") }) { if (mine) statusSheet = true } }
+                    bday?.let { InfoChip(null, Icons.Rounded.Cake, birthdayText(it)) {} }
                 }
             }
         }
-        BadgesSection(pk, mine)
-        if (!mine && friend?.status == FriendStatus.FRIEND) NearbyCard(pk, friend?.displayName ?: "")
+
+        // ------------------------------------------------ numbers
+        val stats: List<Pair<String, String>> = when {
+            mine -> listOf(
+                friendsList.count { it.status == FriendStatus.FRIEND }.toString() to t("Amici"),
+                earnedMine.size.toString() to t("Distintivi"),
+                (bondDays.values.maxOfOrNull { com.monolith.app.data.streakOf(it) } ?: 0).toString() to t("Serie migliore"),
+            )
+            isFriend -> listOf(
+                friendSinceShort(friend?.createdAt ?: 0L) to t("Amici da"),
+                com.monolith.app.data.streakOf(bondDays[pk] ?: emptySet()).toString() to t("Giorni di fila"),
+                badgeIds.size.toString() to t("Distintivi"),
+            )
+            else -> emptyList()
+        }
+        if (stats.isNotEmpty()) {
+            Surface(
+                shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+                modifier = Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 22.dp),
+            ) {
+                Row(Modifier.padding(vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                    stats.forEachIndexed { i, (v, label) ->
+                        if (i > 0) Box(Modifier.width(1.dp).height(34.dp).background(MaterialTheme.colorScheme.outlineVariant))
+                        Column(Modifier.weight(1f).padding(horizontal = 6.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+                            Text(v, style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold, maxLines = 1)
+                            Text(label, style = MaterialTheme.typography.labelMedium, color = muted, textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        }
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ what you can do
+        if (mine || isFriend) {
+            Row(
+                Modifier.fillMaxWidth().padding(start = 20.dp, end = 20.dp, top = 14.dp),
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalAlignment = Alignment.CenterVertically,
+            ) {
+                if (isFriend) {
+                    Button(onClick = { nav.navigate(Routes.chat(pk)) }, shape = CircleShape, modifier = Modifier.weight(1f).height(52.dp)) {
+                        Icon(Icons.Rounded.ChatBubble, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(t("Scrivi"))
+                    }
+                    androidx.compose.material3.FilledTonalIconButton(onClick = { call(false) }, modifier = Modifier.size(52.dp)) { Icon(Icons.Rounded.Call, t("Chiama")) }
+                    androidx.compose.material3.FilledTonalIconButton(onClick = { call(true) }, modifier = Modifier.size(52.dp)) { Icon(Icons.Rounded.Videocam, t("Videochiamata")) }
+                } else {
+                    Button(onClick = { storySheet = true }, shape = CircleShape, modifier = Modifier.weight(1f).height(52.dp)) {
+                        Icon(Icons.Rounded.Add, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(t("Nuova storia"), maxLines = 1)
+                    }
+                    androidx.compose.material3.FilledTonalButton(onClick = { statusSheet = true }, shape = CircleShape, modifier = Modifier.weight(1f).height(52.dp)) {
+                        Icon(Icons.Rounded.Mood, null, Modifier.size(18.dp))
+                        Spacer(Modifier.width(8.dp))
+                        Text(if (status != null) t("Cambia stato") else t("Imposta stato"), maxLines = 1)
+                    }
+                }
+            }
+        }
+
+        // ------------------------------------------------ stories
         if (stories.isNotEmpty()) {
-            Text(t("Storie"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 24.dp, top = 18.dp, bottom = 8.dp))
+            SectionHead(t("Storie"), stories.size.toString())
             LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                 items(stories, key = { it.id }) { m ->
                     Box(
-                        Modifier.size(78.dp, 120.dp).clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.inverseSurface)
+                        Modifier.size(84.dp, 128.dp).clip(RoundedCornerShape(18.dp)).background(MaterialTheme.colorScheme.inverseSurface)
                             .bounceClick(0.95f) { nav.navigate(Routes.stories(pk)) },
                         contentAlignment = Alignment.Center,
                     ) {
                         if (m.kind == "photo" && m.mediaPath != null) AsyncImage(model = File(m.mediaPath), contentDescription = null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize())
-                        else Text(m.text, color = MaterialTheme.colorScheme.inverseOnSurface, fontSize = 11.sp, maxLines = 5, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(6.dp))
+                        else Text(m.text, color = MaterialTheme.colorScheme.inverseOnSurface, fontSize = 11.sp, maxLines = 5, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center, modifier = Modifier.padding(8.dp))
                         Text(
                             Fmt.time(m.ts), color = Color.White, style = MaterialTheme.typography.labelSmall,
-                            modifier = Modifier.align(Alignment.BottomStart).padding(6.dp),
+                            modifier = Modifier.align(Alignment.BottomStart).background(Color.Black.copy(alpha = 0.35f), RoundedCornerShape(topEnd = 10.dp)).padding(horizontal = 8.dp, vertical = 4.dp),
                         )
                     }
                 }
             }
+        }
+
+        // ------------------------------------------------ badges
+        BadgesSection(pk, mine, badgeIds) { badgeDetail = it }
+
+        // ------------------------------------------------ the two of you
+        if (isFriend) {
+            SectionHead(t("Voi due"))
+            bond?.let { b ->
+                Surface(
+                    shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+                ) {
+                    Row(Modifier.padding(horizontal = 18.dp, vertical = 16.dp), verticalAlignment = Alignment.CenterVertically) {
+                        BondStone(b, Modifier.size(64.dp, 88.dp).tiltDepth(6f, 12f))
+                        Spacer(Modifier.width(16.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(t("Legame"), style = MaterialTheme.typography.labelMedium, color = muted)
+                            Text(b.name, style = MaterialTheme.typography.titleLarge, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+                            Spacer(Modifier.height(6.dp))
+                            BondMeter(b.level)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                if (b.streak > 0) t("{0} giorni insieme nell'ultimo mese", b.days30) else t("Scrivetevi oggi per iniziare una serie"),
+                                style = MaterialTheme.typography.bodySmall, color = muted,
+                            )
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+            }
+            NearbyCard(pk, friend?.displayName ?: "")
         }
         if (!mine && saved.isNotEmpty()) SavedSection(nav, saved, friend?.displayName ?: "")
-        bond?.let { b ->
-            Surface(
-                shape = MaterialTheme.shapes.extraLarge, color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth().padding(16.dp),
-            ) {
-                Row(Modifier.padding(18.dp), verticalAlignment = Alignment.CenterVertically) {
-                    BondStone(b, Modifier.size(90.dp, 120.dp).tiltDepth(6f, 12f))
-                    Spacer(Modifier.width(16.dp))
-                    Column(Modifier.weight(1f)) {
-                        Text(t("Legame"), style = MaterialTheme.typography.labelLarge, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        Text(b.name, style = MaterialTheme.typography.headlineSmall)
-                        Text(
-                            if (b.streak > 0) t("🔥 {0} giorni di fila", b.streak) else t("Scrivetevi oggi per iniziare una serie"),
-                            style = MaterialTheme.typography.bodyMedium,
-                        )
-                        Text(t("{0} giorni insieme nell'ultimo mese", b.days30), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                    }
-                }
-            }
-        }
-        Spacer(Modifier.height(32.dp))
+        Spacer(Modifier.navigationBarsPadding().height(36.dp))
     }
+
     if (statusSheet) StatusSheet { statusSheet = false }
     songUri?.let { u -> AudioStoryDialog(u) { songUri = null } }
-    if (coverSheet) CoverSheet { coverSheet = false }
+    if (storySheet) {
+        MonoSheet(onDismissRequest = { storySheet = false }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(bottom = 24.dp)) {
+                Text(t("Nuova storia"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 24.dp, bottom = 4.dp))
+                Text(t("Resta visibile ai tuoi amici per 24 ore"), style = MaterialTheme.typography.bodySmall, color = muted, modifier = Modifier.padding(start = 24.dp, bottom = 12.dp))
+                SheetRow(Icons.Rounded.PhotoCamera, t("Foto"), t("Con filtri in bianco e nero e musica")) {
+                    storySheet = false
+                    pick.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                }
+                SheetRow(Icons.Rounded.TextFields, t("Testo"), t("Qualche parola, anche con una canzone")) { storySheet = false; textStory = true }
+                SheetRow(Icons.Rounded.MusicNote, t("Canzone dal telefono"), t("30 secondi di un brano che hai sul telefono")) { storySheet = false; pickSong.launch("audio/*") }
+            }
+        }
+    }
+    badgeDetail?.let { d -> BadgeDetailDialog(d, mine, pk) { badgeDetail = null } }
     if (textStory) {
         var text by remember { mutableStateOf("") }
         var song by remember { mutableStateOf<Song?>(null) }
@@ -328,6 +444,78 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
             dismissButton = { TextButton(onClick = { textStory = false }) { Text(t("Annulla")) } },
         )
         if (musicSheet) MusicPickerSheet(onDismiss = { musicSheet = false }, onPick = { song = it; musicSheet = false })
+    }
+}
+
+/** five little bars: the level of the bond */
+@Composable
+private fun BondMeter(level: Int) {
+    Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
+        for (i in 1..5) {
+            Box(
+                Modifier.size(22.dp, 6.dp).clip(CircleShape)
+                    .background(if (i <= level) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant),
+            )
+        }
+    }
+}
+
+/** the title of a part of the profile, with an optional count and action on the right */
+@Composable
+internal fun SectionHead(title: String, count: String? = null, action: String? = null, onAction: () -> Unit = {}) {
+    Row(
+        Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 28.dp, bottom = 10.dp).height(40.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Text(title, style = MaterialTheme.typography.titleMedium, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold)
+        if (count != null) {
+            Spacer(Modifier.width(8.dp))
+            Text(count, style = MaterialTheme.typography.titleMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+        Spacer(Modifier.weight(1f))
+        if (action != null) TextButton(onClick = onAction) { Text(action) }
+    }
+}
+
+@Composable
+private fun InfoChip(emoji: String?, icon: androidx.compose.ui.graphics.vector.ImageVector?, text: String, onClick: () -> Unit) {
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.bounceClick(0.96f, onClick = onClick)) {
+        Row(Modifier.padding(start = 12.dp, end = 14.dp, top = 8.dp, bottom = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+            if (emoji != null) Text(emoji, fontSize = 15.sp)
+            if (icon != null) Icon(icon, null, Modifier.size(17.dp))
+            Spacer(Modifier.width(8.dp))
+            Text(text, style = MaterialTheme.typography.labelLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+        }
+    }
+}
+
+@Composable
+internal fun SheetRow(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, subtitle: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 24.dp, vertical = 12.dp), verticalAlignment = Alignment.CenterVertically) {
+        Box(Modifier.size(44.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
+            Icon(icon, null, Modifier.size(22.dp))
+        }
+        Spacer(Modifier.width(16.dp))
+        Column(Modifier.weight(1f)) {
+            Text(title, style = MaterialTheme.typography.titleMedium)
+            Text(subtitle, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        }
+    }
+}
+
+/** "3 mesi", "2 anni": how long you have been friends, short */
+private fun friendSinceShort(ts: Long): String {
+    if (ts <= 0L) return "—"
+    val a = java.util.Calendar.getInstance().apply { timeInMillis = ts }
+    val b = java.util.Calendar.getInstance()
+    var months = (b.get(java.util.Calendar.YEAR) - a.get(java.util.Calendar.YEAR)) * 12 + (b.get(java.util.Calendar.MONTH) - a.get(java.util.Calendar.MONTH))
+    if (b.get(java.util.Calendar.DAY_OF_MONTH) < a.get(java.util.Calendar.DAY_OF_MONTH)) months--
+    months = months.coerceAtLeast(0)
+    return when {
+        months == 0 -> t("poco")
+        months < 12 -> if (months == 1) t("1 mese") else t("{0} mesi", months)
+        months < 24 -> t("1 anno")
+        else -> t("{0} anni", months / 12)
     }
 }
 
@@ -512,19 +700,14 @@ private fun SavedSection(nav: NavHostController, items: List<SavedItem>, friendN
     val player = remember { arrayOfNulls<MediaPlayer>(1) }
     DisposableEffect(Unit) { onDispose { runCatching { player[0]?.release() } } }
     val myPub = Graph.identity.keys?.pub
-    Column(Modifier.fillMaxWidth().padding(top = 8.dp)) {
-        Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
-            Icon(Icons.Rounded.Bookmark, null, Modifier.size(18.dp))
-            Spacer(Modifier.width(8.dp))
-            Text(t("Salvati"), style = MaterialTheme.typography.titleMedium, modifier = Modifier.weight(1f))
-            Text(items.size.toString(), color = MaterialTheme.colorScheme.onSurfaceVariant)
-        }
+    Column(Modifier.fillMaxWidth()) {
+        SectionHead(t("Salvati"), items.size.toString())
         val photos = items.filter { it.kind == "photo" && it.media != null }
         if (photos.isNotEmpty()) {
             LazyRow(
                 contentPadding = PaddingValues(horizontal = 20.dp),
                 horizontalArrangement = Arrangement.spacedBy(8.dp),
-                modifier = Modifier.padding(top = 8.dp, bottom = 4.dp),
+                modifier = Modifier.padding(bottom = 6.dp),
             ) {
                 items(photos, key = { it.id }) { p ->
                     AsyncImage(
@@ -538,7 +721,7 @@ private fun SavedSection(nav: NavHostController, items: List<SavedItem>, friendN
         items.filter { it.kind != "photo" }.forEach { s ->
             Surface(
                 shape = RoundedCornerShape(18.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
-                modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp)
+                modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 4.dp)
                     .combinedClickable(
                         onClick = {
                             if (s.kind == "voice" && s.media != null) {
@@ -575,7 +758,7 @@ private fun SavedSection(nav: NavHostController, items: List<SavedItem>, friendN
         }
         Text(
             t("Tieni premuto per togliere"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
-            modifier = Modifier.padding(horizontal = 24.dp, vertical = 6.dp),
+            modifier = Modifier.padding(horizontal = 24.dp, vertical = 8.dp),
         )
     }
     remove?.let { r ->
@@ -614,87 +797,38 @@ private fun VinylStory(song: Song?, caption: String, modifier: Modifier) {
 }
 
 
+
 @Composable
 private fun CoverButton(content: @Composable () -> Unit) {
-    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) { content() }
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.88f)) { content() }
 }
 
-/** "Amici da 1 anno e 2 mesi" */
-private fun friendSince(ts: Long): String {
-    val a = java.util.Calendar.getInstance().apply { timeInMillis = ts }
-    val b = java.util.Calendar.getInstance()
-    var months = (b.get(java.util.Calendar.YEAR) - a.get(java.util.Calendar.YEAR)) * 12 + (b.get(java.util.Calendar.MONTH) - a.get(java.util.Calendar.MONTH))
-    if (b.get(java.util.Calendar.DAY_OF_MONTH) < a.get(java.util.Calendar.DAY_OF_MONTH)) months--
-    months = months.coerceAtLeast(0)
-    val y = months / 12
-    val m = months % 12
-    return when {
-        y == 0 && m == 0 -> t("Amici da poco")
-        y == 0 -> if (m == 1) t("Amici da 1 mese") else t("Amici da {0} mesi", m)
-        m == 0 -> if (y == 1) t("Amici da 1 anno") else t("Amici da {0} anni", y)
-        else -> (if (y == 1) t("Amici da 1 anno") else t("Amici da {0} anni", y)) + " " + (if (m == 1) t("e 1 mese") else t("e {0} mesi", m))
-    }
-}
-
+/** the badges on a profile: mine (earned, with all the others in "see all") or a friend's */
 @Composable
-private fun CoverSheet(onDismiss: () -> Unit) {
-    val cur by Graph.profileExtras.cover.collectAsState()
-    MonoSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
-        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
-            Text(t("Copertina"), style = MaterialTheme.typography.titleLarge)
-            Text(t("La vedono anche i tuoi amici"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-            Spacer(Modifier.height(14.dp))
-            androidx.compose.foundation.layout.FlowRow(
-                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), maxItemsInEachRow = 2,
-            ) {
-                com.monolith.app.ui.components.Covers.IDS.forEach { id ->
-                    val sel = id == cur
-                    Column(Modifier.weight(1f)) {
-                        com.monolith.app.ui.components.CoverArt(
-                            id,
-                            Modifier.fillMaxWidth().aspectRatio(2.1f).clip(RoundedCornerShape(16.dp))
-                                .border(if (sel) 3.dp else 1.dp, if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
-                                .bounceClick(0.95f) {
-                                    if (!sel) {
-                                        Graph.profileExtras.setCover(id)
-                                        Graph.scope.launch { Graph.messenger.sendProfileToFriends() }
-                                    }
-                                },
-                        )
-                        Text(com.monolith.app.ui.components.Covers.name(id), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
-                    }
-                }
-            }
-        }
-    }
-}
-
-/** the badges on a profile: mine (earned and still to earn) or a friend's (earned) */
-@Composable
-private fun BadgesSection(pk: String, mine: Boolean) {
-    val ctx = androidx.compose.ui.platform.LocalContext.current
-    val earnedMine by com.monolith.app.net.Badges.earned.collectAsState()
-    val theirs by Graph.profileExtras.badges.collectAsState()
+private fun BadgesSection(pk: String, mine: Boolean, earnedIds: List<String>, onDetail: (com.monolith.app.net.BadgeDef) -> Unit) {
+    val ctx = LocalContext.current
     LaunchedEffect(mine) { if (mine) runCatching { com.monolith.app.net.Badges.refresh(ctx) } }
-    val earnedIds: List<String> = if (mine) earnedMine.entries.sortedByDescending { it.value }.map { it.key } else theirs[pk] ?: emptyList()
-    val earned = earnedIds.mapNotNull { com.monolith.app.net.Badges.def(it) }
+    val earned = remember(earnedIds) { earnedIds.mapNotNull { com.monolith.app.net.Badges.def(it) } }
     if (!mine && earned.isEmpty()) return
     var all by remember { mutableStateOf(false) }
-    var detail by remember { mutableStateOf<com.monolith.app.net.BadgeDef?>(null) }
-    Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
-        Text(t("Distintivi"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
-        Text(t("{0} su {1}", earned.size, com.monolith.app.net.Badges.ALL.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
-        TextButton(onClick = { all = true }) { Text(t("Vedi tutti")) }
-    }
+    SectionHead(t("Distintivi"), t("{0} su {1}", earned.size, com.monolith.app.net.Badges.ALL.size), t("Vedi tutti")) { all = true }
     if (earned.isEmpty()) {
-        Text(t("Usa Monolith e sbloccherai i primi distintivi."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp))
+        Surface(
+            shape = RoundedCornerShape(24.dp), color = MaterialTheme.colorScheme.surfaceContainerLow,
+            modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp),
+        ) {
+            Text(
+                t("Usa Monolith e sbloccherai i primi distintivi."), style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(20.dp),
+            )
+        }
     } else {
-        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        LazyRow(contentPadding = PaddingValues(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
             items(earned, key = { it.id }) { d ->
-                Column(Modifier.width(72.dp).bounceClick(0.92f) { detail = d }, horizontalAlignment = Alignment.CenterHorizontally) {
-                    com.monolith.app.ui.components.BadgeEmblem(d, true, 60.dp)
-                    Spacer(Modifier.height(4.dp))
-                    Text(t(d.name), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                Column(Modifier.width(80.dp).bounceClick(0.92f) { onDetail(d) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    com.monolith.app.ui.components.BadgeEmblem(d, true, 64.dp)
+                    Spacer(Modifier.height(6.dp))
+                    Text(t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
                 }
             }
         }
@@ -702,44 +836,58 @@ private fun BadgesSection(pk: String, mine: Boolean) {
     if (all) {
         MonoSheet(onDismissRequest = { all = false }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
             Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
-                Text(t("Distintivi"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 4.dp))
-                Spacer(Modifier.height(12.dp))
+                Text(t("Distintivi"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 8.dp))
+                Text(
+                    t("{0} su {1}", earned.size, com.monolith.app.net.Badges.ALL.size), style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 8.dp, top = 2.dp),
+                )
+                Spacer(Modifier.height(16.dp))
                 val list = if (mine) earned + com.monolith.app.net.Badges.ALL.filter { it.id !in earnedIds } else earned
                 androidx.compose.foundation.layout.FlowRow(
-                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(14.dp), maxItemsInEachRow = 3,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(16.dp), maxItemsInEachRow = 4,
                 ) {
                     list.forEach { d ->
                         val got = d.id in earnedIds
-                        Column(Modifier.weight(1f).bounceClick(0.94f) { detail = d }, horizontalAlignment = Alignment.CenterHorizontally) {
-                            com.monolith.app.ui.components.BadgeEmblem(d, got, 76.dp)
-                            Spacer(Modifier.height(4.dp))
-                            Text(t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (got) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        Column(Modifier.weight(1f).bounceClick(0.94f) { onDetail(d) }, horizontalAlignment = Alignment.CenterHorizontally) {
+                            com.monolith.app.ui.components.BadgeEmblem(d, got, 68.dp)
+                            Spacer(Modifier.height(6.dp))
+                            Text(
+                                t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center,
+                                color = if (got) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant,
+                            )
                         }
                     }
+                    // fill the last row so the badges keep their size
+                    repeat((4 - list.size % 4) % 4) { Spacer(Modifier.weight(1f)) }
                 }
             }
         }
     }
-    detail?.let { d ->
-        val got = d.id in earnedIds
-        MonoDialog(
-            onDismissRequest = { detail = null },
-            text = {
-                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
-                    com.monolith.app.ui.components.BadgeEmblem(d, got, 140.dp, Modifier.tiltDepth(10f, 18f))
-                    Spacer(Modifier.height(14.dp))
-                    Text(t(d.name), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
-                    Text(t(d.desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
-                    if (mine) {
-                        Spacer(Modifier.height(8.dp))
-                        Text(
-                            earnedMine[d.id]?.let { t("Ottenuto il {0}", Fmt.dayShort(it)) } ?: t("Ancora da sbloccare"),
-                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
-                        )
-                    }
+}
+
+@Composable
+internal fun BadgeDetailDialog(d: com.monolith.app.net.BadgeDef, mine: Boolean, pk: String, onDismiss: () -> Unit) {
+    val earnedMine by com.monolith.app.net.Badges.earned.collectAsState()
+    val theirs by Graph.profileExtras.badges.collectAsState()
+    val got = if (mine) d.id in earnedMine else d.id in (theirs[pk] ?: emptyList())
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        text = {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                com.monolith.app.ui.components.BadgeEmblem(d, got, 132.dp, Modifier.tiltDepth(10f, 18f))
+                Spacer(Modifier.height(16.dp))
+                Text(t(d.name), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                Spacer(Modifier.height(4.dp))
+                Text(t(d.desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                if (mine) {
+                    Spacer(Modifier.height(10.dp))
+                    Text(
+                        earnedMine[d.id]?.let { t("Ottenuto il {0}", Fmt.dayShort(it)) } ?: t("Ancora da sbloccare"),
+                        style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
                 }
-            },
-            confirmButton = { TextButton(onClick = { detail = null }) { Text(t("Chiudi")) } },
-        )
-    }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Chiudi")) } },
+    )
 }

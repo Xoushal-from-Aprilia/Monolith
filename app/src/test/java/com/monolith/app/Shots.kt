@@ -7,14 +7,16 @@ import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
-import androidx.compose.ui.test.onRoot
+import androidx.compose.ui.test.onAllNodesWithContentDescription
+import androidx.compose.ui.test.onAllNodesWithText
+import androidx.compose.ui.test.onFirst
+import androidx.compose.ui.test.performClick
 import androidx.navigation.NavHostController
 import androidx.navigation.compose.NavHost
 import androidx.navigation.compose.composable
 import androidx.navigation.compose.rememberNavController
 import androidx.test.core.app.ApplicationProvider
 import androidx.test.ext.junit.runners.AndroidJUnit4
-import com.github.takahirom.roborazzi.captureRoboImage
 import com.monolith.app.core.Keys
 import com.monolith.app.core.Profile
 import com.monolith.app.data.Birthday
@@ -39,20 +41,23 @@ import org.robolectric.annotation.GraphicsMode
  */
 @RunWith(AndroidJUnit4::class)
 @GraphicsMode(GraphicsMode.Mode.NATIVE)
-@Config(sdk = [34], qualifiers = "w400dp-h860dp-xxhdpi")
+@Config(sdk = [34], qualifiers = "it-rIT-w400dp-h860dp-xxhdpi")
 class Shots {
     @get:Rule val compose = createComposeRule()
 
-    private val me = "a1".repeat(32)
-    private val ada = "b2".repeat(32)
-    private val leo = "c3".repeat(32)
-    private val mia = "d4".repeat(32)
-    private val tom = "e5".repeat(32)
+    private val meSk = com.monolith.app.crypto.Secp256k1.generatePrivateKey()
+    private fun pub(sk: ByteArray) = com.monolith.app.crypto.Hex.encode(com.monolith.app.crypto.Secp256k1.publicKey(sk))
+    private fun newPub() = pub(com.monolith.app.crypto.Secp256k1.generatePrivateKey())
+    private val me = pub(meSk)
+    private val ada = newPub()
+    private val leo = newPub()
+    private val mia = newPub()
+    private val tom = newPub()
 
     @Before
     fun seed() = runBlocking {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
-        Graph.identity.previewAs(Keys(ByteArray(32) { 7 }, me), Profile("christian", "Christian", "🗿", "Costruisco cose. Monolith ogni giorno."))
+        Graph.identity.previewAs(Keys(meSk, me), Profile("christian", "Christian", "🗿", "Costruisco cose. Monolith ogni giorno."))
         val day = 86_400_000L
         val now = System.currentTimeMillis()
         val db = Graph.db
@@ -91,10 +96,17 @@ class Shots {
         com.monolith.app.net.Badges.init(ctx)
         Graph.profileExtras.read(ada, JSONObject().put("cv", "mountains").put("bg", "first_word,photographer,streak100,explorer,artist,anniversary"))
         Graph.profileExtras.setCover("stars")
+        Graph.profileExtras.setFeatured(listOf("streak100", "monolith", "pioneer"))
+        Graph.profileExtras.read(ada, JSONObject().put("bf", "streak100,photographer"))
+        val today = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+        db.agenda().upsert(com.monolith.app.data.AgendaEvent("e1", "Caffè con Ada", start = today + 9 * 3_600_000L, end = today + 10 * 3_600_000L, emoji = "☕", createdAt = now, updatedAt = now))
+        db.agenda().upsert(com.monolith.app.data.AgendaEvent("e2", "Palestra", start = today + 18 * 3_600_000L + 1_800_000L, emoji = "🏋️", createdAt = now, updatedAt = now))
+        db.agenda().upsert(com.monolith.app.data.AgendaEvent("e3", "Compleanno di Leo", start = today + 2 * day, allDay = true, emoji = "🎂", createdAt = now, updatedAt = now))
         Thread.sleep(300)
     }
 
-    private fun shot(name: String, dark: Boolean = false, content: @Composable (NavHostController) -> Unit) {
+    @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
+    private fun shot(name: String, dark: Boolean = false, act: (() -> Unit)? = null, content: @Composable (NavHostController) -> Unit) {
         compose.setContent {
             MonolithTheme(if (dark) 2 else 1) {
                 val nav = rememberNavController()
@@ -105,20 +117,43 @@ class Shots {
             }
         }
         // room loads on its own threads: give it time, then let the animations end
+        settle()
+        if (act != null) {
+            act()
+            settle()
+        }
+        com.github.takahirom.roborazzi.captureScreenRoboImage("build/shots/$name.png")
+    }
+
+    private fun settle() {
         repeat(4) { Thread.sleep(250); compose.waitForIdle() }
         compose.mainClock.advanceTimeBy(3000)
         compose.waitForIdle()
-        compose.onRoot().captureRoboImage("build/shots/$name.png")
     }
+
+    private fun click(text: String) = compose.onAllNodesWithText(text, substring = false, useUnmergedTree = true).onFirst().performClick()
 
     @Test fun home_agenda() = shot("01_home_agenda") { com.monolith.app.ui.HomeScreen(it, 0) {} }
     @Test fun home_chat() = shot("02_home_chat") { com.monolith.app.ui.HomeScreen(it, 1) {} }
     @Test fun home_friends() = shot("03_home_friends") { com.monolith.app.ui.HomeScreen(it, 3) {} }
     @Test fun home_shards() = shot("04_home_shards") { com.monolith.app.ui.HomeScreen(it, 4) {} }
-    @Test fun profile_mine() = shot("05_profile_mine") { com.monolith.app.ui.screens.ProfileScreen(it, me) }
-    @Test fun profile_friend() = shot("06_profile_friend") { com.monolith.app.ui.screens.ProfileScreen(it, ada) }
+    @Config(qualifiers = "+h1500dp") @Test fun profile_mine() = shot("05_profile_mine") { com.monolith.app.ui.screens.ProfileScreen(it, me) }
+    @Config(qualifiers = "+h1500dp") @Test fun profile_friend() = shot("06_profile_friend") { com.monolith.app.ui.screens.ProfileScreen(it, ada) }
     @Test fun profile_friend_dark() = shot("07_profile_friend_dark", dark = true) { com.monolith.app.ui.screens.ProfileScreen(it, ada) }
-    @Test fun settings() = shot("08_settings") { com.monolith.app.ui.screens.SettingsScreen(it) }
+    @Config(qualifiers = "+h2900dp") @Test fun settings() = shot("08_settings") { com.monolith.app.ui.screens.SettingsScreen(it) }
+    @Config(qualifiers = "+h1900dp") @Test fun edit_profile() = shot("12_edit_profile") { com.monolith.app.ui.screens.EditProfileScreen(it) }
+    @Test fun story_sheet() = shot("13_story_sheet", act = { click("Nuova storia") }) { com.monolith.app.ui.screens.ProfileScreen(it, me) }
+    @Test fun badges_sheet() = shot("14_badges_sheet", act = { click("Vedi tutti") }) { com.monolith.app.ui.screens.ProfileScreen(it, me) }
+    @Test fun agenda_lists() = shot("15_agenda_lists", act = { click("Liste") }) { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Test fun agenda_expenses() = shot("16_agenda_expenses", act = { click("Spese") }) { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Test fun agenda_albums() = shot("17_agenda_albums", act = { click("Album") }) { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Test fun agenda_habits() = shot("18_agenda_habits", act = { click("Abitudini") }) { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Test fun agenda_month() = shot("19_agenda_dark", dark = true) { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Test fun chat_dark() = shot("20_chat_dark", dark = true) { com.monolith.app.ui.screens.ChatScreen(it, ada) }
+    @Test fun chat_attach() = shot("21_chat_attach", act = { compose.onAllNodesWithContentDescription("Allega").onFirst().performClick() }) { com.monolith.app.ui.screens.ChatScreen(it, ada) }
+    @Test fun event_editor() = shot("22_event_editor") { com.monolith.app.ui.screens.EventEditorScreen(it, "e1", 0L) }
+    @Test fun journal() = shot("23_journal") { com.monolith.app.ui.screens.JournalScreen(it) }
+    @Test fun sounds() = shot("24_sounds") { com.monolith.app.ui.screens.SoundsScreen(it) }
     @Test fun badges() = shot("10_badges") { BadgeBoard(false) }
     @Test fun badges_dark() = shot("11_badges_dark", dark = true) { BadgeBoard(true) }
     @Test fun chat() = shot("09_chat") { com.monolith.app.ui.screens.ChatScreen(it, ada) }
