@@ -82,14 +82,14 @@ object Weekly {
     fun enabled(ctx: Context) = sp(ctx).getBoolean("on", true)
     fun setEnabled(ctx: Context, on: Boolean) = sp(ctx).edit().putBoolean("on", on).apply()
 
-    /** the recap was announced and not opened yet (shown as a card in Clubhouse for three days) */
+    /** the recap was announced and not opened yet (shown as a card in Chat for three days) */
     fun unseen(ctx: Context): Boolean {
         val s = sp(ctx)
         val at = s.getLong("notified_at", 0L)
         return at > 0 && now() - at < 3 * DAY && s.getLong("seen_at", 0L) < at
     }
 
-    /** true while the Clubhouse card "your week is ready" should show */
+    /** true while the Chat card "your week is ready" should show */
     val ready = MutableStateFlow(false)
 
     fun refresh(ctx: Context) { ready.value = unseen(ctx) }

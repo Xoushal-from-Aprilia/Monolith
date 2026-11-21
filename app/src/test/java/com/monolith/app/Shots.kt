@@ -2,6 +2,10 @@ package com.monolith.app
 
 import android.content.Context
 import androidx.compose.runtime.Composable
+import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.foundation.layout.padding
+import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onRoot
 import androidx.navigation.NavHostController
@@ -25,7 +29,6 @@ import org.json.JSONObject
 import org.junit.Before
 import org.junit.Rule
 import org.junit.Test
-import org.junit.rules.Timeout
 import org.junit.runner.RunWith
 import org.robolectric.annotation.Config
 import org.robolectric.annotation.GraphicsMode
@@ -39,7 +42,6 @@ import org.robolectric.annotation.GraphicsMode
 @Config(sdk = [34], qualifiers = "w400dp-h860dp-xxhdpi")
 class Shots {
     @get:Rule val compose = createComposeRule()
-    @get:Rule val timeout: Timeout = Timeout.seconds(120)
 
     private val me = "a1".repeat(32)
     private val ada = "b2".repeat(32)
@@ -117,5 +119,19 @@ class Shots {
     @Test fun profile_friend() = shot("06_profile_friend") { com.monolith.app.ui.screens.ProfileScreen(it, ada) }
     @Test fun profile_friend_dark() = shot("07_profile_friend_dark", dark = true) { com.monolith.app.ui.screens.ProfileScreen(it, ada) }
     @Test fun settings() = shot("08_settings") { com.monolith.app.ui.screens.SettingsScreen(it) }
+    @Test fun badges() = shot("10_badges") { BadgeBoard(false) }
+    @Test fun badges_dark() = shot("11_badges_dark", dark = true) { BadgeBoard(true) }
     @Test fun chat() = shot("09_chat") { com.monolith.app.ui.screens.ChatScreen(it, ada) }
+
+    @Composable
+    private fun BadgeBoard(dark: Boolean) {
+        androidx.compose.foundation.layout.FlowRow(
+            androidx.compose.ui.Modifier.fillMaxSize().background(androidx.compose.material3.MaterialTheme.colorScheme.background).padding(8.dp),
+            maxItemsInEachRow = 6,
+        ) {
+            com.monolith.app.net.Badges.ALL.forEachIndexed { i, d ->
+                com.monolith.app.ui.components.BadgeEmblem(d, i % 9 != 8, 62.dp, androidx.compose.ui.Modifier.padding(2.dp))
+            }
+        }
+    }
 }

@@ -425,7 +425,7 @@ private data class TabSpec(val label: String, val on: ImageVector, val off: Imag
 
 private val TABS = listOf(
     TabSpec("Agenda", Icons.Rounded.CalendarMonth, Icons.Outlined.CalendarMonth),
-    TabSpec("Clubhouse", Icons.Rounded.Forum, Icons.Outlined.Forum),
+    TabSpec("Chat", Icons.Rounded.Forum, Icons.Outlined.Forum),
     TabSpec("Mappa", Icons.Rounded.Map, Icons.Outlined.Map),
     TabSpec("Amici", Icons.Rounded.People, Icons.Outlined.People),
     TabSpec("Shard", com.monolith.app.ui.components.ShardIcons.Filled, com.monolith.app.ui.components.ShardIcons.Outline),
@@ -444,13 +444,6 @@ internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) 
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
                 TABS.forEachIndexed { i, tb ->
-                    // the Shard tab stands apart, after a thin line
-                    if (i == 4) {
-                        Box(
-                            Modifier.align(Alignment.CenterVertically).width(1.dp).height(30.dp)
-                                .background(MaterialTheme.colorScheme.outlineVariant),
-                        )
-                    }
                     val selected = tab == i
                     val scale by animateFloatAsState(if (selected) 1.12f else 1f, Motion.bouncy(), label = "tabScale")
                     val lift by animateDpAsState(if (selected) (-1).dp else 0.dp, Motion.bouncy(), label = "tabLift")

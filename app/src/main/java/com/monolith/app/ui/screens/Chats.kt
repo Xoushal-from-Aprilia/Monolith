@@ -263,7 +263,7 @@ fun ChatListScreen(nav: NavHostController) {
             item(key = "head") {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     BigTitle(
-                        t("Clubhouse"), Modifier.weight(1f),
+                        t("Chat"), Modifier.weight(1f),
                         subtitle = if (onlineFriends.isEmpty()) t("Le tue conversazioni") else t("{0} amici online", onlineFriends.size),
                     )
                     IconButton(onClick = { nav.navigate("search") }) { Icon(Icons.Rounded.Search, t("Cerca nei messaggi")) }

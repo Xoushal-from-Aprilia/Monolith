@@ -185,7 +185,7 @@ private fun Welcome(onStart: () -> Unit, onRestore: () -> Unit) {
         Spacer(Modifier.height(24.dp))
         val features = listOf(
             Triple(Icons.Rounded.CalendarMonth, t("Agenda"), t("Eventi, liste condivise, promemoria con emoji")),
-            Triple(Icons.Rounded.Forum, t("Clubhouse"), t("Chat, gruppi, vocali e videochiamate")),
+            Triple(Icons.Rounded.Forum, t("Chat"), t("Private e di gruppo, con vocali e videochiamate")),
             Triple(Icons.Rounded.LocationOn, t("Posizione live"), t("Condividi dove sei solo con chi vuoi")),
         )
         features.forEachIndexed { i, (icon, title, desc) ->

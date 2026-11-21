@@ -70,7 +70,7 @@ class BondDays(ctx: Context) {
     }
 }
 
-/** friends you keep at the top of Clubhouse and of the widget */
+/** friends you keep at the top of Chat and of the widget */
 class Favorites(ctx: Context) {
     private val sp = ctx.getSharedPreferences("favorites", Context.MODE_PRIVATE)
     private val _all = MutableStateFlow(sp.getStringSet("set", emptySet())?.toSet() ?: emptySet())

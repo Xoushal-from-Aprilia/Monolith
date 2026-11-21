@@ -627,7 +627,7 @@ private fun WeekArt(id: String, ink: Color, modifier: Modifier) {
     }
 }
 
-/** Clubhouse card shown after the Sunday notification, until you open the recap */
+/** Chat card shown after the Sunday notification, until you open the recap */
 @Composable
 fun WeeklyCard(onOpen: () -> Unit) {
     Row(

@@ -80,7 +80,7 @@ private data class Scene(val kicker: String, val title: String, val lines: List<
 private val FILM = listOf(
     Scene("", "Monolith" /*i18n*/, listOf("Tutto quello che conta, tra amici." /*i18n*/), "intro"),
     Scene("Agenda" /*i18n*/, "Il tuo tempo, condiviso" /*i18n*/, listOf("Eventi e inviti agli amici" /*i18n*/, "Conto alla rovescia e meteo" /*i18n*/, "Compleanni e anniversari d'amicizia" /*i18n*/), "agenda"),
-    Scene("Clubhouse" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Sticker, inoltri e foto a vista unica" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
+    Scene("Chat" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Sticker, inoltri e foto a vista unica" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
     Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
