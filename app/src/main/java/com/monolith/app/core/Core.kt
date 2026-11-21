@@ -283,6 +283,12 @@ class IdentityStore(private val ctx: Context) {
         return k
     }
 
+    /** screenshots in tests only: an identity without the keystore */
+    internal fun previewAs(k: Keys, p: Profile) {
+        keys = k
+        _profile.value = p
+    }
+
     fun updateProfile(p: Profile) {
         sp.edit().putString("profile", p.toJson().toString()).apply()
         _profile.value = p

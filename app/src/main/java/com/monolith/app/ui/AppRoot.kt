@@ -432,7 +432,7 @@ private val TABS = listOf(
 )
 
 @Composable
-private fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
+internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
     val unread by remember { Graph.db.messages().unread() }.collectAsState(initial = emptyList())
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
     val unreadTotal = unread.filter { !com.monolith.app.net.Shard.isQuietConv(it.convId) && !it.convId.startsWith("g:shard.") }.sumOf { it.n }
