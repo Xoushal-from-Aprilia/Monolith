@@ -122,5 +122,6 @@ object HighFive {
 
     suspend fun add(m: FiveMatch) {
         Graph.messenger.sendFriendRequest(UserResult(m.pubkey, m.profile, now() / 1000), verified = true)
+        Graph.profileExtras.inc("highfive")
     }
 }

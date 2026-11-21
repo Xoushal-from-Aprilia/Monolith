@@ -95,6 +95,7 @@ object Weekly {
     fun refresh(ctx: Context) { ready.value = unseen(ctx) }
 
     fun markSeen(ctx: Context) {
+        if (sp(ctx).getLong("seen_at", 0L) < sp(ctx).getLong("notified_at", 0L)) Graph.profileExtras.inc("wrapped")
         sp(ctx).edit().putLong("seen_at", now()).apply()
         ready.value = false
     }

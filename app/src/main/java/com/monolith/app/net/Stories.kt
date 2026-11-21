@@ -52,16 +52,19 @@ object Stories {
     suspend fun postPhoto(uri: Uri, caption: String = "", music: org.json.JSONObject? = null) {
         val gid = ensureMine() ?: return
         Graph.messenger.sendPhoto("g:$gid", uri, caption, music = music)
+        Graph.profileExtras.inc("stories")
     }
 
     suspend fun postText(text: String, music: org.json.JSONObject? = null) {
         val gid = ensureMine() ?: return
         Graph.messenger.sendText("g:$gid", text, music = music)
+        Graph.profileExtras.inc("stories")
     }
 
     suspend fun postAudio(file: java.io.File, durationMs: Long, music: org.json.JSONObject, caption: String) {
         val gid = ensureMine() ?: return
         Graph.messenger.sendAudioStory("g:$gid", file, durationMs, music, caption)
+        Graph.profileExtras.inc("stories")
     }
 
     // ---- seen

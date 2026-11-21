@@ -1,6 +1,10 @@
 package com.monolith.app.ui.screens
 
 import android.content.Context
+import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.foundation.layout.aspectRatio
+import androidx.compose.foundation.layout.statusBars
+import androidx.compose.foundation.layout.asPaddingValues
 import com.monolith.app.data.SavedItem
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.runtime.DisposableEffect
@@ -175,25 +179,37 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     val status = (if (mine) myStatus else statuses[pk])?.takeIf { it.active }
     val bday = if (mine) myBday else bdays[pk]
 
-    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().verticalScroll(rememberScrollState())) {
-        Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
-            Spacer(Modifier.weight(1f))
-            if (!mine && friend?.status == FriendStatus.FRIEND) {
-                val fav = pk in favs
-                IconButton(onClick = { Graph.favorites.toggle(pk) }) {
-                    Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.StarBorder, if (fav) t("Togli dai preferiti") else t("Aggiungi ai preferiti"))
+    val myCover by Graph.profileExtras.cover.collectAsState()
+    val covers by Graph.profileExtras.covers.collectAsState()
+    val cover = if (mine) myCover else covers[pk] ?: "monoliths"
+    var coverSheet by remember { mutableStateOf(false) }
+    Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).verticalScroll(rememberScrollState())) {
+        val topInset = androidx.compose.foundation.layout.WindowInsets.statusBars.asPaddingValues().calculateTopPadding()
+        Box(Modifier.fillMaxWidth().height(topInset + 262.dp)) {
+            com.monolith.app.ui.components.CoverArt(cover, Modifier.fillMaxWidth().height(topInset + 190.dp))
+            Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 8.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                CoverButton { IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) } }
+                Spacer(Modifier.weight(1f))
+                if (mine) CoverButton { IconButton(onClick = { coverSheet = true }) { Icon(Icons.Rounded.Wallpaper, t("Copertina")) } }
+                if (!mine && friend?.status == FriendStatus.FRIEND) {
+                    val fav = pk in favs
+                    CoverButton {
+                        IconButton(onClick = { Graph.favorites.toggle(pk) }) {
+                            Icon(if (fav) Icons.Rounded.Star else Icons.Rounded.StarBorder, if (fav) t("Togli dai preferiti") else t("Aggiungi ai preferiti"))
+                        }
+                    }
                 }
             }
-        }
-        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             Box(
-                Modifier.size(132.dp).tiltDepth(8f, 10f).clip(CircleShape)
+                Modifier.align(Alignment.BottomCenter).size(144.dp).tiltDepth(8f, 10f).clip(CircleShape)
+                    .background(MaterialTheme.colorScheme.background).padding(6.dp).clip(CircleShape)
                     .then(if (stories.isNotEmpty()) Modifier.border(3.dp, MaterialTheme.colorScheme.onSurface, CircleShape) else Modifier)
                     .bounceClick(0.95f) { if (stories.isNotEmpty()) nav.navigate(Routes.stories(pk)) },
                 contentAlignment = Alignment.Center,
             ) { Avatar(emoji, 116.dp) }
-            Spacer(Modifier.height(12.dp))
+        }
+        Column(Modifier.fillMaxWidth().padding(horizontal = 24.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+            Spacer(Modifier.height(10.dp))
             Row(verticalAlignment = Alignment.CenterVertically) {
                 Text(name, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
                 if (!mine) com.monolith.app.ui.components.BondBadge(pk)
@@ -203,7 +219,8 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 Spacer(Modifier.height(10.dp))
                 Text(bio, style = MaterialTheme.typography.bodyLarge, textAlign = TextAlign.Center)
             }
-            if (status != null || bday != null) {
+            val since = if (!mine && friend?.status == FriendStatus.FRIEND) friend?.createdAt?.takeIf { it > 0 } else null
+            if (status != null || bday != null || since != null) {
                 Spacer(Modifier.height(12.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
                     status?.let {
@@ -214,6 +231,11 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                     bday?.let {
                         Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
                             Text("🎂  " + birthdayText(it), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp))
+                        }
+                    }
+                    since?.let {
+                        Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surfaceContainerHigh) {
+                            Text("🤝  " + friendSince(it), modifier = Modifier.padding(horizontal = 14.dp, vertical = 8.dp), maxLines = 1)
                         }
                     }
                 }
@@ -238,6 +260,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                 }
             }
         }
+        BadgesSection(pk, mine)
         if (stories.isNotEmpty()) {
             Text(t("Storie"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 24.dp, top = 18.dp, bottom = 8.dp))
             LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -282,6 +305,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     }
     if (statusSheet) StatusSheet { statusSheet = false }
     songUri?.let { u -> AudioStoryDialog(u) { songUri = null } }
+    if (coverSheet) CoverSheet { coverSheet = false }
     if (textStory) {
         var text by remember { mutableStateOf("") }
         var song by remember { mutableStateOf<Song?>(null) }
@@ -575,5 +599,136 @@ private fun VinylStory(song: Song?, caption: String, modifier: Modifier) {
             Spacer(Modifier.height(18.dp))
             Text(caption, color = Color.White, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
         }
+    }
+}
+
+
+@Composable
+private fun CoverButton(content: @Composable () -> Unit) {
+    Surface(shape = CircleShape, color = MaterialTheme.colorScheme.surface.copy(alpha = 0.72f)) { content() }
+}
+
+/** "Amici da 1 anno e 2 mesi" */
+private fun friendSince(ts: Long): String {
+    val a = java.util.Calendar.getInstance().apply { timeInMillis = ts }
+    val b = java.util.Calendar.getInstance()
+    var months = (b.get(java.util.Calendar.YEAR) - a.get(java.util.Calendar.YEAR)) * 12 + (b.get(java.util.Calendar.MONTH) - a.get(java.util.Calendar.MONTH))
+    if (b.get(java.util.Calendar.DAY_OF_MONTH) < a.get(java.util.Calendar.DAY_OF_MONTH)) months--
+    months = months.coerceAtLeast(0)
+    val y = months / 12
+    val m = months % 12
+    return when {
+        y == 0 && m == 0 -> t("Amici da poco")
+        y == 0 -> if (m == 1) t("Amici da 1 mese") else t("Amici da {0} mesi", m)
+        m == 0 -> if (y == 1) t("Amici da 1 anno") else t("Amici da {0} anni", y)
+        else -> (if (y == 1) t("Amici da 1 anno") else t("Amici da {0} anni", y)) + " " + (if (m == 1) t("e 1 mese") else t("e {0} mesi", m))
+    }
+}
+
+@Composable
+private fun CoverSheet(onDismiss: () -> Unit) {
+    val cur by Graph.profileExtras.cover.collectAsState()
+    MonoSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+        Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
+            Text(t("Copertina"), style = MaterialTheme.typography.titleLarge)
+            Text(t("La vedono anche i tuoi amici"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Spacer(Modifier.height(14.dp))
+            androidx.compose.foundation.layout.FlowRow(
+                horizontalArrangement = Arrangement.spacedBy(10.dp), verticalArrangement = Arrangement.spacedBy(10.dp), maxItemsInEachRow = 2,
+            ) {
+                com.monolith.app.ui.components.Covers.IDS.forEach { id ->
+                    val sel = id == cur
+                    Column(Modifier.weight(1f)) {
+                        com.monolith.app.ui.components.CoverArt(
+                            id,
+                            Modifier.fillMaxWidth().aspectRatio(2.1f).clip(RoundedCornerShape(16.dp))
+                                .border(if (sel) 3.dp else 1.dp, if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(16.dp))
+                                .bounceClick(0.95f) {
+                                    if (!sel) {
+                                        Graph.profileExtras.setCover(id)
+                                        Graph.scope.launch { Graph.messenger.sendProfileToFriends() }
+                                    }
+                                },
+                        )
+                        Text(com.monolith.app.ui.components.Covers.name(id), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp, start = 4.dp))
+                    }
+                }
+            }
+        }
+    }
+}
+
+/** the badges on a profile: mine (earned and still to earn) or a friend's (earned) */
+@Composable
+private fun BadgesSection(pk: String, mine: Boolean) {
+    val ctx = androidx.compose.ui.platform.LocalContext.current
+    val earnedMine by com.monolith.app.net.Badges.earned.collectAsState()
+    val theirs by Graph.profileExtras.badges.collectAsState()
+    LaunchedEffect(mine) { if (mine) runCatching { com.monolith.app.net.Badges.refresh(ctx) } }
+    val earnedIds: List<String> = if (mine) earnedMine.entries.sortedByDescending { it.value }.map { it.key } else theirs[pk] ?: emptyList()
+    val earned = earnedIds.mapNotNull { com.monolith.app.net.Badges.def(it) }
+    if (!mine && earned.isEmpty()) return
+    var all by remember { mutableStateOf(false) }
+    var detail by remember { mutableStateOf<com.monolith.app.net.BadgeDef?>(null) }
+    Row(Modifier.fillMaxWidth().padding(start = 24.dp, end = 12.dp, top = 18.dp), verticalAlignment = Alignment.CenterVertically) {
+        Text(t("Distintivi"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+        Text(t("{0} su {1}", earned.size, com.monolith.app.net.Badges.ALL.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+        TextButton(onClick = { all = true }) { Text(t("Vedi tutti")) }
+    }
+    if (earned.isEmpty()) {
+        Text(t("Usa Monolith e sbloccherai i primi distintivi."), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(horizontal = 24.dp))
+    } else {
+        LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+            items(earned, key = { it.id }) { d ->
+                Column(Modifier.width(72.dp).bounceClick(0.92f) { detail = d }, horizontalAlignment = Alignment.CenterHorizontally) {
+                    com.monolith.app.ui.components.BadgeEmblem(d, true, 60.dp)
+                    Spacer(Modifier.height(4.dp))
+                    Text(t(d.name), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis, textAlign = TextAlign.Center)
+                }
+            }
+        }
+    }
+    if (all) {
+        MonoSheet(onDismissRequest = { all = false }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(horizontal = 16.dp).padding(bottom = 24.dp).verticalScroll(rememberScrollState())) {
+                Text(t("Distintivi"), style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(start = 4.dp))
+                Spacer(Modifier.height(12.dp))
+                val list = if (mine) earned + com.monolith.app.net.Badges.ALL.filter { it.id !in earnedIds } else earned
+                androidx.compose.foundation.layout.FlowRow(
+                    horizontalArrangement = Arrangement.spacedBy(8.dp), verticalArrangement = Arrangement.spacedBy(14.dp), maxItemsInEachRow = 3,
+                ) {
+                    list.forEach { d ->
+                        val got = d.id in earnedIds
+                        Column(Modifier.weight(1f).bounceClick(0.94f) { detail = d }, horizontalAlignment = Alignment.CenterHorizontally) {
+                            com.monolith.app.ui.components.BadgeEmblem(d, got, 76.dp)
+                            Spacer(Modifier.height(4.dp))
+                            Text(t(d.name), style = MaterialTheme.typography.labelMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, color = if (got) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                    }
+                }
+            }
+        }
+    }
+    detail?.let { d ->
+        val got = d.id in earnedIds
+        MonoDialog(
+            onDismissRequest = { detail = null },
+            text = {
+                Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                    com.monolith.app.ui.components.BadgeEmblem(d, got, 140.dp, Modifier.tiltDepth(10f, 18f))
+                    Spacer(Modifier.height(14.dp))
+                    Text(t(d.name), style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+                    Text(t(d.desc), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
+                    if (mine) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            earnedMine[d.id]?.let { t("Ottenuto il {0}", Fmt.dayShort(it)) } ?: t("Ancora da sbloccare"),
+                            style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                    }
+                }
+            },
+            confirmButton = { TextButton(onClick = { detail = null }) { Text(t("Chiudi")) } },
+        )
     }
 }

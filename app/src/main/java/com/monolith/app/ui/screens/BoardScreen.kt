@@ -254,6 +254,7 @@ fun BoardScreen(nav: NavHostController, conv: String) {
                     val f = File(ctx.cacheDir, "board-${now()}.jpg")
                     withContext(Dispatchers.Default) { render(strokes, f) }
                     Graph.messenger.sendPhoto(conv, Uri.fromFile(f), t("Dalla lavagna"))
+                    Graph.profileExtras.inc("drawings")
                     runCatching { f.delete() }
                 }
                 nav.popBackStack()

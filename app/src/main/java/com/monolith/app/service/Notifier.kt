@@ -253,6 +253,17 @@ class Notifier(private val ctx: Context) {
     fun shardEvent(shard: String, text: String) =
         simple(("shev$shard$text").hashCode(), t("Nuovo evento in {0}", shard), text, "📅", openApp(22) { putExtra(EXTRA_TAB, 4) })
 
+    fun anniversary(pk: String, name: String, emoji: String, years: Int) =
+        simple(
+            ("anniv$pk").hashCode(),
+            if (years == 1) t("Un anno di amicizia con {0}", name) else t("{0} anni di amicizia con {1}", years, name),
+            t("Siete amici su Monolith da oggi, {0} anni fa. Scrivigli!", years), emoji,
+            openApp(("anniv$pk").hashCode()) { putExtra(EXTRA_CONV, pk) },
+        )
+
+    fun badge(name: String, desc: String) =
+        simple(("badge$name").hashCode(), t("Nuovo distintivo: {0}", name), desc, "🏅", openApp(23) { putExtra(EXTRA_TAB, 3) })
+
     fun screenshot(conv: String, name: String, emoji: String) =
         simple(("shot$conv").hashCode(), t("{0} ha fatto uno screenshot", name), t("della vostra chat"), emoji, openApp(("s$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
 

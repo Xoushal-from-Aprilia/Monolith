@@ -333,16 +333,18 @@ class Messenger(
         val wasFriend = existing.status == FriendStatus.FRIEND
         db.friends().upsert(existing.copy(status = FriendStatus.FRIEND, username = prof.username, displayName = prof.displayName, emoji = prof.emoji, bio = prof.bio))
         readBirthday(from, p)
+        Graph.profileExtras.read(from, p)
         if (!wasFriend) {
             Graph.notifier.friendAccepted(prof.displayName, prof.emoji)
-            // the request carried no birthday: send it now that we are friends
-            if (Graph.birthdays.mine.value != null) sendStored(from, profilePayload("prof"))
+            // the request carried no birthday, cover or badges: send them now that we are friends
+            sendStored(from, profilePayload("prof"))
         }
     }
 
     private suspend fun onProfile(friend: Friend, p: JSONObject) {
         val prof = Profile.fromJson(p)
         readBirthday(friend.pubkey, p)
+        Graph.profileExtras.read(friend.pubkey, p)
         db.friends().upsert(friend.copy(username = prof.username, displayName = prof.displayName, emoji = prof.emoji, bio = prof.bio))
     }
 
@@ -422,6 +424,7 @@ class Messenger(
         "game" -> runCatching { JSONObject(m.extra ?: "{}").optString("g") }.getOrDefault(Games.TTT).let { "🎮 " + Games.name(it) }
         "dice" -> diceText(m)
         "board" -> "🎨 " + t("Lavagna condivisa")
+        "sticker" -> "🖼️ " + t("Sticker")
         "sos" -> "🆘 " + if (m.outgoing) t("Hai chiesto aiuto") else t("Ha bisogno di aiuto")
         "place" -> {
             val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
@@ -446,7 +449,16 @@ class Messenger(
         tryAssemble(id)
     }
 
-    private fun extFor(kind: String) = if (kind == "voice") "m4a" else "jpg"
+    private fun extFor(kind: String) = when (kind) {
+        "voice" -> "m4a"
+        "sticker" -> "webp"
+        else -> "jpg"
+    }
+
+    suspend fun sendSticker(conv: String, file: File, reply: ReplyRef? = null) {
+        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+        sendMedia(conv, "sticker", bytes, JSONObject(), "", reply)
+    }
 
     private suspend fun tryAssemble(id: String) = assembleLock.withLock {
         val msg = db.messages().get(id) ?: return@withLock
@@ -789,7 +801,14 @@ class Messenger(
         val j = p.toJson().put("t", type)
         // the birthday only goes to friends, never to a stranger with a request
         if (type != "freq") j.put("bd", Graph.birthdays.mine.value?.code() ?: "")
+        j.put("cv", Graph.profileExtras.cover.value).put("bg", Badges.ids())
         return j
+    }
+
+    /** cover or badges changed: tell the friends */
+    suspend fun sendProfileToFriends() {
+        val payload = profilePayload("prof")
+        db.friends().friendsNow().forEach { sendStored(it.pubkey, payload) }
     }
 
     private fun readBirthday(pk: String, p: JSONObject) {

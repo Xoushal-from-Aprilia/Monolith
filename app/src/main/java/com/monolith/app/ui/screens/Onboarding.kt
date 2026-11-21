@@ -119,6 +119,7 @@ import org.json.JSONObject
 fun OnboardingFlow() {
     var step by rememberSaveable { mutableIntStateOf(0) }
     var imported by remember { mutableStateOf<ByteArray?>(null) }
+    val ctx = LocalContext.current
     LaunchedEffect(Unit) { Graph.relays.start(Graph.prefs.relays.value) }
     AnimatedContent(
         targetState = step,
@@ -130,7 +131,8 @@ fun OnboardingFlow() {
         label = "onboarding",
     ) { s ->
         when (s) {
-            0 -> Welcome(onStart = { imported = null; step = 1 }, onRestore = { step = 2 })
+            0 -> Welcome(onStart = { imported = null; step = if (FilmPrefs.seen(ctx)) 1 else 3 }, onRestore = { step = 2 })
+            3 -> FeatureFilm(onDone = { FilmPrefs.markSeen(ctx); step = 1 })
             1 -> ProfileSetup(imported = imported, onBack = { step = if (imported != null) 2 else 0 })
             else -> Restore(onBack = { step = 0 }, onKey = { imported = it; step = 1 })
         }

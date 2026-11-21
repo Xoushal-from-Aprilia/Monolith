@@ -73,6 +73,8 @@ class DoneStore(ctx: Context) {
 
     fun isDone(id: String, occ: Long) = sp.contains(key(id, occ))
 
+    fun count() = sp.all.size
+
     fun set(id: String, occ: Long, done: Boolean) {
         val ed = sp.edit()
         if (done) ed.putLong(key(id, occ), now()) else ed.remove(key(id, occ))

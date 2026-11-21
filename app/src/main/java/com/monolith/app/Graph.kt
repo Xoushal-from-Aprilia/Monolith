@@ -65,6 +65,7 @@ object Graph {
     lateinit var favorites: com.monolith.app.data.Favorites
     lateinit var saved: com.monolith.app.data.SavedStore
     lateinit var guard: com.monolith.app.data.ChatGuard
+    lateinit var profileExtras: com.monolith.app.data.ProfileExtras
     lateinit var medical: com.monolith.app.data.MedicalStore
     lateinit var diary: com.monolith.app.location.PlaceDiary
     lateinit var statuses: StatusStore
@@ -92,6 +93,8 @@ object Graph {
         favorites = com.monolith.app.data.Favorites(application)
         saved = com.monolith.app.data.SavedStore(application)
         guard = com.monolith.app.data.ChatGuard(application)
+        profileExtras = com.monolith.app.data.ProfileExtras(application)
+        com.monolith.app.net.Badges.init(application)
         medical = com.monolith.app.data.MedicalStore(application)
         statuses = StatusStore(application)
         Sounds.init(application)
@@ -175,6 +178,13 @@ object Graph {
             shards.start()
             watchFriendsWidget()
             scope.launch { runCatching { bondDays.backfill(db) } }
+            scope.launch {
+                kotlinx.coroutines.delay(20_000)
+                while (true) {
+                    runCatching { com.monolith.app.net.Badges.refresh(app) }
+                    kotlinx.coroutines.delay(20 * 60_000L)
+                }
+            }
             diary.start()
         }
         MonolithService.start(app)

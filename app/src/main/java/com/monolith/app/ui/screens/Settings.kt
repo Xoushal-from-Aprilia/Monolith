@@ -29,6 +29,7 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Movie
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Route
 import androidx.compose.material.icons.rounded.MedicalServices
@@ -225,6 +226,7 @@ fun SettingsScreen(nav: NavHostController) {
                 })
             }
             SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
+            SettingRow(Icons.Rounded.Movie, t("Rivedi il filmato"), t("Tutte le funzioni di Monolith in un minuto")) { nav.navigate("film") }
             SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
             SettingRow(Icons.Rounded.Wallpaper, t("Sfondo animato"), t("Il monolite tra le stelle come sfondo del telefono")) {
                 val comp = android.content.ComponentName(ctx, com.monolith.app.widget.MonolithWallpaper::class.java)
@@ -405,7 +407,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear()
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); Graph.profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx)
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false

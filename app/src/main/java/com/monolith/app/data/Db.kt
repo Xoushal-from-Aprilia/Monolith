@@ -274,6 +274,18 @@ interface MessageDao {
     @Query("SELECT * FROM messages")
     suspend fun allNow(): List<Message>
 
+    @Query("SELECT COUNT(*) FROM messages WHERE outgoing = 1 AND kind NOT IN ('system', 'deleted', 'call')")
+    suspend fun countSent(): Int
+
+    @Query("SELECT COUNT(*) FROM messages WHERE outgoing = 1 AND kind = :kind")
+    suspend fun countSentKind(kind: String): Int
+
+    @Query("SELECT ts FROM messages WHERE outgoing = 1 AND kind NOT IN ('system', 'deleted', 'call') ORDER BY ts DESC LIMIT 4000")
+    suspend fun recentSentTs(): List<Long>
+
+    @Query("SELECT * FROM messages WHERE kind = :kind")
+    suspend fun byKind(kind: String): List<Message>
+
     @Query("SELECT * FROM messages WHERE ts > :since AND kind NOT IN ('system', 'deleted')")
     suspend fun since(since: Long): List<Message>
 

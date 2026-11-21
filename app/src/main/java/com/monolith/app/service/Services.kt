@@ -329,6 +329,19 @@ object BirthdayAlarm {
                 Graph.notifier.birthday(pk, f.displayName, f.emoji)
             }
         }
+        // anniversaries of friendship: same day and month, at least one year
+        val sp = ctx.getSharedPreferences("anniversaries", Context.MODE_PRIVATE)
+        val nowCal = java.util.Calendar.getInstance()
+        Graph.db.friends().friendsNow().forEach { f ->
+            if (f.status != com.monolith.app.data.FriendStatus.FRIEND || f.createdAt <= 0) return@forEach
+            val c = java.util.Calendar.getInstance().apply { timeInMillis = f.createdAt }
+            val years = nowCal.get(java.util.Calendar.YEAR) - c.get(java.util.Calendar.YEAR)
+            if (years < 1 || c.get(java.util.Calendar.MONTH) != nowCal.get(java.util.Calendar.MONTH) || c.get(java.util.Calendar.DAY_OF_MONTH) != nowCal.get(java.util.Calendar.DAY_OF_MONTH)) return@forEach
+            val key = f.pubkey + "_" + year
+            if (sp.getBoolean(key, false)) return@forEach
+            sp.edit().putBoolean(key, true).apply()
+            Graph.notifier.anniversary(f.pubkey, f.displayName, f.emoji, years)
+        }
         schedule(ctx)
     }
 }
