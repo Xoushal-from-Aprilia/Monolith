@@ -80,6 +80,16 @@ object VoicePlayer {
     private val _progress = MutableStateFlow(0f)
     val progress: StateFlow<Float> = _progress.asStateFlow()
 
+    /** listening speed for voice messages: 1×, 1.5×, 2× */
+    private val _speed = MutableStateFlow(1f)
+    val speed: StateFlow<Float> = _speed.asStateFlow()
+
+    fun cycleSpeed() {
+        val next = when (_speed.value) { 1f -> 1.5f; 1.5f -> 2f; else -> 1f }
+        _speed.value = next
+        player?.let { p -> runCatching { p.playbackParams = p.playbackParams.setSpeed(next) } }
+    }
+
     fun toggle(id: String, path: String) {
         if (_playing.value == id) {
             stop()
@@ -93,6 +103,7 @@ object VoicePlayer {
             p.setOnCompletionListener { stop() }
             p.prepare()
             p.start()
+            if (_speed.value != 1f) runCatching { p.playbackParams = p.playbackParams.setSpeed(_speed.value) }
             player = p
             _playing.value = id
             ticker = scope.launch {

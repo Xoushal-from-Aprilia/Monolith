@@ -313,6 +313,12 @@ interface MessageDao {
     @Query("UPDATE messages SET progress = :p, mediaPath = COALESCE(:path, mediaPath) WHERE id = :id")
     suspend fun progress(id: String, p: Float, path: String?)
 
+    @Query("UPDATE messages SET extra = :extra WHERE id = :id")
+    suspend fun setExtra(id: String, extra: String)
+
+    @Query("UPDATE messages SET mediaPath = NULL WHERE id = :id")
+    suspend fun clearMedia(id: String)
+
     @Query("UPDATE messages SET text = :text, edited = 1 WHERE id = :id")
     suspend fun edit(id: String, text: String)
 

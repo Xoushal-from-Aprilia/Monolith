@@ -140,6 +140,7 @@ fun SettingsScreen(nav: NavHostController) {
     val mapStyleIdx by Graph.prefs.mapStyle.collectAsState()
     val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
+    var shakeOn by remember { mutableStateOf(com.monolith.app.ui.screens.ChatLooks.shake) }
     var weeklyOn by remember { mutableStateOf(com.monolith.app.net.Weekly.enabled(ctx)) }
     var lockOn by remember { mutableStateOf(Graph.prefs.appLock) }
     var backupDialog by remember { mutableStateOf(false) }
@@ -207,6 +208,16 @@ fun SettingsScreen(nav: NavHostController) {
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
             SettingRow(Icons.Rounded.MusicNote, t("Suoni"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
+            Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                Column(Modifier.weight(1f)) {
+                    Text(t("Scuoti per un trillo"), style = MaterialTheme.typography.titleMedium)
+                    Text(t("In una chat, scuoti il telefono per mandare un trillo"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                Switch(checked = shakeOn, onCheckedChange = {
+                    shakeOn = it
+                    com.monolith.app.ui.screens.ChatLooks.shake = it
+                })
+            }
             SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {

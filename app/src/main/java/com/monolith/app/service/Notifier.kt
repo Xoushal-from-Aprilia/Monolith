@@ -248,6 +248,10 @@ class Notifier(private val ctx: Context) {
             t("In tempo reale fino alle {0}", Fmt.time(until)), emoji, openApp(12) { putExtra(EXTRA_TAB, 2) },
         )
 
+    /** a move in a game played in a chat */
+    fun game(conv: String, title: String, text: String) =
+        simple(("game$conv").hashCode(), title, text, "🎮", openApp(("g$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
+
     /** a friend sharing their position is about to run out of battery */
     fun batteryLow(pk: String, name: String, emoji: String, level: Int) =
         simple(

@@ -251,6 +251,9 @@ class Messenger(
             "edit" -> onEdit(from, p)
             "del" -> onDelete(from, p)
             "vote" -> onVote(from, p, friend)
+            "gmove" -> onGameMove(from, p, friend)
+            "once" -> onOnceOpened(from, p, friend)
+            "draw", "drawundo", "drawclr", "drawjoin", "drawall", "drawbye" -> convFor(from, p, friend)?.let { Boards.onLive(it, from, p) }
             "ttl" -> onTtl(from, p, friend)
             "grp" -> onGroup(from, p, isFriend)
             "gleave" -> onGroupLeave(from, p)
@@ -377,10 +380,14 @@ class Messenger(
         sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
         // an arrival that reaches me hours later is history, not news: keep it in the chat, silently
         val stale = (kind == "place" && now() - ts > 2 * 3_600_000L) || Shard.isQuietConv(conv)
-        if (!isActive && !stale) {
+        val myPub = me()?.pub ?: ""
+        val mentioned = extra != null && (extra.optBoolean("all") || (extra.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true))
+        val muted = db.social().settingNow(conv)?.muted == true && !mentioned && kind != "sos"
+        if (!isActive && !stale && !muted) {
             val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
-            val title = group?.name ?: friend?.displayName ?: "Monolith"
             val sender = friend ?: db.friends().get(from)
+            val title = if (mentioned && group != null) t("{0} ti ha menzionato in {1}", sender?.displayName ?: t("Qualcuno"), group.name)
+                else group?.name ?: friend?.displayName ?: "Monolith"
             Graph.notifier.message(
                 conv = conv,
                 title = title,
@@ -399,7 +406,8 @@ class Messenger(
     }
 
     fun previewText(m: Message): String = when (m.kind) {
-        "photo" -> if (m.text.isNotBlank()) "📷 ${m.text}" else "📷 " + t("Foto")
+        "photo" -> if (m.extra?.contains("\"once\":true") == true) "📷 " + t("Foto a vista unica")
+            else if (m.text.isNotBlank()) "📷 ${m.text}" else "📷 " + t("Foto")
         "voice" -> "🎤 " + t("Messaggio vocale")
         "event" -> "📅 " + (runCatching { JSONObject(m.extra ?: "{}").optString("title") }.getOrNull() ?: t("Evento"))
         "loc" -> "📍 " + t("Posizione")
@@ -408,6 +416,9 @@ class Messenger(
         "call" -> "📞 " + m.text
         "deleted" -> "🚫 " + t("Messaggio eliminato")
         "scratch" -> "✨ " + t("Messaggio da grattare")
+        "game" -> runCatching { JSONObject(m.extra ?: "{}").optString("g") }.getOrDefault(Games.TTT).let { "🎮 " + Games.name(it) }
+        "dice" -> diceText(m)
+        "board" -> "🎨 " + t("Lavagna condivisa")
         "sos" -> "🆘 " + if (m.outgoing) t("Hai chiesto aiuto") else t("Ha bisogno di aiuto")
         "place" -> {
             val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
@@ -1027,7 +1038,130 @@ class Messenger(
     suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null) {
         val tx = text.trim()
         if (tx.isEmpty()) return
-        deliver(newOutgoing(conv, "text", tx, reply = reply) ?: return)
+        val mentions = if (conv.startsWith("g:")) mentionsIn(conv, tx) else null
+        deliver(newOutgoing(conv, "text", tx, extra = mentions, reply = reply) ?: return)
+    }
+
+    /** members of the group named with @ in the text (or @tutti), for notifications that get through silence */
+    private suspend fun mentionsIn(conv: String, tx: String): JSONObject? {
+        if ('@' !in tx) return null
+        val k = me() ?: return null
+        val g = db.groups().get(conv.removePrefix("g:")) ?: return null
+        val low = tx.lowercase()
+        val all = Regex("@(tutti|all|everyone|tous|alle|все|wszyscy|všichni)\\b").containsMatchIn(low)
+        val pks = g.memberList().filter { it != k.pub }.filter { pk ->
+            val name = db.friends().get(pk)?.displayName ?: return@filter false
+            val first = name.substringBefore(' ')
+            low.contains("@" + name.lowercase()) || Regex("@" + Regex.escape(first.lowercase()) + "\\b").containsMatchIn(low)
+        }
+        if (!all && pks.isEmpty()) return null
+        return JSONObject().put("mn", JSONArray().also { a -> pks.forEach { a.put(it) } }).put("all", all)
+    }
+
+    suspend fun setMuted(conv: String, muted: Boolean) {
+        val cur = db.social().settingNow(conv) ?: ConvSetting(conv)
+        db.social().saveSetting(cur.copy(muted = muted))
+    }
+
+    // ---------------------------------------------------------------- games, dice, view once, board
+
+    suspend fun sendGame(conv: String, type: String, word: String = "") {
+        val k = me() ?: return
+        val ex = JSONObject().put("g", type).put("mv", JSONArray())
+        if (!conv.startsWith("g:")) ex.put("o", conv)
+        if (type == Games.HANG) ex.put("w", Games.cleanWord(word))
+        if (k.pub.isEmpty()) return
+        deliver(newOutgoing(conv, "game", Games.name(type), ex) ?: return)
+    }
+
+    suspend fun gameMove(id: String, v: String) {
+        val k = me() ?: return
+        val m = db.messages().get(id) ?: return
+        val ex = runCatching { JSONObject(m.extra ?: "{}") }.getOrNull() ?: return
+        val st = Games.parse(m.sender, ex)
+        if (!Games.canMove(st, k.pub, v)) return
+        val n = st.moves.size
+        db.messages().setExtra(id, Games.withMove(ex, k.pub, v).toString())
+        toConv(m.convId, JSONObject().put("t", "gmove").put("id", id).put("n", n).put("v", v))
+    }
+
+    private suspend fun onGameMove(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val m = db.messages().get(p.optString("id")) ?: return
+        if (m.convId != conv || m.kind != "game") return
+        val ex = runCatching { JSONObject(m.extra ?: "{}") }.getOrNull() ?: return
+        val st = Games.parse(m.sender, ex)
+        val v = p.optString("v")
+        if (p.optInt("n", -1) != st.moves.size || !Games.canMove(st, from, v)) return
+        val next = Games.parse(m.sender, Games.withMove(ex, from, v))
+        db.messages().setExtra(m.id, ex.toString())
+        if (activeConv.value == conv && Graph.foreground) return
+        val who = (friend ?: db.friends().get(from))?.displayName ?: t("Qualcuno")
+        val myPub = me()?.pub ?: return
+        val res = Games.result(next)
+        val text = when {
+            res == 3 && next.type != Games.HANG -> t("Pareggio")
+            res != 0 -> t("Partita finita")
+            Games.canMoveAny(next, myPub) -> t("Tocca a te")
+            else -> t("{0} ha fatto la sua mossa", who)
+        }
+        Graph.notifier.game(conv, Games.emoji(next.type) + " " + Games.name(next.type), who + " · " + text)
+    }
+
+    suspend fun sendDice(conv: String, type: String) {
+        val r = java.security.SecureRandom()
+        val res = when (type) {
+            "coin" -> listOf(r.nextInt(2))
+            "dice2" -> listOf(r.nextInt(6) + 1, r.nextInt(6) + 1)
+            else -> listOf(r.nextInt(6) + 1)
+        }
+        val ex = JSONObject().put("d", type).put("r", JSONArray().also { a -> res.forEach { a.put(it) } })
+        val text = if (type == "coin") (if (res[0] == 0) t("Testa") else t("Croce")) else res.joinToString(" + ") + if (res.size > 1) " = " + res.sum() else ""
+        deliver(newOutgoing(conv, "dice", text, ex) ?: return)
+    }
+
+    fun diceText(m: Message): String {
+        val type = runCatching { JSONObject(m.extra ?: "{}").optString("d") }.getOrDefault("dice")
+        return (if (type == "coin") "🪙 " else "🎲 ") + m.text
+    }
+
+    /** a view-once photo was opened: delete it here and tell the sender */
+    suspend fun openedOnce(m: Message) {
+        val k = me() ?: return
+        m.mediaPath?.let { runCatching { File(it).delete() } }
+        db.messages().clearMedia(m.id)
+        val ex = runCatching { JSONObject(m.extra ?: "{}") }.getOrDefault(JSONObject())
+        val by = ex.optJSONArray("ob") ?: JSONArray()
+        by.put(k.pub)
+        db.messages().setExtra(m.id, ex.put("ob", by).toString())
+        toConv(m.convId, JSONObject().put("t", "once").put("id", m.id))
+    }
+
+    private suspend fun onOnceOpened(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val m = db.messages().get(p.optString("id")) ?: return
+        if (m.convId != conv || m.kind != "photo") return
+        val ex = runCatching { JSONObject(m.extra ?: "{}") }.getOrDefault(JSONObject())
+        val by = ex.optJSONArray("ob") ?: JSONArray()
+        if ((0 until by.length()).any { by.optString(it) == from }) return
+        by.put(from)
+        db.messages().setExtra(m.id, ex.put("ob", by).toString())
+        // in a one-to-one chat nobody can open it any more: the sender's copy goes too
+        if (m.outgoing && !conv.startsWith("g:")) {
+            m.mediaPath?.let { runCatching { File(it).delete() } }
+            db.messages().clearMedia(m.id)
+        }
+    }
+
+    suspend fun sendBoardInvite(conv: String) {
+        deliver(newOutgoing(conv, "board", t("Lavagna condivisa")) ?: return)
+    }
+
+    /** a live update to everybody in the chat (or only to one of them) */
+    suspend fun fastToConv(conv: String, payload: JSONObject, only: String? = null) {
+        val (targets, gid) = recipients(conv)
+        gid?.let { payload.put("g", it) }
+        targets.filter { only == null || it == only }.forEach { sendFast(it, payload) }
     }
 
     /** a message to scratch off with a finger */
@@ -1059,9 +1193,10 @@ class Messenger(
         db.messages().insert(Message(newId(), conv, if (outgoing) k.pub else conv, outgoing, now(), "call", text = text, status = MsgStatus.READ))
     }
 
-    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null) {
+    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false) {
         val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return
         val extra = JSONObject().put("w", compressed.width).put("h", compressed.height)
+        if (once) extra.put("once", true)
         sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)
     }
 

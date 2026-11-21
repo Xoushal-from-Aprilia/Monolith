@@ -89,6 +89,11 @@ import androidx.compose.material.icons.rounded.PlayArrow
 import androidx.compose.material.icons.rounded.Timer
 import androidx.compose.material.icons.rounded.Bookmark
 import androidx.compose.material.icons.rounded.BookmarkBorder
+import androidx.compose.material.icons.rounded.LooksOne
+import androidx.compose.material.icons.rounded.SportsEsports
+import androidx.compose.material.icons.rounded.Wallpaper
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
@@ -439,6 +444,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val recorder = remember { VoiceRecorder(ctx) }
     var scheduleDialog by remember { mutableStateOf(false) }
     var scratchDialog by remember { mutableStateOf(false) }
+    var funSheet by remember { mutableStateOf(false) }
+    var hangDialog by remember { mutableStateOf(false) }
+    var wallSheet by remember { mutableStateOf(false) }
     val pins by Graph.pins.pins.collectAsState()
     val savedList by Graph.saved.all.collectAsState()
     val scheduledAll by Graph.scheduled.all.collectAsState()
@@ -453,6 +461,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         }
     }
     LaunchedEffect(conv) { if (!isGroup) Graph.rtc.ensureConnected(conv) }
+    ShakeToNudge(conv)
     LaunchedEffect(messages.firstOrNull()?.id) { Graph.scope.launch { Graph.messenger.markRead(conv) } }
 
     val names = people.associateBy { it.pubkey }
@@ -490,6 +499,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     // ---- launchers
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) { val r = replyRef(); replyTo = null; Graph.scope.launch { Graph.messenger.sendPhoto(conv, uri, "", r) } }
+    }
+    val pickOnce = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) Graph.scope.launch { Graph.messenger.sendPhoto(conv, uri, "", null, once = true) }
     }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
@@ -572,6 +584,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                             Graph.scope.launch { Graph.messenger.sendNudge(conv) }
                         })
                         DropdownMenuItem(text = { Text(t("Messaggi effimeri")) }, leadingIcon = { Icon(Icons.Rounded.Timer, null) }, onClick = { menu = false; ttlDialog = true })
+                        DropdownMenuItem(text = { Text(t("Sfondo")) }, leadingIcon = { Icon(Icons.Rounded.Wallpaper, null) }, onClick = { menu = false; wallSheet = true })
+                        if (isGroup) {
+                            val muted = setting?.muted == true
+                            DropdownMenuItem(
+                                text = { Text(if (muted) t("Riattiva le notifiche") else t("Silenzia le notifiche")) },
+                                leadingIcon = { Icon(if (muted) Icons.Rounded.Notifications else Icons.Rounded.NotificationsOff, null) },
+                                onClick = { menu = false; Graph.scope.launch { Graph.messenger.setMuted(conv, !muted) } },
+                            )
+                        }
                         DropdownMenuItem(text = { Text(t("Svuota chat")) }, onClick = { menu = false; confirm = "clear" })
                         if (isGroup && !isRoom) DropdownMenuItem(text = { Text(t("Lascia il gruppo")) }, onClick = { menu = false; confirm = "leave" })
                         else if (friend?.status == FriendStatus.FRIEND) DropdownMenuItem(text = { Text(t("Rimuovi amico")) }, onClick = { menu = false; confirm = "unfriend" })
@@ -598,7 +619,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             onOpen = { pinned?.let { scrollToMsg(it.id) } },
             onUnpin = { Graph.scope.launch { Graph.messenger.pin(conv, null) } },
         )
-        LazyColumn(Modifier.weight(1f).fillMaxWidth(), state = listState, reverseLayout = true, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)) {
+        Box(Modifier.weight(1f).fillMaxWidth()) {
+        ChatWallpaper(conv, Modifier.matchParentSize())
+        LazyColumn(Modifier.fillMaxSize(), state = listState, reverseLayout = true, contentPadding = PaddingValues(horizontal = 12.dp, vertical = 12.dp)) {
             if (typing != null) {
                 item(key = "typing") {
                     Row(Modifier.animateItem().padding(vertical = 4.dp)) {
@@ -629,9 +652,11 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         onOpenMap = { lat, lon -> runCatching { ctx.startActivity(Intent(Intent.ACTION_VIEW, Uri.parse("geo:$lat,$lon?q=$lat,$lon"))) } },
                         onQuote = { id -> scrollToMsg(id) },
                         onReact = { m, e -> Graph.scope.launch { Graph.messenger.react(m, e) } },
+                        onRoute = { nav.navigate(it) },
                     )
                 }
             }
+        }
         }
 
         ScheduledBar(scheduledHere) { sc -> com.monolith.app.service.ScheduledSender.cancel(ctx, sc.id) }
@@ -653,6 +678,11 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     IconButton(onClick = { if (editing != null) text = ""; replyTo = null; editing = null }) { Icon(Icons.Rounded.Close, t("Annulla")) }
                 }
             }
+        }
+
+        if (isGroup) {
+            val members = group?.memberList()?.filter { it != myPub }?.mapNotNull { names[it] }.orEmpty()
+            MentionBar(text, members) { text = it }
         }
 
         // ---- composer
@@ -688,6 +718,10 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                         attach = false; locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                                     })
                                     DropdownMenuItem(text = { Text(t("Evento dall'agenda")) }, leadingIcon = { Icon(Icons.Rounded.Event, null) }, onClick = { attach = false; shareEvent = true })
+                                    DropdownMenuItem(text = { Text(t("Foto a vista unica")) }, leadingIcon = { Icon(Icons.Rounded.LooksOne, null) }, onClick = {
+                                        attach = false; pickOnce.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+                                    })
+                                    DropdownMenuItem(text = { Text(t("Giochi e dadi")) }, leadingIcon = { Icon(Icons.Rounded.SportsEsports, null) }, onClick = { attach = false; funSheet = true })
                                     DropdownMenuItem(text = { Text(t("Messaggio da grattare")) }, leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null) }, onClick = { attach = false; scratchDialog = true })
                                     DropdownMenuItem(text = { Text(t("Programma messaggio")) }, leadingIcon = { Icon(Icons.Rounded.Schedule, null) }, onClick = { attach = false; scheduleDialog = true })
                                 }
@@ -822,7 +856,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     }
                 }
                 val saveOwner = if (!conv.startsWith("g:")) conv else if (!m.outgoing) m.sender else null
-                if (saveOwner != null && m.kind in setOf("text", "photo", "voice", "loc", "place", "scratch")) {
+                if (saveOwner != null && m.kind in setOf("text", "photo", "voice", "loc", "place", "scratch") && m.extra?.contains("\"once\":true") != true) {
                     val isSaved = savedList.any { it.msgId == m.id }
                     ActionRow(if (isSaved) Icons.Rounded.Bookmark else Icons.Rounded.BookmarkBorder, if (isSaved) t("Togli dai salvati") else t("Salva nel profilo")) {
                         actionsFor = null
@@ -852,6 +886,23 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             }
         }
     }
+    if (funSheet) FunSheet(onDismiss = { funSheet = false }) { id ->
+        funSheet = false
+        when (id) {
+            "hang" -> hangDialog = true
+            "board" -> {
+                Graph.scope.launch { Graph.messenger.sendBoardInvite(conv) }
+                nav.navigate("board/" + Uri.encode(conv))
+            }
+            "dice", "dice2", "coin" -> Graph.scope.launch { Graph.messenger.sendDice(conv, id) }
+            else -> Graph.scope.launch { Graph.messenger.sendGame(conv, id) }
+        }
+    }
+    if (hangDialog) HangmanDialog(onDismiss = { hangDialog = false }) { w ->
+        hangDialog = false
+        Graph.scope.launch { Graph.messenger.sendGame(conv, com.monolith.app.net.Games.HANG, w) }
+    }
+    if (wallSheet) WallpaperSheet(conv) { wallSheet = false }
     if (scratchDialog) {
         var sx by remember { mutableStateOf(text) }
         MonoDialog(
@@ -1024,6 +1075,7 @@ private fun MessageRow(
     onOpenMap: (Double, Double) -> Unit,
     onQuote: (String) -> Unit,
     onReact: (Message, String) -> Unit,
+    onRoute: (String) -> Unit = {},
 ) {
     val appear = remember { Animatable(if (isNew) 0f else 1f) }
     LaunchedEffect(Unit) { if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 500f)) }
@@ -1063,7 +1115,11 @@ private fun MessageRow(
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
         }
         val reply = replyOf(m)
-        when (m.kind) {
+        when (if (m.kind == "photo" && ex.optBoolean("once")) "once" else m.kind) {
+            "once" -> OnceBubble(m, myPub, shape, onOpen = { onRoute("once/" + m.id) }, onLongPress = onLongPress)
+            "game" -> GameBubble(m, myPub, names, shape, onLongPress)
+            "dice" -> DiceBubble(m, isNew, shape, onLongPress)
+            "board" -> BoardBubble(m, shape, onOpen = { onRoute("board/" + Uri.encode(m.convId)) }, onLongPress = onLongPress)
             "deleted" -> Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainer, modifier = press) {
                 Text("🚫 " + t("Messaggio eliminato"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
@@ -1304,6 +1360,13 @@ private fun VoiceBubble(m: Message, durationMs: Long, color: Color) {
         }
         Spacer(Modifier.width(8.dp))
         Text(Fmt.duration(if (isMe) (durationMs * progress).toLong() else durationMs), style = MaterialTheme.typography.labelSmall, color = color)
+        if (isMe) {
+            val speed by VoicePlayer.speed.collectAsState()
+            Spacer(Modifier.width(6.dp))
+            Box(
+                Modifier.clip(CircleShape).background(color.copy(alpha = 0.18f)).bounceClick(0.85f) { VoicePlayer.cycleSpeed() }.padding(horizontal = 8.dp, vertical = 3.dp),
+            ) { Text(if (speed == 1f) "1×" else if (speed == 1.5f) "1,5×" else "2×", style = MaterialTheme.typography.labelSmall, color = color) }
+        }
     }
 }
 
