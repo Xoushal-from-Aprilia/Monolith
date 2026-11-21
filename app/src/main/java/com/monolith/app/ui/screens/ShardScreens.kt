@@ -3,6 +3,9 @@ package com.monolith.app.ui.screens
 import android.Manifest
 import android.content.pm.PackageManager
 import android.widget.Toast
+import com.monolith.app.core.now
+import androidx.compose.ui.graphics.Color
+import androidx.compose.foundation.combinedClickable
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.foundation.background
@@ -229,6 +232,10 @@ fun ShardScreen(nav: NavHostController, id: String) {
     val unreadBy = unread.associate { it.convId to it.n }
     val lastBy = last.associateBy { it.convId }
     val isOwner = s.owner == me
+    val canManage = s.canManage(me)
+    var noteDialog by remember { mutableStateOf(false) }
+    var eventDialog by remember { mutableStateOf(false) }
+    var memberMenu by remember { mutableStateOf<String?>(null) }
     val current = if (voiceMap.isNotEmpty() || call.cid != null) Graph.shards.currentRoom() else null
 
     fun join(r: ShardRoom) {
@@ -255,16 +262,41 @@ fun ShardScreen(nav: NavHostController, id: String) {
             Box {
                 IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, t("Altro")) }
                 DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
-                    if (isOwner) {
-                        DropdownMenuItem(text = { Text(t("Modifica shard")) }, onClick = { menu = false; editSheet = true })
+                    if (isOwner) DropdownMenuItem(text = { Text(t("Modifica shard")) }, onClick = { menu = false; editSheet = true })
+                    if (canManage) {
                         DropdownMenuItem(text = { Text(t("Nuova stanza")) }, onClick = { menu = false; roomDialog = true })
+                        DropdownMenuItem(text = { Text(t("Nuova nota in bacheca")) }, onClick = { menu = false; noteDialog = true })
                     }
+                    DropdownMenuItem(text = { Text(t("Nuovo evento")) }, onClick = { menu = false; eventDialog = true })
                     DropdownMenuItem(text = { Text(t("Esci dallo shard")) }, onClick = { menu = false; confirmLeave = true })
                 }
             }
         }
         LazyColumn(contentPadding = PaddingValues(bottom = 32.dp)) {
-            item(key = "textLabel") { SectionLabel(t("Stanze scritte")) }
+            if (s.notes.isNotEmpty() || canManage) {
+                item(key = "boardLabel") {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        SectionLabel(t("Bacheca"), Modifier.weight(1f))
+                        if (canManage) TextButton(onClick = { noteDialog = true }) { Text(t("Aggiungi")) }
+                    }
+                }
+                if (s.notes.isEmpty()) item(key = "boardEmpty") {
+                    Text(t("Note e link per tutti: le regole, il prossimo ritrovo, la playlist del gruppo."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+                items(s.notes, key = { "n" + it.id }) { n -> ShardNoteCard(n, byPk, me, canManage) { Graph.scope.launch { Graph.shards.removeNote(s.id, n.id) } } }
+            }
+            val upcoming = s.events.filter { !it.deleted && it.start > now() - 86_400_000L }.sortedBy { it.start }
+            item(key = "eventsLabel") {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    SectionLabel(t("Eventi"), Modifier.weight(1f))
+                    TextButton(onClick = { eventDialog = true }) { Text(t("Nuovo")) }
+                }
+            }
+            if (upcoming.isEmpty()) item(key = "eventsEmpty") {
+                Text(t("Nessun evento in programma."), Modifier.padding(horizontal = 20.dp), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            items(upcoming, key = { "e" + it.id }) { e -> ShardEventCard(s, e, byPk, me) }
+            item(key = "textLabel") { SectionLabel(t("Stanze scritte"), Modifier.padding(top = 10.dp)) }
             items(s.rooms.filter { !it.voice }, key = { "t" + it.id }) { r ->
                 val conv = s.conv(r)
                 val n = unreadBy[conv] ?: 0
@@ -352,15 +384,47 @@ fun ShardScreen(nav: NavHostController, id: String) {
                     Spacer(Modifier.width(12.dp))
                     Column(Modifier.weight(1f)) {
                         Text(if (pk == me) t("Tu") else f?.displayName ?: t("Qualcuno"), style = MaterialTheme.typography.bodyLarge)
-                        if (pk == s.owner) Text(t("Creatore"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val role = when (pk) {
+                            s.owner -> t("Fondatore")
+                            in s.mods -> t("Moderatore")
+                            else -> null
+                        }
+                        if (role != null) Text(role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
-                    if (isOwner && pk != me) TextButton(onClick = { Graph.scope.launch { Graph.shards.removeMember(s.id, pk) } }) { Text(t("Togli")) }
+                    val canTouch = pk != me && pk != s.owner && (isOwner || (canManage && pk !in s.mods))
+                    if (canTouch) Box {
+                        IconButton(onClick = { memberMenu = pk }) { Icon(Icons.Rounded.MoreVert, t("Altro")) }
+                        DropdownMenu(expanded = memberMenu == pk, onDismissRequest = { memberMenu = null }) {
+                            if (isOwner) {
+                                val mod = pk in s.mods
+                                DropdownMenuItem(
+                                    text = { Text(if (mod) t("Togli moderatore") else t("Rendi moderatore")) },
+                                    onClick = { memberMenu = null; Graph.scope.launch { Graph.shards.setMod(s.id, pk, !mod) } },
+                                )
+                            }
+                            DropdownMenuItem(text = { Text(t("Togli dallo shard")) }, onClick = { memberMenu = null; Graph.scope.launch { Graph.shards.removeMember(s.id, pk) } })
+                        }
+                    }
                 }
             }
         }
     }
 
     if (editSheet) ShardEditSheet(s, onClose = { editSheet = false })
+    if (noteDialog) {
+        var text by remember { mutableStateOf("") }
+        MonoDialog(
+            onDismissRequest = { noteDialog = false },
+            title = { Text(t("Nuova nota in bacheca")) },
+            text = { OutlinedTextField(text, { text = it.take(500) }, label = { Text(t("Testo o link")) }, minLines = 3, modifier = Modifier.fillMaxWidth()) },
+            confirmButton = { TextButton(onClick = { noteDialog = false; Graph.scope.launch { Graph.shards.addNote(s.id, text) } }, enabled = text.isNotBlank()) { Text(t("Fissa")) } },
+            dismissButton = { TextButton(onClick = { noteDialog = false }) { Text(t("Annulla")) } },
+        )
+    }
+    if (eventDialog) ShardEventDialog(onDismiss = { eventDialog = false }) { title, emoji, start, allDay ->
+        eventDialog = false
+        Graph.scope.launch { Graph.shards.createEvent(s.id, title, emoji, start, allDay) }
+    }
     if (inviteSheet) {
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
         var chosen by remember { mutableStateOf(setOf<String>()) }
@@ -417,6 +481,142 @@ fun ShardScreen(nav: NavHostController, id: String) {
                 TextButton(onClick = { confirmLeave = false; Graph.scope.launch { Graph.shards.leave(s.id) }; nav.popBackStack() }) { Text(t("Esci")) }
             },
             dismissButton = { TextButton(onClick = { confirmLeave = false }) { Text(t("Annulla")) } },
+        )
+    }
+}
+
+
+@Composable
+private fun ShardNoteCard(n: com.monolith.app.net.ShardNote, byPk: Map<String, Friend>, me: String?, canManage: Boolean, onRemove: () -> Unit) {
+    val ctx = LocalContext.current
+    val url = remember(n.text) { Regex("https?://\\S+").find(n.text)?.value }
+    var confirm by remember { mutableStateOf(false) }
+    Surface(
+        shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).combinedClickable(
+            onClick = { url?.let { runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(it))) } } },
+            onLongClick = { if (canManage) confirm = true },
+        ),
+    ) {
+        Row(Modifier.padding(14.dp)) {
+            Text("📌", fontSize = 18.sp)
+            Spacer(Modifier.width(10.dp))
+            Column(Modifier.weight(1f)) {
+                Text(n.text, style = MaterialTheme.typography.bodyLarge)
+                Spacer(Modifier.height(4.dp))
+                Text(
+                    (if (n.by == me) t("Tu") else byPk[n.by]?.displayName ?: t("Qualcuno")) + " · " + com.monolith.app.core.Fmt.dayShort(n.at),
+                    style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+            }
+        }
+    }
+    if (confirm) MonoDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text(t("Togliere la nota dalla bacheca?")) },
+        confirmButton = { TextButton(onClick = { confirm = false; onRemove() }) { Text(t("Togli")) } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text(t("Annulla")) } },
+    )
+}
+
+@Composable
+private fun ShardEventCard(s: com.monolith.app.net.Shard, e: com.monolith.app.net.ShardEvent, byPk: Map<String, Friend>, me: String?) {
+    val going = me != null && me in e.going
+    var confirm by remember { mutableStateOf(false) }
+    Surface(
+        shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow,
+        modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 4.dp).combinedClickable(
+            onClick = {},
+            onLongClick = { if (e.by == me || s.canManage(me)) confirm = true },
+        ),
+    ) {
+        Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+            Text(e.emoji, fontSize = 26.sp)
+            Spacer(Modifier.width(12.dp))
+            Column(Modifier.weight(1f)) {
+                Text(e.title, style = MaterialTheme.typography.titleMedium)
+                Text(
+                    com.monolith.app.core.Fmt.dayShort(e.start) + (if (e.allDay) "" else " · " + com.monolith.app.core.Fmt.time(e.start)),
+                    style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                val names = e.going.map { if (it == me) t("tu") else byPk[it]?.displayName?.substringBefore(' ') ?: "?" }
+                if (names.isNotEmpty()) Text(t("Ci saranno: {0}", names.joinToString(", ")), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
+            if (going) OutlinedButton(onClick = { Graph.scope.launch { Graph.shards.setGoing(s.id, e.id, false) } }, shape = CircleShape) { Text(t("Ci sono ✓")) }
+            else Button(onClick = { Graph.scope.launch { Graph.shards.setGoing(s.id, e.id, true) } }, shape = CircleShape) { Text(t("Partecipo")) }
+        }
+    }
+    if (confirm) MonoDialog(
+        onDismissRequest = { confirm = false },
+        title = { Text(t("Eliminare l'evento per tutti?")) },
+        confirmButton = { TextButton(onClick = { confirm = false; Graph.scope.launch { Graph.shards.deleteEvent(s.id, e.id) } }) { Text(t("Elimina")) } },
+        dismissButton = { TextButton(onClick = { confirm = false }) { Text(t("Annulla")) } },
+    )
+}
+
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
+@Composable
+private fun ShardEventDialog(onDismiss: () -> Unit, onCreate: (String, String, Long, Boolean) -> Unit) {
+    var title by remember { mutableStateOf("") }
+    var emoji by remember { mutableStateOf("📅") }
+    var allDay by remember { mutableStateOf(false) }
+    val cal = remember { java.util.Calendar.getInstance().apply { add(java.util.Calendar.DAY_OF_YEAR, 1); set(java.util.Calendar.HOUR_OF_DAY, 20); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) } }
+    var start by remember { mutableStateOf(cal.timeInMillis) }
+    var pickDate by remember { mutableStateOf(false) }
+    var pickTime by remember { mutableStateOf(false) }
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Nuovo evento")) },
+        text = {
+            Column {
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    listOf("📅", "🎉", "🍕", "🎮", "🎬", "⚽", "🎵", "✈️").forEach { e ->
+                        Text(e, fontSize = 22.sp, modifier = Modifier.clip(CircleShape).background(if (e == emoji) MaterialTheme.colorScheme.surfaceContainerHighest else Color.Transparent).bounceClick(0.85f) { emoji = e }.padding(5.dp))
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(title, { title = it.take(80) }, label = { Text(t("Titolo")) }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    TextButton(onClick = { pickDate = true }) { Text(com.monolith.app.core.Fmt.dayShort(start)) }
+                    if (!allDay) TextButton(onClick = { pickTime = true }) { Text(com.monolith.app.core.Fmt.time(start)) }
+                    Spacer(Modifier.weight(1f))
+                    Text(t("Tutto il giorno"), style = MaterialTheme.typography.labelMedium)
+                    androidx.compose.material3.Switch(checked = allDay, onCheckedChange = { allDay = it })
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = { onCreate(title, emoji, if (allDay) com.monolith.app.core.Fmt.startOfDay(start) else start, allDay) }, enabled = title.isNotBlank()) { Text(t("Crea")) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Annulla")) } },
+    )
+    if (pickDate) {
+        val state = androidx.compose.material3.rememberDatePickerState(initialSelectedDateMillis = start + java.util.TimeZone.getDefault().getOffset(start))
+        androidx.compose.material3.DatePickerDialog(
+            onDismissRequest = { pickDate = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    state.selectedDateMillis?.let { utc ->
+                        val u = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { timeInMillis = utc }
+                        val c = java.util.Calendar.getInstance().apply { timeInMillis = start; set(u.get(java.util.Calendar.YEAR), u.get(java.util.Calendar.MONTH), u.get(java.util.Calendar.DAY_OF_MONTH)) }
+                        start = c.timeInMillis
+                    }
+                    pickDate = false
+                }) { Text(t("OK")) }
+            },
+        ) { androidx.compose.material3.DatePicker(state) }
+    }
+    if (pickTime) {
+        val c = java.util.Calendar.getInstance().apply { timeInMillis = start }
+        val state = androidx.compose.material3.rememberTimePickerState(c.get(java.util.Calendar.HOUR_OF_DAY), c.get(java.util.Calendar.MINUTE), true)
+        MonoDialog(
+            onDismissRequest = { pickTime = false },
+            confirmButton = {
+                TextButton(onClick = {
+                    start = java.util.Calendar.getInstance().apply { timeInMillis = start; set(java.util.Calendar.HOUR_OF_DAY, state.hour); set(java.util.Calendar.MINUTE, state.minute) }.timeInMillis
+                    pickTime = false
+                }) { Text(t("OK")) }
+            },
+            text = { androidx.compose.material3.TimePicker(state) },
         )
     }
 }

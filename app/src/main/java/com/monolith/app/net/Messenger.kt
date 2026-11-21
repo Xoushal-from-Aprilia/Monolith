@@ -242,6 +242,7 @@ class Messenger(
             "habit" -> Graph.together.onHabit(from, p)
             "hcheck" -> Graph.together.onCheck(from, p)
             "shardleave" -> Graph.shards.onLeave(from, p)
+            "shardev" -> Graph.shards.onEvent(from, p)
             "vroom" -> Graph.shards.onVoice(from, p)
             "vwho" -> Graph.shards.onWho(from, p)
             "status" -> if (friend?.status == FriendStatus.FRIEND) {
@@ -1038,11 +1039,19 @@ class Messenger(
         return m
     }
 
-    suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null) {
+    suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null, music: JSONObject? = null) {
         val tx = text.trim()
         if (tx.isEmpty()) return
-        val mentions = if (conv.startsWith("g:")) mentionsIn(conv, tx) else null
-        deliver(newOutgoing(conv, "text", tx, extra = mentions, reply = reply) ?: return)
+        val mentions = if (conv.startsWith("g:") && music == null) mentionsIn(conv, tx) else null
+        val ex = music?.let { JSONObject().put("mu", it) } ?: mentions
+        deliver(newOutgoing(conv, "text", tx, extra = ex, reply = reply) ?: return)
+    }
+
+    /** a story made of a piece of song from the phone */
+    suspend fun sendAudioStory(conv: String, file: File, durationMs: Long, music: JSONObject, caption: String) {
+        val bytes = withContext(Dispatchers.IO) { file.readBytes() }
+        sendMedia(conv, "voice", bytes, JSONObject().put("dur", durationMs).put("mu", music), caption, null)
+        runCatching { file.delete() }
     }
 
     /** members of the group named with @ in the text (or @tutti), for notifications that get through silence */
@@ -1232,10 +1241,11 @@ class Messenger(
         db.messages().insert(Message(newId(), conv, if (outgoing) k.pub else conv, outgoing, now(), "call", text = text, status = MsgStatus.READ))
     }
 
-    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false) {
+    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false, music: JSONObject? = null) {
         val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return
         val extra = JSONObject().put("w", compressed.width).put("h", compressed.height)
         if (once) extra.put("once", true)
+        if (music != null) extra.put("mu", music)
         sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)
     }
 

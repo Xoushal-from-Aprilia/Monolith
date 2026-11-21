@@ -12,6 +12,7 @@ import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.compose.animation.core.Animatable
 import androidx.compose.animation.core.LinearEasing
+import androidx.compose.animation.core.animateFloat
 import androidx.compose.animation.core.animateFloatAsState
 import androidx.compose.animation.core.tween
 import androidx.compose.foundation.Canvas
@@ -160,8 +161,10 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
     val saved = savedAll.filter { it.owner == pk }.sortedByDescending { it.savedAt }
     var statusSheet by remember { mutableStateOf(false) }
     var textStory by remember { mutableStateOf(false) }
+    var songUri by remember { mutableStateOf<android.net.Uri?>(null) }
+    val pickSong = rememberLauncherForActivityResult(ActivityResultContracts.GetContent()) { u -> if (u != null) songUri = u }
     val pick = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) Graph.scope.launch { Stories.postPhoto(uri) }
+        if (uri != null) { PendingPhoto.set(uri, null); nav.navigate("photoedit") }
     }
 
     val emoji = if (mine) myProfile?.emoji ?: "🗿" else friend?.emoji ?: "🙂"
@@ -226,6 +229,8 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                     OutlinedButton(onClick = { textStory = true }, shape = CircleShape, modifier = Modifier.height(48.dp)) { Text(t("Storia di testo")) }
                 }
                 Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { pickSong.launch("audio/*") }, shape = CircleShape, modifier = Modifier.height(44.dp)) { Text("♪  " + t("Storia con una canzone dal telefono")) }
+                Spacer(Modifier.height(8.dp))
                 Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
                     TextButton(onClick = { statusSheet = true }) { Text(t("Il tuo stato")) }
                     TextButton(onClick = { nav.navigate("settings") }) { Text(t("Modifica profilo")) }
@@ -275,15 +280,27 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
         Spacer(Modifier.height(32.dp))
     }
     if (statusSheet) StatusSheet { statusSheet = false }
+    songUri?.let { u -> AudioStoryDialog(u) { songUri = null } }
     if (textStory) {
         var text by remember { mutableStateOf("") }
+        var song by remember { mutableStateOf<Song?>(null) }
+        var musicSheet by remember { mutableStateOf(false) }
         MonoDialog(
             onDismissRequest = { textStory = false },
             title = { Text(t("Storia di testo")) },
-            text = { OutlinedTextField(text, { text = it.take(200) }, label = { Text(t("Cosa vuoi raccontare?")) }, modifier = Modifier.fillMaxWidth(), maxLines = 5) },
-            confirmButton = { TextButton(onClick = { textStory = false; Graph.scope.launch { Stories.postText(text) } }, enabled = text.isNotBlank()) { Text(t("Pubblica")) } },
+            text = {
+                Column {
+                    OutlinedTextField(text, { text = it.take(200) }, label = { Text(t("Cosa vuoi raccontare?")) }, modifier = Modifier.fillMaxWidth(), maxLines = 5)
+                    Spacer(Modifier.height(10.dp))
+                    val s = song
+                    if (s == null) TextButton(onClick = { musicSheet = true }) { Text("♪  " + t("Aggiungi musica")) }
+                    else MusicChip(s) { song = null }
+                }
+            },
+            confirmButton = { TextButton(onClick = { textStory = false; val mu = song?.json(); Graph.scope.launch { Stories.postText(text, mu) } }, enabled = text.isNotBlank()) { Text(t("Pubblica")) } },
             dismissButton = { TextButton(onClick = { textStory = false }) { Text(t("Annulla")) } },
         )
+        if (musicSheet) MusicPickerSheet(onDismiss = { musicSheet = false }, onPick = { song = it; musicSheet = false })
     }
 }
 
@@ -310,11 +327,14 @@ fun StoryViewer(nav: NavHostController, pk: String) {
     fun next() { if (index < items.lastIndex) index++ else nav.popBackStack() }
     fun prev() { if (index > 0) index-- }
     var lastId by remember { mutableStateOf("") }
+    val curEx = remember(cur.id, cur.extra) { runCatching { org.json.JSONObject(cur.extra ?: "{}") }.getOrDefault(org.json.JSONObject()) }
+    val curSong = Song.from(curEx.optJSONObject("mu"))
+    StoryMusic(curSong?.takeIf { !it.local }, if (cur.kind == "voice") cur.mediaPath?.takeIf { cur.progress >= 1f || cur.outgoing } else null, paused)
     LaunchedEffect(cur.id, paused) {
         if (lastId != cur.id) { lastId = cur.id; progress.snapTo(0f) }
         Stories.markSeen(pk, cur.ts)
         if (paused) return@LaunchedEffect
-        val remaining = ((1f - progress.value) * 5000).toInt().coerceAtLeast(1)
+        val remaining = ((1f - progress.value) * (if (curSong != null || cur.kind == "voice") 15000 else 5000)).toInt().coerceAtLeast(1)
         progress.animateTo(1f, tween(remaining, easing = LinearEasing))
         next()
     }
@@ -337,11 +357,16 @@ fun StoryViewer(nav: NavHostController, pk: String) {
                         .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(12.dp)).padding(horizontal = 12.dp, vertical = 8.dp),
                 )
             }
+        } else if (cur.kind == "voice") {
+            VinylStory(curSong, cur.text, Modifier.align(Alignment.Center))
         } else {
             Text(
                 cur.text, color = Color.White, style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center,
                 modifier = Modifier.align(Alignment.Center).padding(32.dp),
             )
+        }
+        if (curSong != null && cur.kind != "voice") {
+            MusicChip(curSong, Modifier.align(Alignment.BottomStart).navigationBarsPadding().padding(start = 16.dp, bottom = if (cur.text.isNotBlank() && cur.kind == "photo") 84.dp else 24.dp))
         }
         Column(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 10.dp, vertical = 8.dp)) {
             Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) {
@@ -524,5 +549,30 @@ private fun SavedSection(nav: NavHostController, items: List<SavedItem>, friendN
             confirmButton = { TextButton(onClick = { Graph.saved.remove(r.id); remove = null }) { Text(t("Togli")) } },
             dismissButton = { TextButton(onClick = { remove = null }) { Text(t("Annulla")) } },
         )
+    }
+}
+
+
+/** a story made of a song: a record spinning slowly */
+@Composable
+private fun VinylStory(song: Song?, caption: String, modifier: Modifier) {
+    val tr = androidx.compose.animation.core.rememberInfiniteTransition(label = "vinyl")
+    val rot by tr.animateFloat(0f, 360f, androidx.compose.animation.core.infiniteRepeatable(tween(6000, easing = LinearEasing)), label = "rot")
+    Column(modifier.padding(32.dp), horizontalAlignment = Alignment.CenterHorizontally) {
+        Canvas(Modifier.size(220.dp).graphicsLayer { rotationZ = rot }) {
+            val r = size.minDimension / 2
+            drawCircle(Color(0xFF111111), r)
+            for (k in 1..9) drawCircle(Color.White.copy(alpha = 0.06f), r * (0.4f + k * 0.065f), style = Stroke(1.5f))
+            drawCircle(Color(0xFFE6E6E6), r * 0.3f)
+            drawCircle(Color(0xFF111111), r * 0.04f)
+            drawLine(Color.White.copy(alpha = 0.25f), Offset(r * 1.25f, r * 0.55f), Offset(r * 1.6f, r * 0.4f), 3f)
+        }
+        Spacer(Modifier.height(24.dp))
+        Text(song?.title ?: "", color = Color.White, style = MaterialTheme.typography.titleLarge, textAlign = TextAlign.Center)
+        if (!song?.artist.isNullOrBlank()) Text(song?.artist ?: "", color = Color.White.copy(alpha = 0.7f), style = MaterialTheme.typography.bodyMedium)
+        if (caption.isNotBlank()) {
+            Spacer(Modifier.height(18.dp))
+            Text(caption, color = Color.White, style = MaterialTheme.typography.headlineSmall, textAlign = TextAlign.Center)
+        }
     }
 }

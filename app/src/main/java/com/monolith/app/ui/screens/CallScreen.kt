@@ -38,6 +38,8 @@ import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.VolumeUp
 import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.CallEnd
+import androidx.compose.material.icons.rounded.StopScreenShare
+import androidx.compose.material.icons.rounded.ScreenShare
 import androidx.compose.material.icons.rounded.Cameraswitch
 import androidx.compose.material.icons.rounded.Mic
 import androidx.compose.material.icons.rounded.MicOff
@@ -128,6 +130,10 @@ fun CallScreen(nav: NavHostController) {
             kotlinx.coroutines.delay(500)
         }
     }
+    val shareScreen = rememberLauncherForActivityResult(ActivityResultContracts.StartActivityForResult()) { res ->
+        val d = res.data
+        if (res.resultCode == android.app.Activity.RESULT_OK && d != null) Graph.calls.startScreenShare(d)
+    }
     val perms = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { res ->
         if (res[Manifest.permission.RECORD_AUDIO] == true || ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) == PackageManager.PERMISSION_GRANTED) Graph.calls.accept()
         else Graph.calls.decline()
@@ -146,7 +152,7 @@ fun CallScreen(nav: NavHostController) {
     }
     val ringing = st.phase == CallPhase.OUTGOING || st.phase == CallPhase.INCOMING || st.phase == CallPhase.CONNECTING
     val remotes = st.participants.values.toList()
-    val showGrid = st.phase == CallPhase.ACTIVE && (st.video || remotes.size > 1)
+    val showGrid = st.phase == CallPhase.ACTIVE && (st.video || remotes.size > 1 || remotes.any { it.video != null && it.camOn })
 
     val inf = rememberInfiniteTransition(label = "rings")
     val ring by inf.animateFloat(0f, 1f, infiniteRepeatable(tween(2200, easing = LinearEasing)), label = "ring")
@@ -178,6 +184,12 @@ fun CallScreen(nav: NavHostController) {
             }
         }
 
+        if (st.sharing) {
+            Text(
+                "📱  " + t("Stai mostrando il tuo schermo"), color = BG, style = MaterialTheme.typography.labelLarge,
+                modifier = Modifier.align(Alignment.TopCenter).statusBarsPadding().padding(top = 8.dp).clip(CircleShape).background(FG).padding(horizontal = 14.dp, vertical = 6.dp),
+            )
+        }
         Column(Modifier.align(Alignment.BottomCenter).fillMaxWidth().navigationBarsPadding().padding(bottom = 28.dp), horizontalAlignment = Alignment.CenterHorizontally) {
             AnimatedContent(
                 when (st.phase) {
@@ -208,6 +220,15 @@ fun CallScreen(nav: NavHostController) {
                         ToggleButton(Icons.Rounded.Cameraswitch, t("Gira"), false) { Graph.calls.switchCamera() }
                     }
                     ToggleButton(Icons.AutoMirrored.Rounded.VolumeUp, t("Vivavoce"), st.speaker) { Graph.calls.toggleSpeaker() }
+                    if (st.phase == CallPhase.ACTIVE) {
+                        ToggleButton(if (st.sharing) Icons.Rounded.StopScreenShare else Icons.Rounded.ScreenShare, t("Schermo"), st.sharing) {
+                            if (st.sharing) Graph.calls.stopScreenShare()
+                            else {
+                                val mpm = ctx.getSystemService(android.media.projection.MediaProjectionManager::class.java)
+                                runCatching { shareScreen.launch(mpm.createScreenCaptureIntent()) }
+                            }
+                        }
+                    }
                 }
             }
         }

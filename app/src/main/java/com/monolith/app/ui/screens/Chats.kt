@@ -502,15 +502,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
 
     // ---- launchers
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) { val r = replyRef(); replyTo = null; Graph.scope.launch { Graph.messenger.sendPhoto(conv, uri, "", r) } }
+        if (uri != null) { PendingPhoto.set(uri, conv, replyRef()); replyTo = null; nav.navigate("photoedit") }
     }
     val pickOnce = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
-        if (uri != null) Graph.scope.launch { Graph.messenger.sendPhoto(conv, uri, "", null, once = true) }
+        if (uri != null) { PendingPhoto.set(uri, conv, null, once = true); nav.navigate("photoedit") }
     }
     var cameraUri by remember { mutableStateOf<Uri?>(null) }
     val takePhoto = rememberLauncherForActivityResult(ActivityResultContracts.TakePicture()) { ok ->
         val u = cameraUri
-        if (ok && u != null) { val r = replyRef(); replyTo = null; Graph.scope.launch { Graph.messenger.sendPhoto(conv, u, "", r) } }
+        if (ok && u != null) { PendingPhoto.set(u, conv, replyRef()); replyTo = null; nav.navigate("photoedit") }
     }
     fun launchCamera() {
         val dir = File(ctx.cacheDir, "camera").apply { mkdirs() }

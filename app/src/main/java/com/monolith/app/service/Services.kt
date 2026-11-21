@@ -69,6 +69,12 @@ class MonolithService : Service() {
         if (Build.VERSION.SDK_INT >= 30 && Graph.calls.videoCall && granted(Manifest.permission.CAMERA)) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_CAMERA
         }
+        if (Build.VERSION.SDK_INT >= 29 && projection && inCall) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
+        }
+        if (Build.VERSION.SDK_INT >= 29 && !sharing && Graph.diary.enabled.value && Graph.location.hasPermission()) {
+            types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
+        }
         val n = Graph.notifier.serviceNotification(sharing, inCall)
         try {
             ServiceCompat.startForeground(this, Notifier.ID_SERVICE, n, types)
@@ -82,6 +88,9 @@ class MonolithService : Service() {
     }
 
     companion object {
+        /** a screen is being shared in a call: the service carries the projection type */
+        @Volatile var projection = false
+
         fun start(ctx: Context) {
             if (!Graph.identity.hasIdentity()) return
             if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value) return

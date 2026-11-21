@@ -28,6 +28,22 @@ import java.io.File
 
 data class ShardRoom(val id: String, val name: String, val voice: Boolean)
 
+/** a note pinned on the shard board */
+data class ShardNote(val id: String, val text: String, val by: String, val at: Long)
+
+/** an event of the shard: everyone sees it, each one says if they're going */
+data class ShardEvent(
+    val id: String,
+    val title: String,
+    val emoji: String,
+    val start: Long,
+    val allDay: Boolean,
+    val by: String,
+    val updatedAt: Long,
+    val going: List<String> = emptyList(),
+    val deleted: Boolean = false,
+)
+
 /** a small private space of friends with written and voice rooms */
 data class Shard(
     val id: String,
@@ -37,8 +53,13 @@ data class Shard(
     val members: List<String>,
     val rooms: List<ShardRoom>,
     val updatedAt: Long,
+    /** moderators: manage rooms, members (not other moderators) and the board */
+    val mods: List<String> = emptyList(),
+    val notes: List<ShardNote> = emptyList(),
+    val events: List<ShardEvent> = emptyList(),
 ) {
     fun conv(room: ShardRoom) = "g:" + groupId(id, room.id)
+    fun canManage(pk: String?) = pk != null && (pk == owner || pk in mods)
 
     companion object {
         const val PREFIX = "shard."
@@ -112,10 +133,22 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         }
     }
 
+    private fun evJson(e: ShardEvent): JSONObject = JSONObject().put("id", e.id).put("x", e.title).put("e", e.emoji).put("s", e.start)
+        .put("ad", e.allDay).put("by", e.by).put("u", e.updatedAt).put("go", e.going.toJsonArray()).put("del", e.deleted)
+
+    private fun evFrom(o: JSONObject): ShardEvent? = runCatching {
+        ShardEvent(
+            o.getString("id").take(32), o.optString("x").take(80), o.optString("e", "📅").take(8), o.optLong("s"), o.optBoolean("ad"),
+            o.optString("by"), o.optLong("u"), (o.optJSONArray("go") ?: JSONArray()).strings().filter { Hex.isHex64(it) }, o.optBoolean("del"),
+        )
+    }.getOrNull()
+
     private fun toJson(s: Shard): JSONObject = JSONObject()
         .put("id", s.id).put("n", s.name).put("e", s.emoji).put("o", s.owner)
-        .put("m", s.members.toJsonArray()).put("u", s.updatedAt)
+        .put("m", s.members.toJsonArray()).put("u", s.updatedAt).put("md", s.mods.toJsonArray())
         .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice)) } })
+        .put("nb", JSONArray().also { a -> s.notes.forEach { n -> a.put(JSONObject().put("id", n.id).put("x", n.text).put("by", n.by).put("at", n.at)) } })
+        .put("ev", JSONArray().also { a -> s.events.filter { now() - it.start < 30L * 86_400_000L }.forEach { a.put(evJson(it)) } })
 
     private fun fromJson(o: JSONObject): Shard? = runCatching {
         val rooms = o.optJSONArray("r") ?: JSONArray()
@@ -126,8 +159,17 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                 rooms.optJSONObject(i)?.let { r -> ShardRoom(r.optString("id").filter { c -> c.isLetterOrDigit() }.take(24), r.optString("n").take(40), r.optBoolean("v")) }
             }.filter { it.id.isNotBlank() }.take(30),
             updatedAt = o.optLong("u"),
+            mods = (o.optJSONArray("md") ?: JSONArray()).strings().filter { Hex.isHex64(it) },
+            notes = (o.optJSONArray("nb") ?: JSONArray()).let { a ->
+                (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { n -> ShardNote(n.optString("id"), n.optString("x").take(500), n.optString("by"), n.optLong("at")) } }
+            }.filter { it.id.isNotBlank() }.take(30),
+            events = (o.optJSONArray("ev") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let(::evFrom) } }.take(60),
         )
     }.getOrNull()
+
+    /** events from two copies of the shard: the newest version of each one wins */
+    private fun mergeEvents(a: List<ShardEvent>, b: List<ShardEvent>): List<ShardEvent> =
+        (a + b).groupBy { it.id }.map { (_, v) -> v.maxBy { it.updatedAt } }.sortedBy { it.start }
 
     /** keep the hidden groups of the rooms in step with the shard */
     private suspend fun syncGroups(s: Shard, old: Shard?) {
@@ -189,8 +231,18 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                 }
             }
         }
-        // only the owner renames or changes rooms; anyone may add people
-        val merged = if (old != null && from != old.owner) old.copy(members = (old.members + incoming.members).distinct(), updatedAt = incoming.updatedAt) else incoming
+        // the owner changes everything; moderators rooms, members and board; anyone may add people
+        val merged = when {
+            old == null || from == old.owner -> incoming.copy(events = mergeEvents(old?.events ?: emptyList(), incoming.events))
+            from in old.mods -> old.copy(
+                rooms = incoming.rooms,
+                members = (incoming.members + old.owner + old.mods.filter { it in old.members }).distinct(),
+                notes = incoming.notes,
+                events = mergeEvents(old.events, incoming.events),
+                updatedAt = incoming.updatedAt,
+            )
+            else -> old.copy(members = (old.members + incoming.members).distinct(), events = mergeEvents(old.events, incoming.events), updatedAt = incoming.updatedAt)
+        }
         store(merged, old)
         if (old == null) {
             val who = db.friends().get(from)?.displayName ?: t("Qualcuno")
@@ -254,8 +306,8 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     suspend fun removeMember(id: String, pk: String) {
         val s = get(id) ?: return
-        if (s.owner != me() || pk == s.owner) return
-        val n = s.copy(members = s.members - pk, updatedAt = now())
+        if (!s.canManage(me()) || pk == s.owner || (pk in s.mods && s.owner != me())) return
+        val n = s.copy(members = s.members - pk, mods = s.mods - pk, updatedAt = now())
         store(n, s)
         broadcast(n, extra = listOf(pk))  // they get the list without themselves and drop it
     }
@@ -270,7 +322,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     suspend fun addRoom(id: String, name: String, voice: Boolean) {
         val s = get(id) ?: return
-        if (s.owner != me()) return
+        if (!s.canManage(me())) return
         val clean = name.trim().ifBlank { if (voice) t("Vocale") else t("stanza") }.take(40)
         val n = s.copy(rooms = s.rooms + ShardRoom(newId().take(8), if (voice) clean else clean.lowercase().replace(' ', '-'), voice), updatedAt = now())
         store(n, s)
@@ -279,10 +331,120 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     suspend fun removeRoom(id: String, roomId: String) {
         val s = get(id) ?: return
-        if (s.owner != me() || s.rooms.size <= 1) return
+        if (!s.canManage(me()) || s.rooms.size <= 1) return
         val n = s.copy(rooms = s.rooms.filter { it.id != roomId }, updatedAt = now())
         store(n, s)
         broadcast(n)
+    }
+
+    /** only the owner names moderators */
+    suspend fun setMod(id: String, pk: String, on: Boolean) {
+        val s = get(id) ?: return
+        if (s.owner != me() || pk == s.owner || pk !in s.members) return
+        val n = s.copy(mods = if (on) (s.mods + pk).distinct() else s.mods - pk, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun addNote(id: String, text: String) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        if (!s.canManage(k) || text.isBlank()) return
+        val n = s.copy(notes = (listOf(ShardNote(newId(), text.trim().take(500), k, now())) + s.notes).take(30), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun removeNote(id: String, noteId: String) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(notes = s.notes.filter { it.id != noteId }, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    // ------------------------------------------------------------------ events: anyone in the shard
+
+    private suspend fun sendEvent(s: Shard, e: ShardEvent) {
+        val k = me() ?: return
+        val p = JSONObject().put("t", "shardev").put("s", s.id).put("ev", evJson(e))
+        s.members.filter { it != k }.forEach { Graph.messenger.sendStored(it, p) }
+    }
+
+    private suspend fun putEvent(s: Shard, e: ShardEvent) {
+        val n = s.copy(events = mergeEvents(s.events, listOf(e)))
+        _all.value = _all.value.filter { it.id != s.id } + n
+        save()
+    }
+
+    suspend fun createEvent(id: String, title: String, emoji: String, start: Long, allDay: Boolean) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        val e = ShardEvent(newId().take(16), title.trim().take(80).ifBlank { t("Evento") }, emoji, start, allDay, k, now(), listOf(k))
+        putEvent(s, e)
+        sendEvent(s, e)
+        addToAgenda(s, e)
+        s.rooms.firstOrNull { !it.voice }?.let { r ->
+            db.messages().insert(Message(newId(), s.conv(r), k, true, now(), "system", text = t("Hai creato l'evento {0} · {1}", e.emoji + " " + e.title, com.monolith.app.core.Fmt.dayShort(e.start)), status = MsgStatus.READ))
+        }
+    }
+
+    suspend fun setGoing(id: String, eventId: String, going: Boolean) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        val e = s.events.firstOrNull { it.id == eventId } ?: return
+        val n = e.copy(going = if (going) (e.going + k).distinct() else e.going - k, updatedAt = now())
+        putEvent(s, n)
+        sendEvent(s, n)
+        if (going) addToAgenda(s, n) else db.agenda().delete("shev-" + e.id)
+    }
+
+    suspend fun deleteEvent(id: String, eventId: String) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        val e = s.events.firstOrNull { it.id == eventId } ?: return
+        if (e.by != k && !s.canManage(k)) return
+        val n = e.copy(deleted = true, updatedAt = now())
+        putEvent(s, n)
+        sendEvent(s, n)
+        db.agenda().delete("shev-" + e.id)
+    }
+
+    suspend fun onEvent(from: String, p: JSONObject) {
+        val s = get(p.optString("s")) ?: return
+        if (from !in s.members) return
+        val e = p.optJSONObject("ev")?.let(::evFrom) ?: return
+        val old = s.events.firstOrNull { it.id == e.id }
+        if (old != null && old.updatedAt >= e.updatedAt) return
+        // details are the creator's; anyone else only changes their own "going"
+        val fixed = when {
+            old == null -> e
+            from == old.by || s.canManage(from) -> e
+            else -> old.copy(going = if (from in e.going) (old.going + from).distinct() else old.going - from, updatedAt = e.updatedAt)
+        }
+        putEvent(s, fixed)
+        val k = me() ?: return
+        if (fixed.deleted) { db.agenda().delete("shev-" + fixed.id); return }
+        if (k in fixed.going) addToAgenda(s, fixed)
+        if (old == null) {
+            val who = db.friends().get(from)?.displayName ?: t("Qualcuno")
+            s.rooms.firstOrNull { !it.voice }?.let { r ->
+                db.messages().insert(Message(newId(), s.conv(r), from, false, now(), "system", text = t("{0} ha creato l'evento {1} · {2}", who, fixed.emoji + " " + fixed.title, com.monolith.app.core.Fmt.dayShort(fixed.start)), status = MsgStatus.READ))
+            }
+            Graph.notifier.shardEvent(s.emoji + " " + s.name, fixed.emoji + " " + fixed.title + " · " + com.monolith.app.core.Fmt.dayShort(fixed.start))
+        }
+    }
+
+    /** the events you're going to are copied into your agenda */
+    private suspend fun addToAgenda(s: Shard, e: ShardEvent) {
+        val id = "shev-" + e.id
+        val cur = db.agenda().get(id)
+        val ev = com.monolith.app.data.AgendaEvent(
+            id = id, title = e.title, description = s.emoji + " " + s.name, start = e.start, allDay = e.allDay, emoji = e.emoji,
+            reminders = cur?.reminders ?: "60", createdAt = cur?.createdAt ?: now(), updatedAt = now(),
+        )
+        db.agenda().upsert(ev)
+        com.monolith.app.service.ReminderScheduler.rescheduleAll(Graph.app)
     }
 
     suspend fun leave(id: String) {

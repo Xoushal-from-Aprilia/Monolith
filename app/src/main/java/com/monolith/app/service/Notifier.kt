@@ -248,6 +248,9 @@ class Notifier(private val ctx: Context) {
             t("In tempo reale fino alle {0}", Fmt.time(until)), emoji, openApp(12) { putExtra(EXTRA_TAB, 2) },
         )
 
+    fun shardEvent(shard: String, text: String) =
+        simple(("shev$shard$text").hashCode(), t("Nuovo evento in {0}", shard), text, "📅", openApp(22) { putExtra(EXTRA_TAB, 0) })
+
     fun screenshot(conv: String, name: String, emoji: String) =
         simple(("shot$conv").hashCode(), t("{0} ha fatto uno screenshot", name), t("della vostra chat"), emoji, openApp(("s$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
 

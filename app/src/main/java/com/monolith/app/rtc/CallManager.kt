@@ -65,6 +65,8 @@ data class CallUi(
     val camOn: Boolean = false,
     val frontCam: Boolean = true,
     val reason: String? = null,
+    /** I'm showing my screen to the others */
+    val sharing: Boolean = false,
 )
 
 /**
@@ -94,6 +96,10 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
     private var videoSource: VideoSource? = null
     private var videoTrack: VideoTrack? = null
     private var surfaceHelper: SurfaceTextureHelper? = null
+    private var screenCapturer: org.webrtc.ScreenCapturerAndroid? = null
+    private var screenSource: VideoSource? = null
+    private var screenTrack: VideoTrack? = null
+    private var screenHelper: SurfaceTextureHelper? = null
     private var ringtone: Ringtone? = null
     private var timeout: ScheduledFuture<*>? = null
     private val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
@@ -102,6 +108,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
         get() = _state.value.phase.let { it == CallPhase.OUTGOING || it == CallPhase.CONNECTING || it == CallPhase.ACTIVE || it == CallPhase.INCOMING }
 
     val videoCall: Boolean get() = inCall && _state.value.video
+    val screenSharing: Boolean get() = inCall && _state.value.sharing
 
     private fun myPub() = Graph.identity.keys?.pub ?: ""
     private fun others() = _state.value.members.filter { it != myPub() }
@@ -325,6 +332,8 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
     }
 
     private fun onOffer(from: String, sdp: String) {
+        // an offer on a link that already exists is a renegotiation (someone started showing the screen)
+        links[from]?.sentLocal = false
         val link = links[from] ?: createLink(from, offerer = false) ?: return
         link.pc.setRemoteDescription(SimpleSdp(onSet = {
             exec.execute {
@@ -361,7 +370,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
                 }
             }) ?: return null
             audioTrack?.let { pc.addTrack(it, listOf("monolith")) }
-            val vt = videoTrack
+            val vt = screenTrack ?: videoTrack
             if (vt != null) {
                 pc.addTrack(vt, listOf("monolith"))
             } else if (_state.value.video) {
@@ -466,7 +475,91 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
         }
     }
 
+    // ================================================================== screen sharing
+
+    /** start showing the screen; [data] is the user's consent from the system dialog */
+    fun startScreenShare(data: android.content.Intent) {
+        if (!inCall || _state.value.sharing) return
+        MonolithService.projection = true
+        MonolithService.start(ctx)
+        // the service must be promoted with the projection type before the capture starts
+        exec.schedule(Runnable {
+            try {
+                val factory = RtcFactory.get(ctx)
+                val cap = org.webrtc.ScreenCapturerAndroid(data, object : android.media.projection.MediaProjection.Callback() {
+                    override fun onStop() { stopScreenShare() }
+                })
+                val helper = SurfaceTextureHelper.create("monolith-screen", RtcFactory.egl.eglBaseContext)
+                val src = factory.createVideoSource(true)
+                cap.initialize(helper, ctx, src.capturerObserver)
+                val dm = ctx.resources.displayMetrics
+                val scale = 720f / minOf(dm.widthPixels, dm.heightPixels).coerceAtLeast(1)
+                cap.startCapture((dm.widthPixels * scale).toInt(), (dm.heightPixels * scale).toInt(), 15)
+                val track = factory.createVideoTrack("monolith-screen", src).also { it.setEnabled(true) }
+                screenCapturer = cap
+                screenHelper = helper
+                screenSource = src
+                screenTrack = track
+                links.values.forEach { link ->
+                    val sender = link.pc.senders.firstOrNull { it.track()?.kind() == "video" }
+                    if (sender != null) sender.setTrack(track, false)
+                    else {
+                        link.pc.addTrack(track, listOf("monolith"))
+                        renegotiate(link)
+                    }
+                }
+                _state.update { it.copy(sharing = true) }
+                _state.value.participants.keys.forEach { send(it, "cam") { put("on", true) } }
+            } catch (e: Throwable) {
+                Log.w(tag, "screen share failed", e)
+                MonolithService.projection = false
+            }
+        }, 700, TimeUnit.MILLISECONDS)
+    }
+
+    fun stopScreenShare() {
+        exec.execute {
+            if (screenTrack == null) return@execute
+            val cam = videoTrack
+            links.values.forEach { link ->
+                link.pc.senders.firstOrNull { it.track()?.id() == screenTrack?.id() }?.setTrack(cam, false)
+            }
+            runCatching { screenCapturer?.stopCapture() }
+            runCatching { screenCapturer?.dispose() }
+            runCatching { screenSource?.dispose() }
+            runCatching { screenHelper?.dispose() }
+            screenCapturer = null
+            screenSource = null
+            screenHelper = null
+            screenTrack = null
+            MonolithService.projection = false
+            if (inCall) MonolithService.start(ctx)
+            _state.update { it.copy(sharing = false) }
+            val camOn = cam != null && _state.value.camOn
+            _state.value.participants.keys.forEach { send(it, "cam") { put("on", camOn) } }
+        }
+    }
+
+    /** a new offer on an existing link, after adding a track */
+    private fun renegotiate(link: Link) {
+        link.pc.createOffer(SimpleSdp(onCreate = { sdp ->
+            exec.execute {
+                link.sentLocal = false
+                link.pc.setLocalDescription(SimpleSdp(onSet = { scheduleSend(link, "offer") }), sdp)
+            }
+        }), MediaConstraints())
+    }
+
     private fun releaseLocalMedia() {
+        runCatching { screenCapturer?.stopCapture() }
+        runCatching { screenCapturer?.dispose() }
+        runCatching { screenSource?.dispose() }
+        runCatching { screenHelper?.dispose() }
+        screenCapturer = null
+        screenSource = null
+        screenHelper = null
+        screenTrack = null
+        MonolithService.projection = false
         runCatching { capturer?.stopCapture() }
         runCatching { capturer?.dispose() }
         runCatching { videoSource?.dispose() }

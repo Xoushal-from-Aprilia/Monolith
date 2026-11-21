@@ -27,7 +27,7 @@ object Stories {
     /** the stories of [pk] still visible, oldest first */
     fun visible(msgs: List<Message>): List<Message> {
         val cutoff = now() - DAY * 1000
-        return msgs.filter { (it.kind == "photo" || it.kind == "text") && it.ts > cutoff && (it.expiresAt == 0L || it.expiresAt > now()) }
+        return msgs.filter { (it.kind == "photo" || it.kind == "text" || it.kind == "voice") && it.ts > cutoff && (it.expiresAt == 0L || it.expiresAt > now()) }
             .sortedBy { it.ts }
     }
 
@@ -49,14 +49,19 @@ object Stories {
         return gid
     }
 
-    suspend fun postPhoto(uri: Uri, caption: String = "") {
+    suspend fun postPhoto(uri: Uri, caption: String = "", music: org.json.JSONObject? = null) {
         val gid = ensureMine() ?: return
-        Graph.messenger.sendPhoto("g:$gid", uri, caption)
+        Graph.messenger.sendPhoto("g:$gid", uri, caption, music = music)
     }
 
-    suspend fun postText(text: String) {
+    suspend fun postText(text: String, music: org.json.JSONObject? = null) {
         val gid = ensureMine() ?: return
-        Graph.messenger.sendText("g:$gid", text)
+        Graph.messenger.sendText("g:$gid", text, music = music)
+    }
+
+    suspend fun postAudio(file: java.io.File, durationMs: Long, music: org.json.JSONObject, caption: String) {
+        val gid = ensureMine() ?: return
+        Graph.messenger.sendAudioStory("g:$gid", file, durationMs, music, caption)
     }
 
     // ---- seen
