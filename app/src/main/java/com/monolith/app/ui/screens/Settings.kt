@@ -446,6 +446,35 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.0.0", "2026-11-21",
+        listOf(
+            "Giochi in chat: Tris, Forza 4 e Impiccato a turni, con l'avviso quando tocca a te",
+            "Dadi e moneta: un lancio con lo stesso risultato per tutti, animato",
+            "Foto a vista unica: si apre una volta, senza screenshot, poi sparisce",
+            "Lavagna condivisa: disegnate insieme in tempo reale e inviate il disegno in chat",
+            "Menzioni @ nei gruppi e negli Shard, che arrivano anche con le notifiche silenziate",
+            "Gruppi silenziabili, sfondi in bianco e nero per ogni chat, trillo scuotendo il telefono",
+            "Vocali a 1,5× e 2×; avvicinando il telefono all'orecchio si ascoltano come una chiamata",
+            "Blocca screenshot in una chat (per entrambi) e avviso quando qualcuno fa uno screenshot (Android 14 e successivi)",
+            "Conto alla rovescia per gli eventi, in cima all'agenda e come widget",
+            "Meteo del giorno e del luogo dell'evento, direttamente in Agenda",
+            "Icone alternative per la schermata Home",
+            "Scheda medica inviata insieme all'SOS",
+            "Diario dei luoghi: le tue soste, solo su questo telefono",
+            "Filtri in bianco e nero per foto e storie, con didascalia",
+            "Musica nelle storie: anteprime da iTunes o un pezzo di canzone dal telefono",
+            "Shard: bacheca, eventi con chi partecipa, fondatore e moderatori",
+            "Condivisione dello schermo nelle chiamate e nelle stanze vocali",
+            "Bussola che punta verso l'amico che condivide la posizione",
+            "Batti cinque per aggiungere un amico senza QR",
+            "Arrivo in diretta: la notifica si riempie mentre l'amico si avvicina",
+            "Video in una finestrella quando esci dall'app durante una videochiamata",
+            "In chiamata lo schermo si spegne vicino alla faccia",
+            "Profondità: profilo, Legame e riepilogo si muovono inclinando il telefono",
+            "Sfondo animato per il telefono con il monolite tra le stelle",
+        ),
+    ),
+    Release(
         "1.1.0", "2026-11-21",
         listOf(
             "Legame accanto ai nomi: il piccolo monolite con la serie compare quando vi scrivete da almeno 100 giorni di fila",
