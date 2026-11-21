@@ -35,6 +35,8 @@ data class SoundSettings(
     val meeting: String = Sounds.SYSTEM,
     val reminder: String = Sounds.SYSTEM,
     val callTones: Boolean = false,
+    /** a tiny vibration when a key is pressed (on by default) */
+    val haptics: Boolean = true,
 )
 
 /**
@@ -103,6 +105,7 @@ object Sounds {
             meeting = sp.getString("meet", d.meeting) ?: d.meeting,
             reminder = sp.getString("rem", d.reminder) ?: d.reminder,
             callTones = sp.getBoolean("calltones", d.callTones),
+            haptics = sp.getBoolean("haptics", d.haptics),
         )
         runCatching {
             pool = SoundPool.Builder()
@@ -145,6 +148,7 @@ object Sounds {
             .putBoolean("taps", s.taps).putString("tap", s.tap).putString("ring", s.ringtone)
             .putString("msg", s.message).putString("meet", s.meeting).putString("rem", s.reminder)
             .putBoolean("calltones", s.callTones)
+            .putBoolean("haptics", s.haptics)
             .apply()
         // notification channels carry their sound: a new choice means a new channel
         if (s.message != old.message || s.meeting != old.meeting || s.reminder != old.reminder) {
@@ -177,16 +181,31 @@ object Sounds {
     private fun ringerNormal(): Boolean =
         runCatching { ctx.getSystemService(AudioManager::class.java).ringerMode == AudioManager.RINGER_MODE_NORMAL }.getOrDefault(true)
 
-    /** a very light tick when something is pressed */
+    /** a very light tick when something is pressed: a short vibration and, if chosen, a sound */
     fun tap() {
         val s = _settings.value
-        if (!s.taps || !::ctx.isInitialized) return
+        if ((!s.taps && !s.haptics) || !::ctx.isInitialized) return
         val t = SystemClock.uptimeMillis()
         if (t - lastTap < 45) return
         lastTap = t
-        if (!ringerNormal()) return
+        if (s.haptics) tick()
+        if (!s.taps || !ringerNormal()) return
         val id = tapIds[s.tap] ?: return
         runCatching { pool?.play(id, 0.6f, 0.6f, 1, 0, 1f) }
+    }
+
+    private var tapVibrator: Vibrator? = null
+
+    /** the lightest vibration the phone can do, like the keyboard */
+    fun tick() {
+        if (!::ctx.isInitialized) return
+        runCatching {
+            val v = tapVibrator ?: vibrator()?.also { tapVibrator = it } ?: return
+            if (!v.hasVibrator()) return
+            val effect = if (Build.VERSION.SDK_INT >= 29) VibrationEffect.createPredefined(VibrationEffect.EFFECT_TICK)
+            else VibrationEffect.createOneShot(18, if (v.hasAmplitudeControl()) 90 else VibrationEffect.DEFAULT_AMPLITUDE)
+            v.vibrate(effect)
+        }
     }
 
     // ------------------------------------------------------------------ previews (settings)

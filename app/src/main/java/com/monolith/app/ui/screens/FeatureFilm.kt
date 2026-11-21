@@ -93,7 +93,7 @@ private val FILM = listOf(
     Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Blocco e avviso screenshot" /*i18n*/, "Backup cifrato automatico" /*i18n*/), "safe"),
-    Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/), "phone"),
+    Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
     Scene("Domenica" /*i18n*/, "La tua settimana in slide" /*i18n*/, listOf("Persone, emoji e ritmo" /*i18n*/, "Un titolo tutto tuo" /*i18n*/), "wrapped"),
     Scene("", "Pronto?" /*i18n*/, listOf("Il resto lo scopri usandola." /*i18n*/), "end"),
 )

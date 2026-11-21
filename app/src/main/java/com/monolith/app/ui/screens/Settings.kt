@@ -216,7 +216,7 @@ fun SettingsScreen(nav: NavHostController) {
             }
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
-            SettingRow(Icons.Rounded.MusicNote, t("Suoni"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
+            SettingRow(Icons.Rounded.MusicNote, t("Suoni e vibrazione"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
             SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
             SettingRow(Icons.Rounded.Wallpaper, t("Sfondo animato"), t("Il monolite tra le stelle come sfondo del telefono")) {
                 val comp = android.content.ComponentName(ctx, com.monolith.app.widget.MonolithWallpaper::class.java)
@@ -410,6 +410,13 @@ internal fun SettingSwitch(icon: ImageVector, title: String, subtitle: String, c
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "2.3.1", "2026-11-21",
+        listOf(
+            "Una piccola vibrazione quando tocchi un tasto, leggera come quella della tastiera",
+            "Si spegne da Impostazioni, in Suoni e vibrazione, con Vibrazione dei tasti",
+        ),
+    ),
     Release(
         "2.3.0", "2026-11-21",
         listOf(

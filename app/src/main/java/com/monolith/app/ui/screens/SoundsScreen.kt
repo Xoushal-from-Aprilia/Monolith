@@ -66,7 +66,7 @@ fun SoundsScreen(nav: NavHostController) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding()) {
         Row(Modifier.fillMaxWidth().padding(horizontal = 4.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
-            Text(t("Suoni"), style = MaterialTheme.typography.titleLarge)
+            Text(t("Suoni e vibrazione"), style = MaterialTheme.typography.titleLarge)
         }
         LazyColumn(contentPadding = PaddingValues(start = 16.dp, end = 16.dp, bottom = 40.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
             item {
@@ -77,11 +77,22 @@ fun SoundsScreen(nav: NavHostController) {
                 )
             }
             item {
-                SoundGroup(Icons.Rounded.TouchApp, t("Tasti"), t("Un tocco leggero quando premi qualcosa")) {
+                SoundGroup(Icons.Rounded.TouchApp, t("Tasti"), t("Una vibrazione leggera e, se vuoi, un suono quando premi qualcosa")) {
                     Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                         Text(t("Suoni dei tasti"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Switch(
                             checked = s.taps, onCheckedChange = { on -> Sounds.update { it.copy(taps = on) } },
+                            colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
+                        )
+                    }
+                    Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Text(t("Vibrazione dei tasti"), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
+                        Switch(
+                            checked = s.haptics,
+                            onCheckedChange = { on ->
+                                Sounds.update { it.copy(haptics = on) }
+                                if (on) Sounds.tick()
+                            },
                             colors = SwitchDefaults.colors(checkedTrackColor = MaterialTheme.colorScheme.primary),
                         )
                     }
