@@ -41,7 +41,7 @@ class MonolithService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promote()
-        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value) {
+        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value && !Graph.nearbyActive) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -72,7 +72,7 @@ class MonolithService : Service() {
         if (Build.VERSION.SDK_INT >= 29 && projection && inCall) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_MEDIA_PROJECTION
         }
-        if (Build.VERSION.SDK_INT >= 29 && !sharing && Graph.diary.enabled.value && Graph.location.hasPermission()) {
+        if (Build.VERSION.SDK_INT >= 29 && !sharing && (Graph.diary.enabled.value || Graph.nearbyActive) && Graph.location.hasPermission()) {
             types = types or ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION
         }
         val n = Graph.notifier.serviceNotification(sharing, inCall)
@@ -93,7 +93,7 @@ class MonolithService : Service() {
 
         fun start(ctx: Context) {
             if (!Graph.identity.hasIdentity()) return
-            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value) return
+            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value && !Graph.nearbyActive) return
             try {
                 ContextCompat.startForegroundService(ctx, Intent(ctx, MonolithService::class.java))
             } catch (_: Exception) {
@@ -170,6 +170,7 @@ object ReminderScheduler {
         // a birthday today that nobody announced yet (phone was off at nine)
         if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 9) BirthdayAlarm.fire(ctx)
         WeeklyAlarm.schedule(ctx)
+        com.monolith.app.core.AutoBackup.schedule(ctx)
         // Sunday evening and the recap didn't go out (phone off at six)
         val c = java.util.Calendar.getInstance()
         if (c.get(java.util.Calendar.DAY_OF_WEEK) == java.util.Calendar.SUNDAY && c.get(java.util.Calendar.HOUR_OF_DAY) >= WeeklyAlarm.HOUR) {
@@ -221,6 +222,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val ACTION_BIRTHDAYS = "monolith.reminder.BIRTHDAYS"
         const val ACTION_SEND = "monolith.reminder.SEND"
         const val ACTION_WEEK = "monolith.reminder.WEEK"
+        const val ACTION_BACKUP = "monolith.reminder.BACKUP"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -233,6 +235,7 @@ class ReminderReceiver : BroadcastReceiver() {
                 when {
                     action == ACTION_BIRTHDAYS -> BirthdayAlarm.fire(context)
                     action == ACTION_WEEK -> WeeklyAlarm.fire(context)
+                    action == ACTION_BACKUP -> com.monolith.app.core.AutoBackup.run(context)
                     action.startsWith(ACTION_SEND) && id != null -> ScheduledSender.fire(id)
                     action.startsWith(ACTION_SNOOZE) && id != null -> {
                         Graph.notifier.cancelReminder(id)

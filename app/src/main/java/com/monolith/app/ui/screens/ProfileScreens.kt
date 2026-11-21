@@ -262,6 +262,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
             }
         }
         BadgesSection(pk, mine)
+        if (!mine && friend?.status == FriendStatus.FRIEND) NearbyCard(pk, friend?.displayName ?: "")
         if (stories.isNotEmpty()) {
             Text(t("Storie"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.padding(start = 24.dp, top = 18.dp, bottom = 8.dp))
             LazyRow(contentPadding = PaddingValues(horizontal = 20.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {

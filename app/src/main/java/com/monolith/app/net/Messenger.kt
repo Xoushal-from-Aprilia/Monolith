@@ -270,6 +270,8 @@ class Messenger(
             "placedel" -> onPlaceDelete(from, p)
             "placehere" -> onPlaceHere(from, p)
             "loc" -> if (isFriend) onLocation(friend!!, p)
+            "nearon" -> Graph.nearby.onOn(from, p, friend)
+            "nearpos" -> if (isFriend) Graph.nearby.onPos(from, p)
             "locstart" -> if (isFriend) onLocStart(friend!!, p)
             "locstop" -> if (isFriend) { db.friends().sharing(from, 0); Graph.notifier.cancelArriving(from) }
             "pres" -> if (isFriend) onPresence(from, p)

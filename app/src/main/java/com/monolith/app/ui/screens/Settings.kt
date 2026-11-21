@@ -274,6 +274,7 @@ fun SettingsScreen(nav: NavHostController) {
                 if (Unlock.available(ctx)) Unlock.prompt(ctx, t("Mostra il codice di recupero")) { showCode = true } else showCode = true
             }
             SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Salva chat, agenda, liste e amici in un file protetto da password")) { backupDialog = true }
+            AutoBackupRow()
 
             SectionLabel(t("Connessione"), Modifier.padding(top = 16.dp))
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
@@ -407,7 +408,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); Graph.profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx)
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); Graph.profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx); Graph.nearby.clear(); com.monolith.app.core.AutoBackup.clear(ctx)
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false

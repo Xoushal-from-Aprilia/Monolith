@@ -68,6 +68,8 @@ object Graph {
     lateinit var profileExtras: com.monolith.app.data.ProfileExtras
     lateinit var medical: com.monolith.app.data.MedicalStore
     lateinit var diary: com.monolith.app.location.PlaceDiary
+    lateinit var nearby: com.monolith.app.location.Nearby
+    val nearbyActive: Boolean get() = ::nearby.isInitialized && nearby.active
     lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
 
@@ -96,6 +98,7 @@ object Graph {
         profileExtras = com.monolith.app.data.ProfileExtras(application)
         com.monolith.app.net.Badges.init(application)
         medical = com.monolith.app.data.MedicalStore(application)
+        com.monolith.app.core.AutoBackup.load(application)
         statuses = StatusStore(application)
         Sounds.init(application)
         com.monolith.app.net.Stories.init(application)
@@ -112,6 +115,8 @@ object Graph {
         location = LocationShare(application, scope)
         placeWatch = PlaceWatcher(application, scope)
         diary = com.monolith.app.location.PlaceDiary(application, scope)
+        nearby = com.monolith.app.location.Nearby(application, scope)
+        nearby.refresh()
         rtc.keepAlive = { pk ->
             messenger.activeConv.value == pk || calls.state.value.peer == pk
         }

@@ -261,6 +261,15 @@ class Notifier(private val ctx: Context) {
             openApp(("anniv$pk").hashCode()) { putExtra(EXTRA_CONV, pk) },
         )
 
+    /** a friend with "friend nearby" turned on is less than 500 m away */
+    fun nearby(pk: String, name: String, emoji: String, dist: Int) =
+        simple(
+            ("near$pk").hashCode(),
+            t("{0} è nei paraggi", name),
+            t("A circa {0} da te. Vi vedete?", Fmt.distance(dist.toFloat())), emoji,
+            openApp(("near$pk").hashCode()) { putExtra(EXTRA_CONV, pk) }, Sounds.channelId(SoundKind.MEETING),
+        )
+
     fun badge(name: String, desc: String) =
         simple(("badge$name").hashCode(), t("Nuovo distintivo: {0}", name), desc, "🏅", openApp(23) { putExtra(EXTRA_TAB, 3) })
 
