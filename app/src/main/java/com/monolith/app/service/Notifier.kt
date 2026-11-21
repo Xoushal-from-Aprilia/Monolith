@@ -248,6 +248,9 @@ class Notifier(private val ctx: Context) {
             t("In tempo reale fino alle {0}", Fmt.time(until)), emoji, openApp(12) { putExtra(EXTRA_TAB, 2) },
         )
 
+    fun screenshot(conv: String, name: String, emoji: String) =
+        simple(("shot$conv").hashCode(), t("{0} ha fatto uno screenshot", name), t("della vostra chat"), emoji, openApp(("s$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })
+
     /** a move in a game played in a chat */
     fun game(conv: String, title: String, text: String) =
         simple(("game$conv").hashCode(), title, text, "🎮", openApp(("g$conv").hashCode()) { putExtra(EXTRA_CONV, conv) })

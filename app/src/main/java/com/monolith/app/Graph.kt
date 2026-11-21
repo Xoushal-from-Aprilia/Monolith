@@ -64,6 +64,9 @@ object Graph {
     lateinit var bondDays: com.monolith.app.data.BondDays
     lateinit var favorites: com.monolith.app.data.Favorites
     lateinit var saved: com.monolith.app.data.SavedStore
+    lateinit var guard: com.monolith.app.data.ChatGuard
+    lateinit var medical: com.monolith.app.data.MedicalStore
+    lateinit var diary: com.monolith.app.location.PlaceDiary
     lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
 
@@ -88,6 +91,8 @@ object Graph {
         bondDays = com.monolith.app.data.BondDays(application)
         favorites = com.monolith.app.data.Favorites(application)
         saved = com.monolith.app.data.SavedStore(application)
+        guard = com.monolith.app.data.ChatGuard(application)
+        medical = com.monolith.app.data.MedicalStore(application)
         statuses = StatusStore(application)
         Sounds.init(application)
         com.monolith.app.net.Stories.init(application)
@@ -103,6 +108,7 @@ object Graph {
         places = PlacesStore(application)
         location = LocationShare(application, scope)
         placeWatch = PlaceWatcher(application, scope)
+        diary = com.monolith.app.location.PlaceDiary(application, scope)
         rtc.keepAlive = { pk ->
             messenger.activeConv.value == pk || calls.state.value.peer == pk
         }
@@ -169,6 +175,7 @@ object Graph {
             shards.start()
             watchFriendsWidget()
             scope.launch { runCatching { bondDays.backfill(db) } }
+            diary.start()
         }
         MonolithService.start(app)
     }

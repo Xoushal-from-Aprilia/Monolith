@@ -4,4 +4,6 @@
     <string name="widget_desc">Ваши ближайшие события</string>
     <string name="friends_widget_label">Друзья Monolith</string>
     <string name="friends_widget_desc">Ваши друзья: статус и место</string>
+    <string name="countdown_widget_label">Обратный отсчёт</string>
+    <string name="countdown_widget_desc">Дни до события</string>
 </resources>

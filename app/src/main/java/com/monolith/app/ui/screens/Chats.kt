@@ -94,6 +94,7 @@ import androidx.compose.material.icons.rounded.SportsEsports
 import androidx.compose.material.icons.rounded.Wallpaper
 import androidx.compose.material.icons.rounded.Notifications
 import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
@@ -462,6 +463,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     }
     LaunchedEffect(conv) { if (!isGroup) Graph.rtc.ensureConnected(conv) }
     ShakeToNudge(conv)
+    val guarded by Graph.guard.blocked.collectAsState()
+    SecureScreen(conv in guarded)
+    ScreenshotWatcher(conv)
     LaunchedEffect(messages.firstOrNull()?.id) { Graph.scope.launch { Graph.messenger.markRead(conv) } }
 
     val names = people.associateBy { it.pubkey }
@@ -585,6 +589,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         })
                         DropdownMenuItem(text = { Text(t("Messaggi effimeri")) }, leadingIcon = { Icon(Icons.Rounded.Timer, null) }, onClick = { menu = false; ttlDialog = true })
                         DropdownMenuItem(text = { Text(t("Sfondo")) }, leadingIcon = { Icon(Icons.Rounded.Wallpaper, null) }, onClick = { menu = false; wallSheet = true })
+                        val blocked = conv in guarded
+                        DropdownMenuItem(
+                            text = { Text(if (blocked) t("Riattiva gli screenshot") else t("Blocca gli screenshot")) },
+                            leadingIcon = { Icon(Icons.Rounded.Screenshot, null) },
+                            onClick = { menu = false; Graph.scope.launch { Graph.messenger.setScreenBlock(conv, !blocked) } },
+                        )
                         if (isGroup) {
                             val muted = setting?.muted == true
                             DropdownMenuItem(
@@ -1266,6 +1276,7 @@ private fun MessageRow(
                             Spacer(Modifier.height(6.dp))
                             Text(t("Tocca per vedere dove si trova"), color = ink.copy(alpha = 0.75f), style = MaterialTheme.typography.labelMedium)
                         }
+                        com.monolith.app.data.Medical.fromJson(ex.optJSONObject("med"))?.let { med -> MedicalBox(med, ink) }
                         MetaLine(m, ink)
                     }
                 }

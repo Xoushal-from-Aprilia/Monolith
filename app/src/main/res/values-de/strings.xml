@@ -4,4 +4,6 @@
     <string name="widget_desc">Deine nächsten Termine</string>
     <string name="friends_widget_label">Monolith-Freunde</string>
     <string name="friends_widget_desc">Deine Freunde mit Status und Ort</string>
+    <string name="countdown_widget_label">Countdown</string>
+    <string name="countdown_widget_desc">Tage bis zu einem Termin</string>
 </resources>

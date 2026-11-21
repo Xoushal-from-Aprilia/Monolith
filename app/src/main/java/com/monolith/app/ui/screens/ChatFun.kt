@@ -667,3 +667,30 @@ fun SecureScreen(on: Boolean = true) {
         onDispose { if (on) w?.clearFlags(WindowManager.LayoutParams.FLAG_SECURE) }
     }
 }
+
+/** Android 14 and later tell the app when a screenshot is taken: the chat lets the others know */
+@Composable
+fun ScreenshotWatcher(conv: String) {
+    if (android.os.Build.VERSION.SDK_INT < 34) return
+    val act = LocalContext.current.findActivity() ?: return
+    DisposableEffect(conv) {
+        val cb = ScreenCapture.register(act, conv)
+        onDispose { ScreenCapture.unregister(act, cb) }
+    }
+}
+
+private object ScreenCapture {
+    fun register(act: Activity, conv: String): Any? {
+        if (android.os.Build.VERSION.SDK_INT < 34) return null
+        return runCatching {
+            val cb = Activity.ScreenCaptureCallback { Graph.scope.launch { Graph.messenger.screenshotTaken(conv) } }
+            act.registerScreenCaptureCallback(act.mainExecutor, cb)
+            cb
+        }.getOrNull()
+    }
+
+    fun unregister(act: Activity, cb: Any?) {
+        if (android.os.Build.VERSION.SDK_INT < 34 || cb == null) return
+        runCatching { act.unregisterScreenCaptureCallback(cb as Activity.ScreenCaptureCallback) }
+    }
+}

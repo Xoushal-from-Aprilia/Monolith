@@ -4,4 +4,6 @@
     <string name="widget_desc">Vaše nadcházející události</string>
     <string name="friends_widget_label">Přátelé Monolith</string>
     <string name="friends_widget_desc">Vaši přátelé se stavem a místem</string>
+    <string name="countdown_widget_label">Odpočet</string>
+    <string name="countdown_widget_desc">Dny do události</string>
 </resources>

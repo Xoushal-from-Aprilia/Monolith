@@ -5,4 +5,6 @@
     <string name="widget_desc">I tuoi prossimi eventi</string>
     <string name="friends_widget_label">Amici Monolith</string>
     <string name="friends_widget_desc">I tuoi amici, con stato e luogo</string>
+    <string name="countdown_widget_label">Conto alla rovescia</string>
+    <string name="countdown_widget_desc">I giorni che mancano a un evento</string>
 </resources>

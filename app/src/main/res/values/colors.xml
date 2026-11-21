@@ -2,4 +2,7 @@
     <color name="mono_white">#FFFFFFFF</color>
     <color name="mono_black">#FF0A0A0A</color>
     <color name="ic_bg">#FFF4F4F2</color>
+    <color name="ic_bg_night">#FF0A0A0A</color>
+    <color name="ic_bg_stone">#FF9A9A98</color>
+    <color name="ic_bg_white">#FFFFFFFF</color>
 </resources>

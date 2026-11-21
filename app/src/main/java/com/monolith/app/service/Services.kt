@@ -41,7 +41,7 @@ class MonolithService : Service() {
 
     override fun onStartCommand(intent: Intent?, flags: Int, startId: Int): Int {
         promote()
-        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active) {
+        if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value) {
             stopSelf()
             return START_NOT_STICKY
         }
@@ -84,7 +84,7 @@ class MonolithService : Service() {
     companion object {
         fun start(ctx: Context) {
             if (!Graph.identity.hasIdentity()) return
-            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active) return
+            if (!Graph.prefs.alwaysOnline && !Graph.location.sharing.value && !Graph.calls.inCall && !Graph.placeWatch.active && !Graph.diary.enabled.value) return
             try {
                 ContextCompat.startForegroundService(ctx, Intent(ctx, MonolithService::class.java))
             } catch (_: Exception) {

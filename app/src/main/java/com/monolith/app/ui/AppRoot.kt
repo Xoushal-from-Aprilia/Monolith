@@ -344,6 +344,7 @@ private fun MainNav() {
                 composable("shard/{id}") { entry -> ShardScreen(nav, entry.arguments?.getString("id") ?: "") }
                 composable("profile/{pk}") { entry -> com.monolith.app.ui.screens.ProfileScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("stories/{pk}") { entry -> com.monolith.app.ui.screens.StoryViewer(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("diary") { com.monolith.app.ui.screens.DiaryScreen(nav) }
                 composable("once/{id}") { entry -> com.monolith.app.ui.screens.OnceViewer(nav, entry.arguments?.getString("id") ?: "") }
                 composable("board/{conv}") { entry -> com.monolith.app.ui.screens.BoardScreen(nav, entry.arguments?.getString("conv") ?: "") }
                 composable("wrapped", enterTransition = { fadeIn(tween(400)) }, exitTransition = { fadeOut(tween(300)) }) { com.monolith.app.ui.screens.WrappedScreen(nav) }

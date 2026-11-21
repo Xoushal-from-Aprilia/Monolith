@@ -264,6 +264,7 @@ private fun EventsPane(nav: NavHostController, selected: Long, onSelect: (Long) 
     val dayBirthdays = friends.filter { f -> friendBdays[f.pubkey]?.isOn(selected) == true }
 
     LazyColumn(Modifier.fillMaxSize(), contentPadding = PaddingValues(bottom = 110.dp)) {
+        item(key = "countdowns") { CountdownStrip(nav) }
         item(key = "month") {
             Row(Modifier.fillMaxWidth().padding(horizontal = 16.dp), verticalAlignment = Alignment.CenterVertically) {
                 AnimatedContent(
@@ -701,6 +702,7 @@ fun EventEditorScreen(nav: NavHostController, id: String, date: Long) {
                 AnimatedVisibility(repeat != Recur.NONE) {
                     EditorRow(Icons.Rounded.Event, t("Fino al"), if (repeatUntil > 0) Fmt.dayShort(repeatUntil) else t("Per sempre"), enabled = !invited, faded = repeatUntil == 0L) { dateDialog = 2 }
                 }
+                EventExtras(if (isNew) null else id, start, allDay)
                 HorizontalDivider(Modifier.padding(vertical = 12.dp), color = MaterialTheme.colorScheme.outlineVariant)
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Icon(if (reminderSet.isNotEmpty()) Icons.Rounded.NotificationsActive else Icons.Rounded.NotificationsOff, null, Modifier.size(22.dp))

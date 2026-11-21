@@ -29,6 +29,9 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.rounded.AutoAwesome
+import androidx.compose.material.icons.rounded.Route
+import androidx.compose.material.icons.rounded.MedicalServices
+import androidx.compose.material.icons.rounded.Apps
 import androidx.compose.material.icons.rounded.AutoStories
 import androidx.compose.material.icons.rounded.Backup
 import androidx.compose.material.icons.rounded.ContentCopy
@@ -140,6 +143,8 @@ fun SettingsScreen(nav: NavHostController) {
     val mapStyleIdx by Graph.prefs.mapStyle.collectAsState()
     val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
+    var iconSheet by remember { mutableStateOf(false) }
+    var medSheet by remember { mutableStateOf(false) }
     var shakeOn by remember { mutableStateOf(com.monolith.app.ui.screens.ChatLooks.shake) }
     var weeklyOn by remember { mutableStateOf(com.monolith.app.net.Weekly.enabled(ctx)) }
     var lockOn by remember { mutableStateOf(Graph.prefs.appLock) }
@@ -219,6 +224,9 @@ fun SettingsScreen(nav: NavHostController) {
                 })
             }
             SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
+            SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
+            SettingRow(Icons.Rounded.MedicalServices, t("Scheda medica"), t("Inviata solo insieme all'SOS")) { medSheet = true }
+            SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
             Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 Column(Modifier.weight(1f)) {
                     Text(t("Riepilogo della domenica"), style = MaterialTheme.typography.titleMedium)
@@ -287,6 +295,8 @@ fun SettingsScreen(nav: NavHostController) {
     if (picker) EmojiPickerSheet(onDismiss = { picker = false }) { emoji = it; picker = false }
     if (showQr) MyQrDialog { showQr = false }
     if (mapSheet) MapStyleSheet { mapSheet = false }
+    if (iconSheet) com.monolith.app.ui.screens.IconSheet { iconSheet = false }
+    if (medSheet) com.monolith.app.ui.screens.MedicalSheet { medSheet = false }
     if (bdayPicker) {
         val init = myBday?.let {
             java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply { clear(); set(2000, it.month - 1, it.day) }.timeInMillis
@@ -386,7 +396,7 @@ fun SettingsScreen(nav: NavHostController) {
                         Graph.relays.stop()
                         Graph.db.clearAllTables()
                         Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear()
+                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear()
                         Graph.identity.reset()
                         Graph.prefs.lastWrapSec = 0
                         Graph.prefs.permissionsDone = false

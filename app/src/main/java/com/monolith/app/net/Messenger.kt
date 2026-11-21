@@ -252,6 +252,8 @@ class Messenger(
             "del" -> onDelete(from, p)
             "vote" -> onVote(from, p, friend)
             "gmove" -> onGameMove(from, p, friend)
+            "noshot" -> onNoShot(from, p, friend)
+            "shot" -> onShot(from, p, friend)
             "once" -> onOnceOpened(from, p, friend)
             "draw", "drawundo", "drawclr", "drawjoin", "drawall", "drawbye" -> convFor(from, p, friend)?.let { Boards.onLive(it, from, p) }
             "ttl" -> onTtl(from, p, friend)
@@ -960,6 +962,7 @@ class Messenger(
         val friends = db.friends().friendsNow().filter { it.status == FriendStatus.FRIEND }
         val ex = JSONObject()
         if (lat != null && lon != null) ex.put("lat", lat).put("lon", lon).put("acc", (accuracy ?: 0f).toDouble())
+        Graph.medical.card.value.takeIf { !it.isEmpty }?.let { ex.put("med", it.toJson()) }
         friends.forEach { f ->
             deliver(newOutgoing(f.pubkey, "sos", t("SOS"), JSONObject(ex.toString())) ?: return@forEach)
         }
@@ -1151,6 +1154,42 @@ class Messenger(
             m.mediaPath?.let { runCatching { File(it).delete() } }
             db.messages().clearMedia(m.id)
         }
+    }
+
+    // ---------------------------------------------------------------- screenshots
+
+    private suspend fun systemNote(conv: String, from: String, outgoing: Boolean, text: String) {
+        db.messages().insert(Message(newId(), conv, from, outgoing, now(), "system", text = text, status = MsgStatus.READ))
+    }
+
+    /** block screenshots in this chat, on my phone and on theirs */
+    suspend fun setScreenBlock(conv: String, on: Boolean) {
+        val k = me() ?: return
+        Graph.guard.set(conv, on)
+        toConv(conv, JSONObject().put("t", "noshot").put("on", on))
+        systemNote(conv, k.pub, true, if (on) t("Hai bloccato gli screenshot in questa chat") else t("Hai riattivato gli screenshot in questa chat"))
+    }
+
+    private suspend fun onNoShot(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val on = p.optBoolean("on")
+        Graph.guard.set(conv, on)
+        val who = (friend ?: db.friends().get(from))?.displayName ?: t("Qualcuno")
+        systemNote(conv, from, false, if (on) t("{0} ha bloccato gli screenshot in questa chat", who) else t("{0} ha riattivato gli screenshot in questa chat", who))
+    }
+
+    /** I took a screenshot of this chat: the others are told */
+    suspend fun screenshotTaken(conv: String) {
+        val k = me() ?: return
+        toConv(conv, JSONObject().put("t", "shot"))
+        systemNote(conv, k.pub, true, "📸 " + t("Hai fatto uno screenshot"))
+    }
+
+    private suspend fun onShot(from: String, p: JSONObject, friend: Friend?) {
+        val conv = convFor(from, p, friend) ?: return
+        val who = (friend ?: db.friends().get(from))?.displayName ?: t("Qualcuno")
+        systemNote(conv, from, false, "📸 " + t("{0} ha fatto uno screenshot della chat", who))
+        if (activeConv.value != conv || !Graph.foreground) Graph.notifier.screenshot(conv, who, (friend ?: db.friends().get(from))?.emoji ?: "📸")
     }
 
     suspend fun sendBoardInvite(conv: String) {
