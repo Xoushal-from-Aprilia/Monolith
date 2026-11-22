@@ -21,3 +21,15 @@ the bond counter and its badge, the Shard, safety, the logo. 120 BPM, big hits o
   `node render_motion.mjs out.html cues <dir>` (writes `cues.json`) and `node render_motion.mjs out.html video <dir>`.
 - `python3 motion_audio.py <dir>/cues.json track.wav`: the music and effects, all synthesized (no samples).
 - Join: concat the scenes, then mux with the track (`-c:a aac -b:a 256k`), x264 crf 21, maxrate 14M.
+
+## «Seguici» video (27 s, for a voiceover)
+
+Made to grow the TikTok and Instagram pages: «Questa è Monolith» → what it is → «ogni follow è un pezzo»
+(the monolith built from falling blocks, progress towards the release) → Segui on TikTok and Instagram,
+notifications, a comment → logo «Costruiamolo insieme». Content stays in y 300–1250 and x 160–920,
+clear of both apps' buttons and captions.
+
+- `follow.src.html` (uses `motionkit.js`, the drawing kit shared by the motion videos; `build_reel.py` inlines it).
+- `follow_audio.py` (uses `synth.py`): a lighter bed in D minor, then set to −17 LUFS so a voice sits on top:
+  measure with `ffmpeg -af ebur128`, then `volume=<gain>dB,alimiter=limit=0.84`.
+- Render with `CRF=21 MAXRATE=14M node render_motion.mjs …`, then concat with `-c:v copy` and the AAC track.

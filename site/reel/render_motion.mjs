@@ -40,7 +40,7 @@ if (mode === "cues") {
     const b = i === SCENES.length - 1 ? total : Math.round(SCENES[i + 1].start * FPS);
     const name = `scene${String(i).padStart(2, "0")}.mp4`, tmp = path.join(outDir, `tmp-${name}`), fin = path.join(outDir, name);
     const ff = spawn("ffmpeg", ["-y", "-loglevel", "error", "-f", "image2pipe", "-framerate", String(FPS), "-c:v", "mjpeg", "-i", "-",
-      "-c:v", "libx264", "-preset", "veryfast", "-crf", "16", "-pix_fmt", "yuv420p", "-r", String(FPS), "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", tmp]);
+      "-c:v", "libx264", "-preset", "veryfast", "-crf", process.env.CRF || "16", ...(process.env.MAXRATE ? ["-maxrate", process.env.MAXRATE, "-bufsize", String(2 * parseInt(process.env.MAXRATE)) + "M"] : []), "-pix_fmt", "yuv420p", "-r", String(FPS), "-colorspace", "bt709", "-color_primaries", "bt709", "-color_trc", "bt709", tmp]);
     const done = new Promise((res, rej) => ff.on("exit", (c) => (c === 0 ? res() : rej(new Error("ffmpeg " + c)))));
     for (let f = a; f < b; f++) {
       const b64 = await grab(f / FPS, "image/jpeg", 0.92);

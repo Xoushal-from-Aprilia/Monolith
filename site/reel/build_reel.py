@@ -23,6 +23,7 @@ for weight in (500, 900):
     )
 
 src = (here / (sys.argv[2] if len(sys.argv) > 2 else "reel.src.html")).read_text(encoding="utf-8")
-out = src.replace("/*FONTS*/", "\n".join(faces)).replace("/*FILM*/", film)
+kit = (here / "motionkit.js").read_text(encoding="utf-8")
+out = src.replace("/*FONTS*/", "\n".join(faces)).replace("/*FILM*/", film).replace("/*KIT*/", kit)
 pathlib.Path(sys.argv[1]).write_text(out, encoding="utf-8")
 print(sys.argv[1], len(out) // 1024, "KB")

@@ -1,0 +1,340 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Monolith · Seguici</title>
+<style>
+/*FONTS*/
+html, body { margin: 0; background: #050505; }
+canvas { display: block; width: 540px; height: 960px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<script>
+/*KIT*/
+
+// «Ogni follow è un pezzo»: video to grow the TikTok and Instagram pages. 27 s, 120 BPM, made for a voiceover.
+// Content stays between y 300 and 1250 and x 160–920: clear of the TikTok and Reels buttons and captions.
+const TOTAL = 27.0;
+const HITS = [[1.0, 10], [15.0, 14], [23.0, 18]];
+const MAXW = 800;
+
+/** two lines of words; they leave by sliding up before the next ones come */
+function lines(ctx, l1, l2, y, base, t, tIn, tOut, color) {
+  if (t < tIn || (tOut !== null && t > tOut + 0.2)) return;
+  const size = Math.min(fitSize(ctx, l1.join(" "), base, MAXW), fitSize(ctx, l2.join(" "), base, MAXW));
+  const o = tOut === null ? 0 : seg(t, tOut, tOut + 0.2);
+  ctx.save(); ctx.translate(0, -50 * E.inCubic(o));
+  words(ctx, l1, 540, y, size, t, tIn, 0.08, color, 1 - o);
+  words(ctx, l2, 540, y + size * 1.12, size, t, tIn + 0.2, 0.08, color, 1 - o);
+  ctx.restore();
+}
+function flash(ctx, col, a) { if (a > 0) { ctx.fillStyle = rgba(col, a); ctx.fillRect(-60, -60, W + 120, H + 120); } }
+
+// ================================================================ 1 · hook  [0, 3)
+function sceneHook(ctx, t) {
+  bg(ctx, BK);
+  const base = 1000;
+  for (let k = 0; k < 2; k++) {
+    const d = t - 1.0 - k * 0.18;
+    if (d > 0 && d < 1.6) { const f = E.outCubic(d / 1.6); ctx.beginPath(); ctx.ellipse(540, base, 50 + f * 520, (50 + f * 520) * 0.2, 0, 0, TAU); ctx.strokeStyle = rgba(WH, 0.35 * (1 - f)); ctx.lineWidth = 3; ctx.stroke(); }
+  }
+  const gl = E.outCubic(seg(t, 0.85, 1.2)) * 260;
+  ctx.fillStyle = rgba(WH, 0.35); ctx.fillRect(540 - gl, base - 1.5, gl * 2, 3);
+  slab(ctx, 540, base, 130, 300 * E.outBack(seg(t, 0.85, 1.25), 1.6), WH);
+  words(ctx, ["Questa", "è"], 540, 380, 64, t, 0.0, 0.12, WH, 0.6, 500);
+  const ms = fitSize(ctx, "MONOLITH", 150, MAXW);
+  const s = 1.6 - 0.6 * E.outExpo(seg(t, 0.55, 0.8));
+  ctx.save(); ctx.translate(540, 500); ctx.scale(s, s);
+  txt(ctx, "MONOLITH", 0, 0, { size: ms, ls: 4, alpha: seg(t, 0.55, 0.62) });
+  ctx.restore();
+  words(ctx, ["Può", "uscire", "prima…"], 540, 1100, 72, t, 1.6, 0.12, WH);
+  // «grazie a te.», with «te.» in a pill
+  const a = "grazie a", b = "te.", fs = 72;
+  const wa = measure(ctx, a + " ", fs), wb = measure(ctx, b, fs) + 44;
+  const x0 = 540 - (wa + wb) / 2, y = 1190;
+  const pa = E.outExpo(seg(t, 2.05, 2.5));
+  ctx.save(); ctx.beginPath(); ctx.rect(0, y - 70, W, 140); ctx.clip();
+  txt(ctx, a, x0, y + (1 - pa) * 90, { size: fs, align: "left", alpha: pa });
+  ctx.restore();
+  const pb = E.outBack(seg(t, 2.35, 2.65), 2.6);
+  if (pb > 0) {
+    ctx.save(); ctx.translate(x0 + wa + wb / 2, y); ctx.scale(pb, pb); ctx.rotate(-0.06 * (1 - pb));
+    rr(ctx, -wb / 2, -48, wb, 96, 30); ctx.fillStyle = rgba(WH); ctx.fill();
+    txt(ctx, b, 0, 2, { size: fs, color: BK });
+    ctx.restore();
+  }
+  flash(ctx, WH, E.inCubic(seg(t, 2.8, 3.0)));
+}
+
+// ================================================================ 2 · what it is  [3, 9)
+const TILES = [["Chat", iconChat], ["Chiamate", iconCall], ["Storie", iconStory], ["Mappa", iconPin]];
+function lockIcon(ctx, x, y, col) {
+  ctx.strokeStyle = rgba(col); ctx.fillStyle = rgba(col); ctx.lineWidth = 8;
+  ctx.beginPath(); ctx.arc(x, y - 8, 17, Math.PI, 0); ctx.lineTo(x + 17, y + 2); ctx.moveTo(x - 17, y - 8); ctx.lineTo(x - 17, y + 2); ctx.stroke();
+  rr(ctx, x - 27, y - 2, 54, 40, 9); ctx.fill();
+}
+function noAdIcon(ctx, x, y, col) {
+  ctx.strokeStyle = rgba(col); ctx.lineWidth = 7;
+  circ(ctx, x, y + 8, 27); ctx.stroke();
+  ctx.beginPath(); ctx.moveTo(x - 19, y + 27); ctx.lineTo(x + 19, y - 11); ctx.stroke();
+}
+function sceneWhat(ctx, t) {
+  bg(ctx, WH);
+  const out = E.inCubic(seg(t, 8.72, 9.0));
+  ctx.save(); ctx.translate(0, -220 * out); ctx.globalAlpha = 1 - out;
+  const m = E.inOutCubic(seg(t, 5.0, 5.4));
+  TILES.forEach(([label, icon], k) => {
+    const t0 = 3.0 + k * 0.5, p = E.outBack(seg(t, t0, t0 + 0.35), 1.8);
+    if (p <= 0 || m >= 1) return;
+    const cx = lerp(k % 2 ? 740 : 340, 540, m), cy = lerp(k < 2 ? 560 : 960, 760, m);
+    ctx.save(); ctx.translate(cx, cy); const sc = p * (1 - 0.85 * m); ctx.scale(sc, sc);
+    rr(ctx, -180, -180, 360, 360, 64); ctx.fillStyle = rgba(BK, 0.07); ctx.fill();
+    ctx.save(); rr(ctx, -180, -180, 360, 360, 64); ctx.clip();
+    ctx.translate(0, -34); ctx.scale(0.5, 0.5); ctx.translate(-540, -560);
+    icon(ctx, t - t0);
+    ctx.restore();
+    txt(ctx, label, 0, 128, { size: 40, color: BK });
+    ctx.restore();
+  });
+  const up = E.inOutCubic(seg(t, 6.9, 7.3));
+  lines(ctx, ["Tutto", "in", "un'app."], ["Solo", "tra", "amici."], lerp(640, 430, up), 110, t, 5.25, null, BK);
+  [["Messaggi cifrati", lockIcon, 7.05], ["Zero pubblicità", noAdIcon, 7.75]].forEach(([s, icon, t0], k) => {
+    const p = E.outBack(seg(t, t0, t0 + 0.35), 1.8);
+    if (p <= 0) return;
+    const y = 800 + k * 150;
+    ctx.save(); ctx.translate(540, y); ctx.scale(0.6 + 0.4 * p, 0.6 + 0.4 * p); ctx.globalAlpha *= c01(p * 2);
+    rr(ctx, -340, -62, 680, 124, 62); ctx.fillStyle = rgba(BK); ctx.fill();
+    icon(ctx, -250, -12, WH);
+    txt(ctx, s, -190, 2, { size: 46, align: "left" });
+    ctx.restore();
+  });
+  ctx.restore();
+}
+
+// ================================================================ 3 · every follow is a piece  [9, 17)
+const LAND = [9.5, 10.0, 10.5, 11.0, 11.5, 11.75, 12.0, 12.25, 12.5, 12.75, 13.0, 13.25];
+const CAP = 15.0;
+const FOLLOWS = (() => { const r = seeded(21), out = []; for (let i = 0; i < 22; i++) { const a = r() * TAU; out.push({ a, d: 620 + r() * 300, t0: 13.4 + i * 0.065, y: 380 + r() * 520 }); } return out; })();
+/** the monolith built from blocks; each block lands at its own time */
+function stack(ctx, t, cx, base, bw, bh, gap, land, cap, alpha = 1) {
+  for (let k = 0; k < land.length; k++) {
+    const T = land[k];
+    if (t < T - 0.3) break;
+    const fall = 1 - E.inCubic(seg(t, T - 0.3, T));
+    const bounce = t > T ? 7 * Math.exp(-(t - T) * 12) * Math.sin((t - T) * 38) : 0;
+    const yb = base - k * (bh + gap) - fall * 120 - bounce;
+    slab(ctx, cx, yb, bw, bh, WH, alpha * c01((t - (T - 0.3)) / 0.1));
+  }
+  if (cap !== null && t >= cap - 0.18) {
+    const fall = 1 - E.inCubic(seg(t, cap - 0.18, cap));
+    const yb = base - land.length * (bh + gap) - fall * 110;
+    slab(ctx, cx, yb, bw, bh * 2.2, WH, alpha * c01((t - (cap - 0.18)) / 0.08));
+  }
+}
+function sceneBuild(ctx, t) {
+  bg(ctx, BK);
+  lines(ctx, ["La", "costruiamo"], ["pezzo", "dopo", "pezzo."], 360, 96, t, 9.05, 11.3, WH);
+  lines(ctx, ["Ogni", "follow"], ["è", "un", "pezzo", "in", "più."], 360, 96, t, 11.5, 13.3, WH);
+  lines(ctx, ["Più", "siamo,"], ["prima", "arriva."], 360, 96, t, 13.5, null, WH);
+  const base = 1100, bw = 200, bh = 30, gap = 4;
+  const done = seg(t, CAP, CAP + 1.2);
+  // light behind the finished monolith
+  if (t >= CAP) {
+    const g = ctx.createRadialGradient(540, 820, 10, 540, 820, 560);
+    g.addColorStop(0, rgba(WH, 0.16 * (1 - 0.5 * done))); g.addColorStop(1, rgba(WH, 0));
+    ctx.fillStyle = g; ctx.fillRect(0, 200, W, 1200);
+  }
+  stack(ctx, t, 540, base, bw, bh, gap, LAND, CAP);
+  LAND.forEach((T) => {
+    const f = seg(t, T, T + 0.65);
+    if (f > 0 && f < 1) txt(ctx, "+1", 720 + f * 20, base - LAND.indexOf(T) * (bh + gap) - 30 - f * 70, { size: 46, alpha: 1 - f });
+  });
+  // more follows stream in from everywhere
+  for (const p of FOLLOWS) {
+    const f = seg(t, p.t0, p.t0 + 0.45);
+    if (f <= 0 || f >= 1) continue;
+    const e = E.inCubic(f);
+    const x = 540 + Math.cos(p.a) * p.d * (1 - e), y = lerp(p.y + Math.sin(p.a) * 400, 800, e);
+    txt(ctx, "+1", x, y, { size: 34, alpha: 0.85 * (1 - f * f) });
+  }
+  if (t >= CAP) {
+    const f = seg(t, CAP, CAP + 0.8);
+    circ(ctx, 540, 820, 120 + E.outCubic(f) * 620); ctx.strokeStyle = rgba(WH, 0.55 * (1 - f)); ctx.lineWidth = 2 + 8 * (1 - f); ctx.stroke();
+  }
+  // progress towards the release
+  const landed = LAND.reduce((s, T) => s + E.outCubic(seg(t, T, T + 0.2)), 0);
+  const fill = 0.85 * (landed / LAND.length) + 0.15 * E.outCubic(seg(t, CAP - 0.1, CAP + 0.15));
+  const bi = seg(t, 9.2, 9.5);
+  txt(ctx, "Verso l'uscita", 240, 1168, { size: 30, weight: 500, align: "left", alpha: 0.55 * bi });
+  txt(ctx, `${Math.round(fill * 100)}%`, 840, 1168, { size: 30, align: "right", alpha: 0.9 * bi });
+  rr(ctx, 240, 1196, 600, 14, 7); ctx.fillStyle = rgba(WH, 0.16 * bi); ctx.fill();
+  if (fill > 0) { rr(ctx, 240, 1196, 600 * fill, 14, 7); ctx.fillStyle = rgba(WH, bi); ctx.fill(); }
+  flash(ctx, WH, 0.45 * (1 - seg(t, CAP, CAP + 0.3)) * (t >= CAP ? 1 : 0));
+  const wipe = E.inCubic(seg(t, 16.65, 17.0));
+  if (wipe > 0) { circ(ctx, 540, 820, wipe * 2300); ctx.fillStyle = rgba(WH); ctx.fill(); }
+}
+
+// ================================================================ 4 · follow us  [17, 23)
+function bell(ctx, x, y, rot) {
+  ctx.save(); ctx.translate(x, y - 30); ctx.rotate(rot); ctx.translate(0, 30);
+  ctx.fillStyle = rgba(BK);
+  ctx.beginPath(); ctx.moveTo(-28, 18); ctx.quadraticCurveTo(-28, -30, 0, -32); ctx.quadraticCurveTo(28, -30, 28, 18); ctx.lineTo(36, 26); ctx.lineTo(-36, 26); ctx.closePath(); ctx.fill();
+  circ(ctx, 0, 34, 8); ctx.fill();
+  circ(ctx, 0, -36, 5); ctx.fill();
+  ctx.restore();
+}
+function check(ctx, x, y, s, col, p) {
+  partial(ctx, [[x - s, y], [x - s * 0.35, y + s * 0.62], [x + s, y - s * 0.7]], p, rgba(col), s * 0.32);
+}
+const TAPS = [17.9, 18.5];
+function card(ctx, y, t0, t) {
+  const p = E.outExpo(seg(t, t0, t0 + 0.45));
+  ctx.translate(90 * (1 - p), 0);
+  ctx.globalAlpha *= c01(p * 1.5);
+  rr(ctx, 220, y - 60, 640, 120, 60); ctx.fillStyle = rgba(BK, 0.07); ctx.fill();
+  return p;
+}
+function sceneFollow(ctx, t) {
+  bg(ctx, WH);
+  const ts = fitSize(ctx, "Seguici", 210, MAXW);
+  const s = 1.4 - 0.4 * E.outExpo(seg(t, 17.0, 17.3));
+  ctx.save(); ctx.translate(540, 430); ctx.scale(s, s);
+  txt(ctx, "Seguici", 0, 0, { size: ts, color: BK, alpha: seg(t, 17.0, 17.07), ls: -6 });
+  ctx.restore();
+  // the two pages, each with its follow button
+  [["TikTok", 620, 17.3], ["Instagram", 770, 17.45]].forEach(([name, y, t0], k) => {
+    if (t < t0) return;
+    ctx.save();
+    card(ctx, y, t0, t);
+    txt(ctx, name, 270, y + 2, { size: 48, color: BK, align: "left" });
+    const tap = TAPS[k], on = t >= tap + 0.08;
+    const squeeze = 1 - 0.1 * Math.sin(Math.PI * seg(t, tap - 0.04, tap + 0.16));
+    const label = on ? "Seguito" : "Segui", bw = on ? 236 : 176;
+    ctx.translate(836 - bw / 2, y); ctx.scale(squeeze, squeeze);
+    rr(ctx, -bw / 2, -38, bw, 76, 38);
+    if (on) { ctx.fillStyle = rgba(WH); ctx.fill(); ctx.strokeStyle = rgba(BK); ctx.lineWidth = 3; ctx.stroke(); }
+    else { ctx.fillStyle = rgba(BK); ctx.fill(); }
+    txt(ctx, label, on ? 18 : 0, 2, { size: 32, color: on ? BK : WH });
+    if (on) check(ctx, -bw / 2 + 40, 2, 16, BK, E.outCubic(seg(t, tap + 0.08, tap + 0.3)));
+    ctx.restore();
+  });
+  // the finger that taps both buttons
+  const pts = [[1010, 1500], [748, 622], [718, 772], [980, 1450]];
+  const legs = [[17.62, 17.88], [18.2, 18.48], [18.7, 19.0]];
+  let fx = pts[0][0], fy = pts[0][1];
+  legs.forEach(([a, b], i) => { const p = E.inOutCubic(seg(t, a, b)); if (t >= a) { fx = lerp(pts[i][0], pts[i + 1][0], p); fy = lerp(pts[i][1], pts[i + 1][1], p); } });
+  if (t > 17.6 && t < 19.0) {
+    const press = TAPS.reduce((m, T) => Math.max(m, Math.sin(Math.PI * seg(t, T - 0.05, T + 0.12))), 0);
+    circ(ctx, fx, fy, 36 - 8 * press); ctx.fillStyle = rgba(BK, 0.22); ctx.fill();
+    circ(ctx, fx, fy, 36 - 8 * press); ctx.strokeStyle = rgba(WH, 0.9); ctx.lineWidth = 4; ctx.stroke();
+    TAPS.forEach((T) => { const f = seg(t, T, T + 0.4); if (f > 0 && f < 1) { circ(ctx, fx, fy, 36 + f * 70); ctx.strokeStyle = rgba(BK, 0.4 * (1 - f)); ctx.lineWidth = 4; ctx.stroke(); } });
+  }
+  // notifications
+  if (t >= 19.3) {
+    ctx.save(); card(ctx, 920, 19.3, t);
+    const d = t - 19.45, rot = d > 0 ? Math.sin(d * 28) * 0.38 * Math.exp(-d * 2.6) : 0;
+    bell(ctx, 290, 918, rot);
+    const dot = E.outBack(seg(t, 19.5, 19.7), 3);
+    circ(ctx, 312, 888, 11 * dot); ctx.fillStyle = rgba(BK); ctx.fill(); ctx.strokeStyle = rgba(WH); ctx.lineWidth = 4; ctx.stroke();
+    txt(ctx, "Attiva le notifiche", 350, 922, { size: 44, color: BK, align: "left" });
+    ctx.restore();
+  }
+  // a comment being typed
+  if (t >= 20.6) {
+    ctx.save(); card(ctx, 1090, 20.6, t);
+    ctx.fillStyle = rgba(BK, 0.07);
+    ctx.beginPath(); ctx.moveTo(270, 1146); ctx.lineTo(250, 1186); ctx.lineTo(312, 1148); ctx.closePath(); ctx.fill();
+    const msg = "Cosa vorresti in Monolith?";
+    const n = Math.floor(msg.length * seg(t, 20.85, 22.2));
+    const shown = msg.slice(0, n);
+    txt(ctx, shown, 262, 1092, { size: 38, weight: 500, color: BK, align: "left" });
+    const cw = measure(ctx, shown, 38, 500);
+    if (Math.floor(t * 2.5) % 2 === 0 || n < msg.length) { ctx.fillStyle = rgba(BK); ctx.fillRect(266 + cw, 1070, 4, 46); }
+    ctx.restore();
+  }
+  const wipe = E.inCubic(seg(t, 22.7, 23.0));
+  if (wipe > 0) { circ(ctx, 540, 1000, wipe * 2300); ctx.fillStyle = rgba(BK); ctx.fill(); }
+}
+
+// ================================================================ 5 · end  [23, 27]
+const DUST = (() => { const r = seeded(9), out = []; for (let i = 0; i < 60; i++) out.push([r() * W, 280 + r() * 1000, 1.5 + r() * 2.5, r() * TAU]); return out; })();
+const END_LAND = Array.from({ length: 12 }, (_, k) => 23.05 + k * 0.035);
+function sceneEnd(ctx, t) {
+  bg(ctx, BK);
+  const z = 1 + 0.03 * seg(t, 23, 27);
+  ctx.save(); ctx.translate(540, 860); ctx.scale(z, z); ctx.translate(-540, -860);
+  for (const [x, y, r, ph] of DUST) { const tw = 0.5 + 0.5 * Math.sin(t * 2.4 + ph); circ(ctx, x, y, r); ctx.fillStyle = rgba(WH, 0.3 * tw * seg(t, 23.2, 24)); ctx.fill(); }
+  const base = 870;
+  for (let k = 0; k < 4; k++) {
+    const f = ((t - 23) / 3.2 + k / 4) % 1;
+    if (t < 23.3) continue;
+    ctx.beginPath(); ctx.ellipse(540, base, 80 + f * 540, (80 + f * 540) * 0.2, 0, 0, TAU);
+    ctx.strokeStyle = rgba(WH, 0.15 * (1 - f)); ctx.lineWidth = 2.5; ctx.stroke();
+  }
+  const sh = seg(t, 23.0, 23.8);
+  if (sh < 1) { circ(ctx, 540, 680, E.outExpo(sh) * 1000); ctx.strokeStyle = rgba(WH, 0.6 * (1 - sh)); ctx.lineWidth = 2 + 10 * (1 - sh); ctx.stroke(); }
+  const gl = E.outCubic(seg(t, 23.0, 23.4)) * 280;
+  ctx.fillStyle = rgba(WH, 0.3); ctx.fillRect(540 - gl, base - 1.5, gl * 2, 3);
+  stack(ctx, t, 540, base, 150, 26, 4, END_LAND, 23.55);
+  ctx.restore();
+  const wp = E.outExpo(seg(t, 23.35, 24.3));
+  txt(ctx, "MONOLITH", 540, 1000, { size: fitSize(ctx, "MONOLITH", 124, MAXW), ls: lerp(80, 8, wp), alpha: seg(t, 23.35, 23.6) });
+  words(ctx, ["Costruiamolo", "insieme."], 540, 1095, 60, t, 24.0, 0.12, WH);
+  const s2 = E.outExpo(seg(t, 24.9, 25.4));
+  txt(ctx, "Seguici per non perderti l'uscita", 540, 1180 + (1 - s2) * 24, { size: 36, weight: 500, alpha: 0.6 * s2 });
+  flash(ctx, WH, 0.35 * (1 - seg(t, 23.0, 23.25)));
+  flash(ctx, BK, seg(t, 26.35, 27.0));
+}
+
+// ---------------------------------------------------------------- timeline
+const SCENES = [
+  { start: 0, end: 3, draw: sceneHook },
+  { start: 3, end: 9, draw: sceneWhat },
+  { start: 9, end: 17, draw: sceneBuild },
+  { start: 17, end: 23, draw: sceneFollow },
+  { start: 23, end: 27, draw: sceneEnd },
+];
+function render(ctx, t) {
+  t = Math.max(0, Math.min(TOTAL - 1e-6, t));
+  const s = SCENES.find((x) => t >= x.start && t < x.end) || SCENES[SCENES.length - 1];
+  const [dx, dy] = shake(t, HITS);
+  ctx.setTransform(1, 0, 0, 1, dx, dy);
+  s.draw(ctx, t);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawGrain(ctx, t);
+}
+
+const CUES = [
+  ["tick", 0.0, { f: 1800, g: 0.4 }], ["tick", 0.12, { f: 2100, g: 0.35 }],
+  ["whoosh", 0.2, { dur: 0.45, up: 1, g: 0.4 }], ["thud", 0.62, { g: 0.5 }], ["impact", 1.0, { g: 0.85 }],
+  ["pop", 2.37, { f: 720 }], ["whoosh", 2.5, { dur: 0.5, up: 1, g: 0.5 }],
+  ["pop", 3.02, { f: 520 }], ["pop", 3.52, { f: 600 }], ["pop", 4.02, { f: 680 }], ["pop", 4.52, { f: 780 }],
+  ["swoosh", 5.0, { g: 0.5 }], ["click", 7.05, {}], ["pop", 7.77, { f: 560 }],
+  ["whoosh", 8.7, { dur: 0.35, up: 1, g: 0.45 }],
+  ...LAND.map((T, i) => ["block", T, { f: 1 + i * 0.06 }]),
+  ...FOLLOWS.map((p, i) => ["tick", p.t0 + 0.42, { f: 1400 + i * 45, g: 0.16 }]),
+  ["impact", 15.0, { g: 0.85 }], ["shimmer", 15.05, {}], ["whoosh", 16.6, { dur: 0.42, up: 1, g: 0.5 }],
+  ["thud", 17.0, { g: 0.6 }], ["swoosh", 17.3, { g: 0.25 }], ["swoosh", 17.45, { g: 0.25 }],
+  ["click", 17.9, {}], ["pop", 17.98, { f: 880 }], ["click", 18.5, {}], ["pop", 18.58, { f: 990 }],
+  ["swoosh", 19.3, { g: 0.25 }], ["ping", 19.45, {}], ["swoosh", 20.6, { g: 0.25 }],
+  ...Array.from({ length: 26 }, (_, i) => ["tick", 20.85 + (i * 1.35) / 26, { f: 2600 + (i % 3) * 300, g: 0.12 }]),
+  ["whoosh", 22.65, { dur: 0.4, up: 1, g: 0.5 }],
+  ["impact", 23.0, { g: 1.0 }], ["shimmer", 23.4, {}],
+];
+
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+window.MOTION = { W, H, FPS, TOTAL, CUES, SCENES: SCENES.map((s) => ({ start: s.start, dur: s.end - s.start })), frame: (t) => render(ctx, t) };
+document.fonts.ready
+  .then(() => Promise.all([document.fonts.load("500 40px Inter"), document.fonts.load("900 40px Inter")]))
+  .then(() => { render(ctx, 0); window.MOTION.ready = true; });
+if (!navigator.webdriver) {
+  const t0 = performance.now();
+  const loop = (now) => { if (window.MOTION.ready) render(ctx, ((now - t0) / 1000) % TOTAL); requestAnimationFrame(loop); };
+  requestAnimationFrame(loop);
+}
+</script>
+</body>
+</html>
