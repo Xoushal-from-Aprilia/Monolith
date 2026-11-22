@@ -1,6 +1,6 @@
 """Builds the reel as one HTML file: the film's drawings and the Inter font inlined.
 
-usage: python3 build_reel.py <out.html>
+usage: python3 build_reel.py <out.html> [source.html]   (default reel.src.html)
 Fonts come from @fontsource/inter (npm i @fontsource/inter in /home/claude/tools).
 """
 import base64
@@ -22,7 +22,7 @@ for weight in (500, 900):
         f"font-weight: {weight}; src: url(data:font/woff2;base64,{data}) format('woff2'); }}"
     )
 
-src = (here / "reel.src.html").read_text(encoding="utf-8")
+src = (here / (sys.argv[2] if len(sys.argv) > 2 else "reel.src.html")).read_text(encoding="utf-8")
 out = src.replace("/*FONTS*/", "\n".join(faces)).replace("/*FILM*/", film)
 pathlib.Path(sys.argv[1]).write_text(out, encoding="utf-8")
 print(sys.argv[1], len(out) // 1024, "KB")
