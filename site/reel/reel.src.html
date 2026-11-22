@@ -1,0 +1,310 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#050505">
+<title>Monolith · Reel</title>
+<style>
+/*FONTS*/
+* { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; background: #050505; overflow: hidden; }
+body { display: flex; align-items: center; justify-content: center; font-family: Inter, system-ui, sans-serif; -webkit-tap-highlight-color: transparent; }
+canvas { display: block; height: 100svh; width: calc(100svh * 9 / 16); max-width: 100vw; max-height: calc(100vw * 16 / 9); }
+#ui { position: fixed; inset: 0; display: flex; flex-direction: column; align-items: center; justify-content: flex-end; gap: 12px; padding: 0 24px max(40px, env(safe-area-inset-bottom)); transition: opacity .3s; }
+#ui.off { opacity: 0; pointer-events: none; }
+button { font: 500 16px/1 Inter, system-ui, sans-serif; border: 0; border-radius: 999px; height: 52px; padding: 0 28px; width: min(320px, 100%); cursor: pointer; }
+#play { background: #F1F1EF; color: #0A0A0A; }
+#rec { background: rgba(241,241,239,.12); color: #F1F1EF; }
+#rec:disabled { opacity: .5; }
+#note { color: rgba(241,241,239,.55); font: 500 13px/1.4 Inter, system-ui, sans-serif; text-align: center; max-width: 320px; }
+</style>
+</head>
+<body>
+<canvas id="c" width="1080" height="1920"></canvas>
+<div id="ui">
+  <button id="play">Avvia</button>
+  <button id="rec">Scarica MP4</button>
+  <p id="note">Avvia e registra lo schermo, oppure scarica il video: si registra mentre scorre, circa 35 secondi.</p>
+</div>
+<script>
+/*FILM*/
+
+// ---------------------------------------------------------------- the reel
+// 1080×1920 at 30 fps, laid out for Instagram: text and art stay between y 290 and 1350,
+// clear of the header, the caption and the buttons on the right.
+const W = 1080, H = 1920, FPS = 30;
+const DP = W / 411.4;                       // one dp of the app on a 1080 px wide phone
+const DARK = { bg: [5, 5, 5], ink: [241, 241, 239] };
+const LIGHT = { bg: [241, 241, 239], ink: [10, 10, 10] };
+const PAD = Math.round(28 * DP);            // the film's side padding
+const TEXT_MAX = W - PAD - 124;             // leaves room for the buttons on the right
+const TEXT_END = 1320;                      // bottom of the text block
+const ART_TOP = 395;
+
+const SCENES = [
+  { art: "intro", kicker: "", title: "Monolith", lines: ["Tutto quello che conta, tra amici."], dur: 3.4, big: true },
+  { art: "chat", kicker: "Chat", title: "Chat che sanno giocare", lines: ["Giochi, dadi e lavagna condivisa"], dur: 2.8 },
+  { art: "stories", kicker: "Storie", title: "Racconta la giornata", lines: ["Filtri e musica nelle storie"], dur: 2.8 },
+  { art: "calls", kicker: "Chiamate", title: "Voce, video e schermo", lines: ["Fino a 4 persone"], dur: 2.8 },
+  { art: "map", kicker: "Mappa", title: "Sai sempre dove trovarvi", lines: ["Posizione e arrivo in diretta"], dur: 2.8 },
+  { art: "agenda", kicker: "Agenda", title: "Il tuo tempo, condiviso", lines: ["Eventi, inviti e compleanni"], dur: 2.8 },
+  { art: "bond", kicker: "Legame", title: "Più vi scrivete, più cresce", lines: ["Da Sasso a Monolite"], dur: 2.8 },
+  { art: "shard", kicker: "Shard", title: "Spazi per il tuo gruppo", lines: ["Stanze, bacheca, eventi e ruoli"], dur: 2.8 },
+  { art: "profile", kicker: "Profilo", title: "Il tuo spazio", lines: ["Copertine e distintivi disegnati"], dur: 2.8 },
+  { art: "safe", kicker: "Sicurezza", title: "Al sicuro, sempre", lines: ["SOS e backup cifrato"], dur: 2.8 },
+  { art: "phone", kicker: "Il tuo telefono", title: "Si muove con te", lines: ["Batti cinque per aggiungere amici"], dur: 2.8 },
+  { art: "end", kicker: "", title: "Monolith", lines: ["Gratis, per Android"], dur: 4.2, big: true, pill: "Link in bio" },
+];
+let acc = 0;
+for (const s of SCENES) { s.start = acc; acc += s.dur; }
+const TOTAL = acc;
+
+// ---- easing: the app's EmphasizedDecelerate and the default FastOutSlowIn
+function bezier(x1, y1, x2, y2) {
+  return (x) => {
+    if (x <= 0) return 0; if (x >= 1) return 1;
+    let t = x;
+    for (let i = 0; i < 8; i++) {
+      const cx = 3 * x1 * t * (1 - t) ** 2 + 3 * x2 * t * t * (1 - t) + t ** 3 - x;
+      const d = 3 * x1 * (1 - t) ** 2 + 6 * (x2 - x1) * t * (1 - t) + 3 * (1 - x2) * t * t;
+      if (Math.abs(cx) < 1e-5 || d === 0) break;
+      t = Math.min(1, Math.max(0, t - cx / d));
+    }
+    return 3 * y1 * t * (1 - t) ** 2 + 3 * y2 * t * t * (1 - t) + t ** 3;
+  };
+}
+const emph = bezier(0.05, 0.7, 0.1, 1);
+const std = bezier(0.4, 0, 0.2, 1);
+const c01 = (x) => Math.max(0, Math.min(1, x));
+const mix = (a, b, k) => a.map((v, i) => Math.round(v + (b[i] - v) * k));
+const col = (c, a = 1) => `rgba(${c[0]},${c[1]},${c[2]},${a})`;
+const themeOf = (i) => (i % 2 === 0 ? DARK : LIGHT);
+
+// ---- text
+const FONT_LABEL = `500 ${Math.round(14 * DP)}px Inter`;
+const FONT_LINE = `500 ${Math.round(16 * DP)}px Inter`;
+const FONT_SMALL = `500 ${Math.round(12 * DP)}px Inter`;
+const titleFont = (s) => `900 ${Math.round((s.big ? 54 : 36) * DP)}px Inter`;
+const titleLH = (s) => Math.round((s.big ? 58 : 40) * DP);
+const hasSpacing = "letterSpacing" in CanvasRenderingContext2D.prototype;
+
+function spaced(ctx, text, x, y, px) {
+  // letter spacing drawn by hand, the same in every browser
+  let cx = x;
+  for (const ch of text) { ctx.fillText(ch, cx, y); cx += ctx.measureText(ch).width + px; }
+}
+
+function wrap(ctx, text, max) {
+  const words = text.split(" "), out = [];
+  let cur = "";
+  for (const w of words) {
+    const next = cur ? cur + " " + w : w;
+    if (cur && ctx.measureText(next).width > max) { out.push(cur); cur = w; } else cur = next;
+  }
+  if (cur) out.push(cur);
+  return out;
+}
+
+const layoutCache = new Map();
+function layout(ctx, s) {
+  if (layoutCache.has(s)) return layoutCache.get(s);
+  ctx.save();
+  ctx.font = titleFont(s);
+  if (hasSpacing) ctx.letterSpacing = `${-1 * DP}px`;
+  const titleLines = wrap(ctx, s.title, TEXT_MAX);
+  ctx.restore();
+  const kickerH = s.kicker ? Math.round(20 * DP) + Math.round(8 * DP) : 0;
+  const titleH = titleLines.length * titleLH(s);
+  const gap = Math.round(14 * DP);
+  const rowH = Math.round(30 * DP);
+  const pillH = s.pill ? Math.round(24 * DP) + Math.round(56 * DP) : 0;
+  const h = kickerH + titleH + gap + s.lines.length * rowH + pillH;
+  const top = (s.pill ? TEXT_END - 70 : TEXT_END) - h;
+  const L = { titleLines, top, kickerH, titleH, gap, rowH, artBottom: top - Math.round(12 * DP) };
+  layoutCache.set(s, L);
+  return L;
+}
+
+// ---- the art of each scene, drawn into its own canvas (drawArt clears its box)
+const artCanvas = document.createElement("canvas");
+const ART_ASPECT = { intro: 1.0, end: 1.0, chat: 1.25, stories: 1.2, calls: 1.2, map: 1.4, agenda: 1.2, bond: 1.4, shard: 1.25, profile: 1.3, safe: 1.05, phone: 1.5 };
+
+function drawSceneArt(ctx, s, L, ink, bg, p, clock, alpha) {
+  const boxH = L.artBottom - ART_TOP;
+  const aw = Math.min(W - 2 * PAD, Math.round(boxH * (ART_ASPECT[s.art] || 1)));
+  const ah = boxH;
+  if (artCanvas.width !== aw || artCanvas.height !== ah) { artCanvas.width = aw; artCanvas.height = ah; }
+  const a = artCanvas.getContext("2d");
+  a.setTransform(1, 0, 0, 1, 0, 0);
+  drawArt(a, s.art, aw, ah, ink, bg, p, clock);
+  ctx.globalAlpha = alpha;
+  ctx.drawImage(artCanvas, Math.round((W - aw) / 2), ART_TOP);
+  ctx.globalAlpha = 1;
+}
+
+function reveal(e, delayMs) { return emph(c01((e * 1000 - delayMs) / 650)); }
+
+function drawScene(ctx, i, e, t, ink, bg, alpha) {
+  const s = SCENES[i];
+  const L = layout(ctx, s);
+  const p = c01(e / (s.dur * 0.92));
+  const clock = (t / 6) % 1;
+  drawSceneArt(ctx, s, L, ink, bg, p, clock, alpha);
+
+  ctx.textBaseline = "middle";
+  ctx.textAlign = "left";
+  let y = L.top;
+  const lift = 36 * DP;
+  if (s.kicker) {
+    const r = reveal(e, 0);
+    ctx.font = FONT_LABEL;
+    ctx.fillStyle = col(ink, 0.55 * r * alpha);
+    spaced(ctx, s.kicker.toUpperCase(), PAD, y + Math.round(10 * DP) + (1 - r) * lift, 3 * DP);
+    y += L.kickerH;
+  }
+  {
+    const r = reveal(e, 120);
+    ctx.save();
+    ctx.font = titleFont(s);
+    if (hasSpacing) ctx.letterSpacing = `${-1 * DP}px`;
+    ctx.fillStyle = col(ink, r * alpha);
+    L.titleLines.forEach((tl, k) => ctx.fillText(tl, PAD - 2, y + titleLH(s) * (k + 0.5) + (1 - r) * lift));
+    ctx.restore();
+    y += L.titleH + L.gap;
+  }
+  s.lines.forEach((ln, k) => {
+    const r = reveal(e, 380 + k * 260);
+    const cy = y + L.rowH / 2 + (1 - r) * lift;
+    ctx.fillStyle = col(ink, r * alpha);
+    const dw = 14 * DP, dh = 3 * DP;
+    ctx.beginPath(); ctx.roundRect(PAD, cy - dh / 2, dw, dh, dh / 2); ctx.fill();
+    ctx.font = FONT_LINE;
+    ctx.fillStyle = col(ink, 0.85 * r * alpha);
+    ctx.fillText(ln, PAD + dw + 10 * DP, cy);
+    y += L.rowH;
+  });
+  if (s.pill) {
+    const r = reveal(e, 700);
+    y += Math.round(24 * DP);
+    const ph = Math.round(56 * DP), pw = TEXT_MAX, py = y + (1 - r) * lift;
+    ctx.fillStyle = col(ink, r * alpha);
+    ctx.beginPath(); ctx.roundRect(PAD, py, pw, ph, ph / 2); ctx.fill();
+    ctx.font = FONT_LINE;
+    ctx.textAlign = "center";
+    ctx.fillStyle = col(bg, r * alpha);
+    ctx.fillText(s.pill, PAD + pw / 2, py + ph / 2);
+    ctx.textAlign = "left";
+  }
+}
+
+function drawChrome(ctx, i, e, ink) {
+  // the film's progress bar, one segment per scene, and the name under it
+  const n = SCENES.length, x0 = 65, x1 = W - 65, gap = 3 * DP, bh = 3 * DP, y = 292;
+  const sw = (x1 - x0 - gap * (n - 1)) / n;
+  for (let k = 0; k < n; k++) {
+    const x = x0 + k * (sw + gap);
+    const f = k < i ? 1 : k === i ? c01(e / SCENES[i].dur) : 0;
+    ctx.fillStyle = col(ink, 0.22);
+    ctx.beginPath(); ctx.roundRect(x, y, sw, bh, bh / 2); ctx.fill();
+    if (f > 0) { ctx.fillStyle = col(ink); ctx.beginPath(); ctx.roundRect(x, y, sw * f, bh, bh / 2); ctx.fill(); }
+  }
+  ctx.font = FONT_SMALL;
+  ctx.textBaseline = "middle";
+  ctx.fillStyle = col(ink, 0.5);
+  spaced(ctx, "MONOLITH", x0 + 4, y + bh + 24 * DP, 2 * DP);
+}
+
+function sceneAt(t) {
+  let i = 0;
+  while (i < SCENES.length - 1 && t >= SCENES[i + 1].start) i++;
+  return i;
+}
+
+/** draws the frame at time t (seconds); returns the background colour */
+function render(ctx, t) {
+  t = Math.max(0, Math.min(TOTAL, t));
+  const i = sceneAt(t), e = t - SCENES[i].start;
+  const k = i === 0 ? 1 : std(c01(e / 0.45));
+  const from = themeOf(Math.max(0, i - 1)), to = themeOf(i);
+  const bg = mix(from.bg, to.bg, k), ink = mix(from.ink, to.ink, k);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  ctx.fillStyle = col(bg);
+  ctx.fillRect(0, 0, W, H);
+  // the old scene fades out while the new one fades and grows in
+  if (i > 0 && e < 0.2) drawScene(ctx, i - 1, t - SCENES[i - 1].start, t, ink, bg, 1 - std(e / 0.2));
+  const a = i === 0 ? 1 : std(c01(e / 0.42));
+  const sc = i === 0 ? 1 : 0.94 + 0.06 * emph(c01(e / 0.52));
+  ctx.setTransform(sc, 0, 0, sc, (W / 2) * (1 - sc), (H / 2) * (1 - sc));
+  drawScene(ctx, i, e, t, ink, bg, a);
+  ctx.setTransform(1, 0, 0, 1, 0, 0);
+  drawChrome(ctx, i, e, ink);
+  return bg;
+}
+
+// ---------------------------------------------------------------- player
+const canvas = document.getElementById("c");
+const ctx = canvas.getContext("2d");
+const ui = document.getElementById("ui");
+const playBtn = document.getElementById("play");
+const recBtn = document.getElementById("rec");
+const note = document.getElementById("note");
+let raf = 0, lastBg = "";
+
+function paint(t) {
+  const bg = col(render(ctx, t));
+  if (bg !== lastBg) { document.body.style.background = bg; document.documentElement.style.background = bg; lastBg = bg; }
+}
+
+// back to the first frame, which is dark like the buttons
+function showUi() { paint(0); ui.classList.remove("off"); }
+
+function play(onEnd) {
+  cancelAnimationFrame(raf);
+  ui.classList.add("off");
+  const t0 = performance.now() + 600;       // a short pause, to start recording on a clean frame
+  const step = (now) => {
+    const t = Math.max(0, (now - t0) / 1000);
+    paint(t);
+    if (t < TOTAL) raf = requestAnimationFrame(step);
+    else if (onEnd) onEnd(); else setTimeout(showUi, 1500);
+  };
+  paint(0);
+  raf = requestAnimationFrame(step);
+}
+
+const MIME = ["video/mp4;codecs=avc1.640028", "video/mp4;codecs=avc1", "video/mp4", "video/webm;codecs=vp9", "video/webm"]
+  .find((m) => window.MediaRecorder && MediaRecorder.isTypeSupported(m));
+const isMp4 = MIME && MIME.startsWith("video/mp4");
+if (!MIME) { recBtn.hidden = true; note.textContent = "Avvia e registra lo schermo."; }
+else if (!isMp4) recBtn.textContent = "Scarica il video (WebM)";
+
+function record() {
+  const stream = canvas.captureStream(FPS);
+  const rec = new MediaRecorder(stream, { mimeType: MIME, videoBitsPerSecond: 12_000_000 });
+  const chunks = [];
+  rec.ondataavailable = (ev) => { if (ev.data.size) chunks.push(ev.data); };
+  rec.onstop = () => {
+    const blob = new Blob(chunks, { type: MIME.split(";")[0] });
+    const a = document.createElement("a");
+    a.href = URL.createObjectURL(blob);
+    a.download = isMp4 ? "monolith-reel.mp4" : "monolith-reel.webm";
+    document.body.appendChild(a); a.click(); a.remove();
+    recBtn.disabled = false;
+    setTimeout(showUi, 600);
+  };
+  recBtn.disabled = true;
+  rec.start(1000);
+  play(() => setTimeout(() => rec.stop(), 300));
+}
+
+playBtn.addEventListener("click", (ev) => { ev.stopPropagation(); play(); });
+recBtn.addEventListener("click", (ev) => { ev.stopPropagation(); record(); });
+document.addEventListener("keydown", (ev) => { if (ev.code === "Space") { ev.preventDefault(); play(); } });
+
+// exposed for rendering the video frame by frame
+window.REEL = { W, H, FPS, TOTAL, SCENES: SCENES.map((s) => ({ start: s.start, dur: s.dur })), frame: (t) => paint(t) };
+document.fonts.ready.then(() => Promise.all([document.fonts.load(FONT_LINE), document.fonts.load("900 95px Inter")])).then(() => { layoutCache.clear(); paint(0); window.REEL.ready = true; });
+</script>
+</body>
+</html>
