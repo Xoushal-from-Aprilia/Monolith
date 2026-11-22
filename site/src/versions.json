@@ -1,0 +1,279 @@
+[
+ {
+  "version": "2.3.1",
+  "date": "2026-11-21",
+  "notes": [
+   "Una piccola vibrazione quando tocchi un tasto, leggera come quella della tastiera",
+   "Si spegne da Impostazioni, in Suoni e vibrazione, con Vibrazione dei tasti"
+  ],
+  "build": 41,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-41/Monolith-41.apk",
+  "size": 23740597
+ },
+ {
+  "version": "2.3.0",
+  "date": "2026-11-21",
+  "notes": [
+   "Profilo rifatto: copertina, immagine e informazioni più ordinate, con i numeri in evidenza e i tasti ben separati",
+   "Tasto Modifica in alto a destra nel tuo profilo: immagine, nome, bio, stato, compleanno, copertina e distintivi in un'unica schermata",
+   "Distintivi disegnati a mano uno per uno, e fino a 3 in vetrina sotto al tuo nome",
+   "Dal profilo di un amico scrivi, chiami o videochiami con un tocco; legame e amico nei paraggi stanno nella parte Voi due",
+   "Nuova storia da un unico tasto: foto, testo o canzone dal telefono",
+   "Clubhouse ora si chiama Chat e nella barra in basso non c'è più la linea prima di Shard",
+   "Impostazioni divise in gruppi chiari: Aspetto, Funzioni, Privacy e sicurezza, Connessione",
+   "Spaziature e allineamenti sistemati in Chat, Shard, Liste, storie e filmato",
+   "Più fluida: l'effetto inclinazione e le barre di avanzamento non ridisegnano più tutta la schermata"
+  ],
+  "build": 40,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-40/Monolith-40.apk",
+  "size": 23739741
+ },
+ {
+  "version": "2.2.0",
+  "date": "2026-11-21",
+  "notes": [
+   "Un filmato animato alla prima apertura racconta tutte le funzioni; lo rivedi quando vuoi dalle Impostazioni",
+   "Distintivi: tanti emblemi da sbloccare usando l'app, visibili nel tuo profilo e in quello degli amici",
+   "Copertina del profilo: scegli tra le copertine preimpostate, dietro alla tua foto come su Facebook",
+   "Sticker personali: crea sticker dalle tue foto, con forme, filtri e scritte, e salva quelli che ricevi",
+   "Rispondi alle storie: una risposta o una reazione arriva in chat con l'anteprima della storia",
+   "Inoltra messaggi, foto, vocali e sticker ad altre chat",
+   "Date nei messaggi: «domani alle 9» o «sabato» diventano un tocco per creare l'evento",
+   "Shard: stanze private visibili solo ad alcuni membri, messaggio di benvenuto e titoli personalizzati",
+   "Ascolto insieme: in chiamata scegli una canzone e parte nello stesso momento per tutti",
+   "Anniversari d'amicizia: un avviso nel giorno in cui siete diventati amici, e da quanto nel profilo",
+   "Amico nei paraggi: se lo attivate in due, un avviso quando siete a meno di 500 m",
+   "Backup automatico: ogni settimana un backup cifrato nella cartella che scegli, con le ultime 4 copie"
+  ],
+  "build": 35,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-35/Monolith-35.apk",
+  "size": 23717921
+ },
+ {
+  "version": "2.1.0",
+  "date": "2026-11-21",
+  "notes": [
+   "Gli Shard hanno la loro scheda nella barra in basso, separata dalle altre, con l'icona di un frammento di monolite",
+   "Come su Discord: a sinistra la colonna con tutti i tuoi Shard, a destra stanze scritte, vocali, bacheca, eventi e membri",
+   "Gli Shard non sono più in Clubhouse e i loro messaggi da leggere hanno un contatore a parte"
+  ],
+  "build": 30,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-30/Monolith-30.apk",
+  "size": 23589133
+ },
+ {
+  "version": "2.0.0",
+  "date": "2026-11-21",
+  "notes": [
+   "Giochi in chat: Tris, Forza 4 e Impiccato a turni, con l'avviso quando tocca a te",
+   "Dadi e moneta: un lancio con lo stesso risultato per tutti, animato",
+   "Foto a vista unica: si apre una volta, senza screenshot, poi sparisce",
+   "Lavagna condivisa: disegnate insieme in tempo reale e inviate il disegno in chat",
+   "Menzioni @ nei gruppi e negli Shard, che arrivano anche con le notifiche silenziate",
+   "Gruppi silenziabili, sfondi in bianco e nero per ogni chat, trillo scuotendo il telefono",
+   "Vocali a 1,5× e 2×; avvicinando il telefono all'orecchio si ascoltano come una chiamata",
+   "Blocca screenshot in una chat (per entrambi) e avviso quando qualcuno fa uno screenshot (Android 14 e successivi)",
+   "Conto alla rovescia per gli eventi, in cima all'agenda e come widget",
+   "Meteo del giorno e del luogo dell'evento, direttamente in Agenda",
+   "Icone alternative per la schermata Home",
+   "Scheda medica inviata insieme all'SOS",
+   "Diario dei luoghi: le tue soste, solo su questo telefono",
+   "Filtri in bianco e nero per foto e storie, con didascalia",
+   "Musica nelle storie: anteprime da iTunes o un pezzo di canzone dal telefono",
+   "Shard: bacheca, eventi con chi partecipa, fondatore e moderatori",
+   "Condivisione dello schermo nelle chiamate e nelle stanze vocali",
+   "Bussola che punta verso l'amico che condivide la posizione",
+   "Batti cinque per aggiungere un amico senza QR",
+   "Arrivo in diretta: la notifica si riempie mentre l'amico si avvicina",
+   "Video in una finestrella quando esci dall'app durante una videochiamata",
+   "In chiamata lo schermo si spegne vicino alla faccia",
+   "Profondità: profilo, Legame e riepilogo si muovono inclinando il telefono",
+   "Sfondo animato per il telefono con il monolite tra le stelle"
+  ],
+  "build": 29,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-29/Monolith-29.apk",
+  "size": 23587681
+ },
+ {
+  "version": "1.1.0",
+  "date": "2026-11-21",
+  "notes": [
+   "Legame accanto ai nomi: il piccolo monolite con la serie compare quando vi scrivete da almeno 100 giorni di fila",
+   "La serie del Legame non si perde più con i messaggi che si autoeliminano",
+   "Riepilogo della domenica: nuova slide con il legame più forte",
+   "Amici preferiti: stella nel profilo, in cima a Clubhouse e nel widget Amici",
+   "Batteria degli amici mentre condividono la posizione, con avviso quando il telefono sta per spegnersi",
+   "Salvati: tieni premuto un messaggio o una foto e salvalo nel profilo dell'amico, resta lì anche se la chat sparisce"
+  ],
+  "build": 23,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-23/Monolith-23.apk",
+  "size": 23395854
+ },
+ {
+  "version": "1.0.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Riepilogo della domenica: ogni domenica alle 18 la tua settimana in slide animate",
+   "Le persone con cui hai parlato di più, la tua emoji, chiamate, ritmo, luoghi, foto, agenda e abitudini",
+   "Un titolo per la tua settimana, da condividere con chi vuoi",
+   "Widget Amici per la schermata Home: stato, dove si trovano, messaggi da leggere; un tocco apre la chat",
+   "Il riepilogo si guarda quando vuoi da Impostazioni, e l'avviso della domenica si può spegnere"
+  ],
+  "build": 22,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-22/Monolith-22.apk",
+  "size": 23376934
+ },
+ {
+  "version": "0.9.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Profili: tocca un amico per vedere bio, stato, compleanno e storie",
+   "Storie di 24 ore, con foto o solo testo, che vedono i tuoi amici",
+   "Legame: per ogni amico un monolite che cresce con i giorni in cui vi sentite",
+   "Messaggio da grattare: arriva coperto e si scopre strisciando col dito"
+  ],
+  "build": 21,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-21/Monolith-21.apk",
+  "size": 23336142
+ },
+ {
+  "version": "0.8.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Spese condivise: chi ha pagato cosa, saldi e il modo più semplice per pareggiare",
+   "Album condivisi: ognuno aggiunge le sue foto, con i commenti",
+   "Abitudini da soli o con gli amici, con la serie di giorni di fila"
+  ],
+  "build": 19,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-19/Monolith-19.apk",
+  "size": 23317970
+ },
+ {
+  "version": "0.7.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Shard: spazi per te e i tuoi amici, con stanze scritte e stanze vocali",
+   "Stanze vocali sempre aperte: entri ed esci quando vuoi, fino a 4 persone insieme",
+   "Chi crea lo shard aggiunge stanze, lo rinomina e gestisce i membri; tutti possono invitare amici"
+  ],
+  "build": 16,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-16/Monolith-16.apk",
+  "size": 23281190
+ },
+ {
+  "version": "0.6.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Messaggi programmati: scrivi ora, parte all'ora che scegli",
+   "Cerca nei messaggi di tutte le chat",
+   "Messaggi fissati in cima alla chat, per tutti",
+   "Stato di 24 ore: un'emoji e una frase che vedono gli amici",
+   "Agenda più semplice: i promemoria su luogo ora stanno nella scheda del luogo, sulla mappa",
+   "Suoni spenti di serie: si attivano da Impostazioni → Suoni"
+  ],
+  "build": 14,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-14/Monolith-14.apk",
+  "size": 23245814
+ },
+ {
+  "version": "0.5.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Promemoria: «+10 min», «+1 ora» e «Fatto» direttamente dalla notifica",
+   "Eventi da spuntare come fatti toccando la loro emoji",
+   "Vista a ore della giornata, con gli eventi come blocchi",
+   "Compleanni degli amici in agenda, con un avviso alle 9 del giorno giusto",
+   "Promemoria su luogo: «quando arrivo a casa ricordami di…»",
+   "Luoghi anche solo tuoi, senza amici",
+   "Tasto SOS sulla mappa: tieni premuto e tutti i tuoi amici ricevono un avviso con la tua posizione"
+  ],
+  "build": 11,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-11/Monolith-11.apk",
+  "size": 23210118
+ },
+ {
+  "version": "0.4.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Suoni calmi creati per Monolith: tasti leggeri, 5 suonerie, suoni per messaggi, incontri e promemoria",
+   "Nuova pagina Suoni nelle impostazioni, con ascolto di prova",
+   "Toni discreti durante le chiamate: attesa, collegamento e fine",
+   "Avviso «Sei con…» quando raggiungi un luogo comune dove ci sono già amici"
+  ],
+  "build": 9,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-9/Monolith-9.apk",
+  "size": 23175218
+ },
+ {
+  "version": "0.3.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Luoghi comuni: segna casa, ufficio o palestra con un raggio da 10 a 100 metri e condividili con gli amici",
+   "Quando tu o un amico arrivate in un luogo comune, l'altro riceve un messaggio in chat e una notifica",
+   "La mappa ora ha due sezioni: Persone e Luoghi comuni",
+   "I vecchi avvisi di arrivo sono stati sostituiti dai luoghi comuni",
+   "Corretto il promemoria degli eventi che arrivava più volte"
+  ],
+  "build": 7,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-7/Monolith-7.apk",
+  "size": 22882920
+ },
+ {
+  "version": "0.2.1",
+  "date": "2026-11-20",
+  "notes": [
+   "Mappe in bianco e nero, in tono con lo stile dell'app",
+   "Tre stili di mappa gratuiti e senza account: Classica, Essenziale e Topografica",
+   "Colore della mappa: automatico, bianco o nero",
+   "Le mappe tornano a caricarsi correttamente"
+  ],
+  "build": 5,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-5/Monolith-5.apk",
+  "size": 22845992
+ },
+ {
+  "version": "0.2.0",
+  "date": "2026-11-20",
+  "notes": [
+   "Messaggi vocali: tieni premuto il microfono per registrare",
+   "Reazioni con emoji, risposte ai messaggi, modifica ed eliminazione per tutti",
+   "Messaggi effimeri: 1 ora, 24 ore o 7 giorni",
+   "Sondaggi nelle chat e nei gruppi",
+   "Videochiamate e chiamate di gruppo fino a 4 persone",
+   "Eventi ricorrenti e più promemoria per lo stesso evento",
+   "Widget dell'agenda per la schermata Home",
+   "Liste condivise con gli amici",
+   "Avvisi di arrivo e «Sto arrivando» con distanza e tempo stimato",
+   "Riquadro nelle impostazioni rapide per condividere la posizione",
+   "Aggiungi amici con il codice QR e verifica dell'identità",
+   "Blocco dell'app con impronta, volto o PIN",
+   "Backup cifrato e codice di recupero",
+   "7 lingue: italiano, inglese, francese, tedesco, russo, polacco e ceco",
+   "Journal e Crediti nelle impostazioni"
+  ],
+  "build": 4,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-4/Monolith-4.apk",
+  "size": 22828256
+ },
+ {
+  "version": "0.1.2",
+  "date": "2026-11-19",
+  "notes": [
+   "Nasce Monolith: logo, animazioni e interfaccia in bianco, nero e grigi",
+   "Agenda con eventi, note e promemoria con emoji come icona della notifica",
+   "Clubhouse: chat private e di gruppo con foto e trilli",
+   "Mappa con la posizione in tempo reale degli amici",
+   "Amici: ricerca per username e richieste di amicizia",
+   "Chiamate vocali",
+   "Tema chiaro e scuro",
+   "Correzioni di stabilità e dell'interfaccia",
+   "Prima versione installabile",
+   "Schermata dei permessi al primo avvio",
+   "Inviti agli eventi con risposta Partecipo / Non posso",
+   "Eventi e posizione condivisibili in chat"
+  ],
+  "build": 2,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-2/Monolith-2.apk",
+  "size": 21136244
+ }
+]
