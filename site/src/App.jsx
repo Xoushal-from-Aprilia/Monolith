@@ -1,332 +1,303 @@
-import { useEffect, useMemo, useState } from "react";
-import { MotionConfig, motion } from "framer-motion";
+import { useEffect, useMemo, useRef, useState } from "react";
+import qrcode from "qrcode-generator";
 import versions from "./versions.json";
-import { Glyph } from "./Glyphs.jsx";
-import { Hero } from "./Hero.jsx";
-import { Tour, Phone } from "./Tour.jsx";
+import { drawArt, SCENE_MS } from "./film.js";
 
+// The site is the app's intro film, scrolled: one scene per screen, black and white in turn.
+const DARK = { bg: [5, 5, 5], ink: [241, 241, 239] };
+const LIGHT = { bg: [241, 241, 239], ink: [10, 10, 10] };
 const REPO = "https://github.com/Xoushal-from-Aprilia/Monolith";
 const MONTHS = ["gennaio", "febbraio", "marzo", "aprile", "maggio", "giugno", "luglio", "agosto", "settembre", "ottobre", "novembre", "dicembre"];
 const dateIt = (iso) => { const [y, m, d] = iso.split("-").map(Number); return `${d} ${MONTHS[m - 1]} ${y}`; };
 const mb = (b) => (b / 1048576).toLocaleString("it-IT", { maximumFractionDigits: 1, minimumFractionDigits: 1 }) + " MB";
+const latest = versions[0];
 
-const FEATURES = [
-  { g: Glyph.chat, t: "Chat", d: "Private e di gruppo, con vocali, foto a vista unica, sticker fatti da te, sondaggi, tris, forza 4, impiccato, dadi e una lavagna per disegnare insieme. Messaggi effimeri, programmati e fissati." },
-  { g: Glyph.agenda, t: "Agenda", d: "Settimana e mese, eventi ricorrenti con più promemoria, inviti a cui gli amici rispondono, conto alla rovescia e meteo del giorno. Se in chat scrivi «sabato alle 9», diventa un evento con un tocco." },
-  { g: Glyph.map, t: "Mappa", d: "Posizione dal vivo solo quando la accendi, «Sto arrivando» con distanza e orario, luoghi comuni che avvisano quando qualcuno arriva, e un avviso se un amico è a meno di 500 m." },
-  { g: Glyph.together, t: "Insieme", d: "Spese condivise con saldi e pareggio, album di gruppo, abitudini da tenere insieme giorno dopo giorno e liste della spesa o delle cose da fare." },
-  { g: Glyph.shard, t: "Shard", d: "Lo spazio del tuo gruppo: stanze scritte, vocali e private, bacheca, eventi, moderatori, messaggio di benvenuto e titoli personalizzati." },
-  { g: Glyph.call, t: "Chiamate", d: "Voce e video fino a 4 persone, schermo condiviso, la stessa canzone che parte nello stesso momento per tutti, video in finestra mentre usi altro." },
-  { g: Glyph.profile, t: "Profilo", d: "Copertina, stato di 24 ore, storie con musica, 37 distintivi disegnati a mano e un legame con ogni amico che cresce con i giorni in cui vi scrivete." },
-  { g: Glyph.shield, t: "Sicurezza", d: "Tasto SOS che manda la posizione e la scheda medica, blocco con impronta o volto, codice di recupero, backup cifrato anche automatico ogni settimana." },
-  { g: Glyph.compass, t: "Il telefono in mano", d: "Batti il cinque per aggiungere un amico, bussola che punta verso di lui, vocali che passano all'orecchio, scuoti per un trillo, una piccola vibrazione a ogni tocco." },
-  { g: Glyph.sparkle, t: "La tua domenica", d: "Ogni domenica alle 18 la settimana in slide: con chi hai parlato di più, le emoji, il ritmo dei giorni, il legame più forte." },
+const SCENES = [
+  { id: "inizio", art: "intro", kicker: "", title: "Monolith", lines: ["Tutto quello che conta, tra amici."], cta: "hero" },
+  { id: "agenda", art: "agenda", kicker: "Agenda", title: "Il tuo tempo, condiviso", lines: ["Eventi e inviti agli amici", "Conto alla rovescia e meteo", "Compleanni e anniversari d'amicizia"] },
+  { id: "chat", art: "chat", kicker: "Chat", title: "Chat che sanno giocare", lines: ["Giochi, dadi e lavagna condivisa", "Sticker, inoltri e foto a vista unica", "Date nei messaggi che diventano eventi"] },
+  { id: "storie", art: "stories", kicker: "Storie", title: "Racconta la giornata", lines: ["Filtri in bianco e nero", "Musica nelle storie", "Risposte che arrivano in chat"] },
+  { id: "chiamate", art: "calls", kicker: "Chiamate", title: "Voce, video e schermo", lines: ["Fino a 4 persone", "Condividi lo schermo", "Ascolta musica insieme"] },
+  { id: "mappa", art: "map", kicker: "Mappa", title: "Sai sempre dove trovarvi", lines: ["Posizione in diretta e arrivo in diretta", "Luoghi comuni e amici nei paraggi", "Bussola verso l'amico"] },
+  { id: "profilo", art: "profile", kicker: "Profilo", title: "Il tuo spazio", lines: ["Copertine da scegliere", "Distintivi disegnati, tre in vetrina", "Tutto si modifica da un solo tasto"] },
+  { id: "legame", art: "bond", kicker: "Legame", title: "Più vi scrivete, più cresce", lines: ["Da Sasso a Monolite", "Serie di giorni insieme", "Il simbolo accanto al nome dopo 100 giorni"] },
+  { id: "shard", art: "shard", kicker: "Shard", title: "Spazi per il tuo gruppo", lines: ["Stanze scritte, vocali e private", "Bacheca, eventi e ruoli", "Benvenuto e titoli per tutti"] },
+  { id: "insieme", art: "together", kicker: "Insieme", title: "Spese, album, abitudini", lines: ["Chi deve quanto, in un tocco", "Le foto di tutti in un posto", "Abitudini da tenere insieme"] },
+  { id: "sicurezza", art: "safe", kicker: "Sicurezza", title: "Al sicuro, sempre", lines: ["Tasto SOS con scheda medica", "Blocco e avviso screenshot", "Backup cifrato automatico"] },
+  { id: "telefono", art: "phone", kicker: "Il tuo telefono", title: "Si muove con te", lines: ["Batti cinque per aggiungere amici", "Vocali all'orecchio", "Sfondo animato e widget", "Una piccola vibrazione a ogni tocco"] },
+  { id: "domenica", art: "wrapped", kicker: "Domenica", title: "La tua settimana in slide", lines: ["Persone, emoji e ritmo", "Un titolo tutto tuo"] },
+  { id: "scarica", art: "end", kicker: "", title: "Pronto?", lines: ["Il resto lo scopri usandola."], cta: "end" },
+  {
+    id: "installa", art: "install", kicker: "Installazione", title: "Quattro passi", steps: [
+      "Scarica l'APK dal telefono",
+      "Aprilo e consenti «Installa da questa fonte»",
+      "Se Play Protect avvisa: Altri dettagli, poi Installa comunque",
+      "Apri Monolith e crea il tuo profilo",
+    ],
+  },
+  {
+    id: "aggiornare", art: "update", kicker: "Aggiornare", title: "Dalla versione vecchia", steps: [
+      "In Monolith: Impostazioni, Backup cifrato",
+      "Disinstalla la versione vecchia",
+      "Installa quella nuova",
+      "Apri e scegli «Ho già un profilo Monolith»",
+    ],
+    note: "Per ora serve a ogni aggiornamento: ogni versione ha una firma diversa.",
+  },
 ];
+const N = SCENES.length;
+const themeOf = (i) => (i % 2 === 0 ? DARK : LIGHT);
+const css = (c) => `rgb(${c[0]},${c[1]},${c[2]})`;
 
-const GALLERY = [
-  ["shots/profilo.webp", "Il profilo di un amico"],
-  ["shots/conversazione.webp", "Una conversazione"],
-  ["shots/modifica.webp", "Modifica profilo"],
-  ["shots/chat-scura.webp", "Chat, tema scuro"],
-  ["shots/spese.webp", "Spese condivise"],
-  ["shots/stanza.webp", "Una stanza di uno Shard"],
-  ["shots/profilo-scuro.webp", "Profilo, tema scuro"],
-  ["shots/abitudini.webp", "Abitudini"],
-  ["shots/agenda-scura.webp", "Agenda, tema scuro"],
-  ["shots/impostazioni.webp", "Impostazioni"],
-];
+// what the top bar needs, shared without re-rendering at every frame
+const live = { index: 0, start: performance.now() };
+const reduced = typeof matchMedia !== "undefined" && matchMedia("(prefers-reduced-motion: reduce)").matches;
 
-const FAQ = [
-  ["Su quali telefoni funziona?", "Su Android 8.0 o più recente. L'APK pesa circa 23 MB. Su iPhone non c'è: Monolith è solo per Android."],
-  ["Perché non è sul Play Store?", "Perché è un progetto personale distribuito solo qui. Per questo Android ti chiede il permesso di installare un'app scaricata dal browser."],
-  ["È sicuro installarlo?", "Ogni APK viene compilato in automatico dal codice sorgente pubblico su GitHub, che chiunque può leggere. Play Protect può avvisarti solo perché l'app non arriva dal Play Store."],
-  ["Devo disinstallare per aggiornare?", "Per ora sì: ogni versione ha una firma diversa e Android non la installa sopra la vecchia. Prima fai un backup cifrato o copia il codice di recupero, poi disinstalla e installa la nuova."],
-  ["Dove stanno i miei dati?", "Sul tuo telefono. Monolith non ha un server suo: i messaggi partono cifrati e li apre solo chi li riceve. Se perdi il telefono senza backup né codice di recupero, il profilo non si può recuperare."],
-  ["Serve un'email o il numero?", "No. Scegli un nome utente e un'emoji: il profilo è una chiave che vive sul telefono, e gli amici ti trovano con il nome utente o il codice QR."],
-  ["In che lingue è?", "Italiano, inglese, francese, tedesco, russo, polacco e ceco. La cambi in Impostazioni, alla voce Lingua."],
-  ["Come scopro le novità?", "Torna su questa pagina: ogni nuova versione compare in cima all'elenco, con le novità. Nell'app le trovi anche in Impostazioni, nel Journal."],
-];
-
-function VersionRow({ v, latest }) {
-  const [open, setOpen] = useState(false);
-  const shown = open ? v.notes : v.notes.slice(0, 3);
+function Qr({ text, ink }) {
+  const q = qrcode(0, "M");
+  q.addData(text);
+  q.make();
+  const n = q.getModuleCount();
+  let d = "";
+  for (let r = 0; r < n; r++) for (let c = 0; c < n; c++) if (q.isDark(r, c)) d += `M${c},${r}h1v1h-1z`;
   return (
-    <div className="ver" id={`v-${v.version.replaceAll(".", "-")}`}>
-      <div>
-        <div className="vn num">{v.version}{latest && <span className="pill">Ultima</span>}</div>
-        <div className="vd num">{dateIt(v.date)}</div>
-      </div>
-      <div>
-        <ul>{shown.map((n, k) => <li key={k}>{n}</li>)}</ul>
-        {v.notes.length > 3 && (
-          <button type="button" className="more" onClick={() => setOpen(!open)} aria-expanded={open}>
-            {open ? "Mostra meno" : `Mostra tutte le ${v.notes.length} novità`}
-          </button>
-        )}
-      </div>
-      <div className="dl">
-        {v.url ? (
-          <a className={latest ? "btn btn-primary btn-small" : "btn btn-ghost btn-small"} href={v.url} rel="noopener">
-            <Glyph.download /> APK
-          </a>
-        ) : <small>APK non disponibile</small>}
-        {v.size && <small className="num">{mb(v.size)} · build {v.build}</small>}
-      </div>
+    <svg className="qr" viewBox={`-2 -2 ${n + 4} ${n + 4}`} shapeRendering="crispEdges" role="img" aria-label="Codice QR per scaricare l'APK">
+      <path d={d} fill={ink} />
+    </svg>
+  );
+}
+
+function Download({ big }) {
+  return (
+    <div className={big ? "cta cta-big" : "cta"}>
+      <a className="btn" href={latest.url} rel="noopener">Scarica Monolith {latest.version}</a>
+      <p className="meta">APK · {mb(latest.size)} · Android 8.0 o più recente</p>
     </div>
   );
 }
 
-function Versions() {
-  const latest = versions[0];
+function Scene({ s, index }) {
+  const t = themeOf(index);
+  const ref = useRef(null);
+  const art = useRef(null);
+  const canvas = useRef(null);
+  const [on, setOn] = useState(index === 0);
+  const state = useRef({ visible: index === 0, start: performance.now(), active: index === 0 });
+
+  useEffect(() => {
+    const cv = canvas.current;
+    const ctx = cv.getContext("2d");
+    let raf = 0, w = 0, h = 0;
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    const size = () => {
+      const r = art.current.getBoundingClientRect();
+      w = r.width; h = r.height;
+      cv.width = Math.round(w * dpr); cv.height = Math.round(h * dpr);
+      ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    };
+    const frame = (now) => {
+      const st = state.current;
+      const p = reduced ? 1 : st.active ? Math.min(1, (now - st.start) / SCENE_MS) : 0;
+      const clock = reduced ? 0.3 : (now % 6000) / 6000;
+      if (w > 0 && h > 0) drawArt(ctx, s.art, w, h, t.ink, t.bg, p, clock);
+      if (st.visible && !reduced) raf = requestAnimationFrame(frame);
+    };
+    size();
+    frame(performance.now());
+    const ro = new ResizeObserver(() => { size(); frame(performance.now()); });
+    ro.observe(art.current);
+    const io = new IntersectionObserver((entries) => {
+      for (const e of entries) {
+        const st = state.current;
+        const wasVisible = st.visible;
+        st.visible = e.isIntersecting;
+        if (e.intersectionRatio >= 0.45 && !st.active) {
+          st.active = true; st.start = performance.now(); setOn(true);
+        } else if (e.intersectionRatio < 0.08 && st.active) {
+          st.active = false; setOn(false);
+        }
+        if (st.visible && !wasVisible) { cancelAnimationFrame(raf); raf = requestAnimationFrame(frame); }
+      }
+    }, { threshold: [0, 0.08, 0.45, 0.7] });
+    io.observe(ref.current);
+    return () => { cancelAnimationFrame(raf); ro.disconnect(); io.disconnect(); };
+  }, [s.art, t]);
+
+  // the scene tells the bar where it is
+  useEffect(() => {
+    if (on) { live.index = index; live.start = state.current.start; }
+  }, [on, index]);
+
+  const style = { background: css(t.bg), color: css(t.ink), "--ink": css(t.ink), "--bg": css(t.bg) };
+  const delay = (ms) => ({ "--d": `${ms}ms` });
+  return (
+    <section id={s.id} ref={ref} className={on || reduced ? "scene on" : "scene"} style={style} data-i={index}>
+      <div className="art" ref={art} aria-hidden="true"><canvas ref={canvas} /></div>
+      <div className="text">
+        {s.kicker && <span className="kicker rv" style={delay(0)}>{s.kicker}</span>}
+        <h2 className={s.art === "intro" ? "title title-hero rv" : "title rv"} style={delay(120)}>{s.title}</h2>
+        {s.lines && (
+          <ul className="lines">
+            {s.lines.map((l, k) => <li key={l} className="rv" style={delay(380 + k * 260)}>{l}</li>)}
+          </ul>
+        )}
+        {s.steps && (
+          <ol className="lines steps">
+            {s.steps.map((l, k) => <li key={l} className="rv" style={delay(380 + k * 260)}><b>{k + 1}</b>{l}</li>)}
+          </ol>
+        )}
+        {s.note && <p className="note rv" style={delay(380 + s.steps.length * 260)}>{s.note}</p>}
+        {s.cta && (
+          <div className="rv" style={delay(s.cta === "hero" ? 640 : 700)}>
+            <Download big={s.cta === "end"} />
+            {s.cta === "end" && (
+              <div className="qr-row">
+                <Qr text={latest.url} ink={css(t.ink)} />
+                <p>Sei al computer? Inquadra il codice con il telefono e l'APK si scarica lì.</p>
+              </div>
+            )}
+          </div>
+        )}
+      </div>
+    </section>
+  );
+}
+
+/** the bar of the film: one segment per scene, the current one fills in 4.3 s */
+function Bar() {
+  const fills = useRef([]);
+  const [theme, setTheme] = useState(DARK);
+  useEffect(() => {
+    let raf = 0, last = -2;
+    const loop = (now) => {
+      // which part of the page is under the bar
+      const probe = window.innerHeight * 0.4;
+      let idx = -1, extra = null;
+      document.querySelectorAll("[data-i],[data-t]").forEach((el) => {
+        const r = el.getBoundingClientRect();
+        if (r.top <= probe && r.bottom > probe) { if (el.dataset.i !== undefined) idx = Number(el.dataset.i); else extra = el.dataset.t; }
+      });
+      const cur = extra ? N : idx;
+      if (cur !== last) {
+        last = cur;
+        setTheme(extra ? (extra === "dark" ? DARK : LIGHT) : themeOf(Math.max(0, idx)));
+      }
+      fills.current.forEach((el, i) => {
+        if (!el) return;
+        let f = 0;
+        if (cur >= N || i < cur) f = 1;
+        else if (i === cur) f = reduced ? 1 : live.index === i ? Math.min(1, (now - live.start) / SCENE_MS) : 0;
+        el.style.transform = `scaleX(${f})`;
+      });
+      raf = requestAnimationFrame(loop);
+    };
+    raf = requestAnimationFrame(loop);
+    return () => cancelAnimationFrame(raf);
+  }, []);
+  const go = (e, id) => { e.preventDefault(); document.getElementById(id)?.scrollIntoView({ behavior: reduced ? "auto" : "smooth" }); };
+  return (
+    <header className="bar" style={{ background: css(theme.bg), color: css(theme.ink) }}>
+      <div className="segs">
+        {SCENES.map((s, i) => (
+          <span key={s.id} className="seg"><i ref={(el) => (fills.current[i] = el)} /></span>
+        ))}
+      </div>
+      <div className="bar-row">
+        <a className="brand" href="#inizio" onClick={(e) => go(e, "inizio")}>Monolith</a>
+        <nav>
+          <a href="#versioni" onClick={(e) => go(e, "versioni")}>Versioni</a>
+          <a className="bar-dl" href={latest.url} rel="noopener">Scarica</a>
+        </nav>
+      </div>
+    </header>
+  );
+}
+
+function VersionRow({ v }) {
+  const [open, setOpen] = useState(false);
+  const isLatest = v === latest;
+  return (
+    <li className="ver">
+      <div className="ver-top">
+        <div>
+          <span className="vn">{v.version}</span>
+          {isLatest && <span className="tag">Ultima</span>}
+          <span className="vd">{dateIt(v.date)}{v.size ? ` · ${mb(v.size)}` : ""}</span>
+        </div>
+        {v.url ? <a className={isLatest ? "apk apk-on" : "apk"} href={v.url} rel="noopener" aria-label={`Scarica l'APK della versione ${v.version}`}>APK</a> : null}
+      </div>
+      <ul className="notes">
+        {(open ? v.notes : v.notes.slice(0, 1)).map((n) => <li key={n}>{n}</li>)}
+      </ul>
+      {v.notes.length > 1 && (
+        <button type="button" className="more" aria-expanded={open} onClick={() => setOpen(!open)}>
+          {open ? "Mostra meno" : v.notes.length === 2 ? "+ 1 altra novità" : `+ altre ${v.notes.length - 1} novità`}
+        </button>
+      )}
+    </li>
+  );
+}
+
+const FAQ = [
+  ["Su quali telefoni funziona?", "Android 8.0 o più recente. Su iPhone non c'è."],
+  ["Perché non è sul Play Store?", "Si scarica solo da qui. Per questo Android chiede il permesso di installarla."],
+  ["È sicura?", "Ogni APK è compilato in automatico dal codice pubblico su GitHub. Play Protect avvisa solo perché non arriva dal Play Store."],
+  ["Dove stanno i miei dati?", "Sul tuo telefono. Senza backup né codice di recupero, se perdi il telefono il profilo non torna."],
+  ["Serve un'email o il numero?", "No. Scegli un nome utente: gli amici ti trovano con quello o con il codice QR."],
+  ["In che lingue è?", "Italiano, inglese, francese, tedesco, russo, polacco e ceco."],
+];
+
+export default function App() {
   const groups = useMemo(() => {
     const g = [
-      { id: "2", name: "Monolith 2", sub: "Giochi, Shard nella barra, distintivi, profilo nuovo", list: [] },
-      { id: "1", name: "Monolith 1", sub: "Riepilogo della domenica, legame, preferiti", list: [] },
-      { id: "0", name: "Le origini", sub: "Dalla prima chat ai luoghi comuni", list: [] },
+      { id: "2", name: "Monolith 2", list: [] },
+      { id: "1", name: "Monolith 1", list: [] },
+      { id: "0", name: "Le origini", list: [] },
     ];
     versions.forEach((v) => (g.find((x) => x.id === v.version.split(".")[0]) ?? g[2]).list.push(v));
     return g.filter((x) => x.list.length);
   }, []);
-  return (
-    <>
-      <div className="latest">
-        <div>
-          <span className="eyebrow" style={{ color: "inherit", opacity: 0.6 }}>Ultima versione</span>
-          <div className="v num" style={{ marginTop: 12 }}>{latest.version}</div>
-          <div className="meta num">{dateIt(latest.date)} · {mb(latest.size)} · build {latest.build}</div>
-          <ul>{latest.notes.slice(0, 4).map((n, k) => <li key={k}>{n}</li>)}</ul>
-        </div>
-        <a className="btn btn-primary" href={latest.url} rel="noopener"><Glyph.download /> Scarica l'APK</a>
-      </div>
-      {groups.map((g) => (
-        <div className="group" key={g.id}>
-          <div className="group-head">
-            <h3>{g.name}</h3>
-            <span>{g.list.length === 1 ? "1 versione" : `${g.list.length} versioni`} · {g.sub}</span>
-          </div>
-          {g.list.map((v) => <VersionRow key={v.version} v={v} latest={v === latest} />)}
-        </div>
-      ))}
-    </>
-  );
-}
-
-const rise = { initial: { y: 26 }, whileInView: { y: 0 }, viewport: { once: true, margin: "-60px" }, transition: { duration: 0.8, ease: [0.16, 1, 0.3, 1] } };
-
-export default function App() {
-  const latest = versions[0];
-  const [toast, setToast] = useState("");
-  const go = (id) => document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
   useEffect(() => {
     const h = location.hash.slice(1);
-    if (h) setTimeout(() => go(h), 300);
-    const on = () => go(location.hash.slice(1));
-    window.addEventListener("hashchange", on);
-    return () => window.removeEventListener("hashchange", on);
+    if (h) setTimeout(() => document.getElementById(h)?.scrollIntoView(), 200);
   }, []);
-  const copy = async () => {
-    try { await navigator.clipboard.writeText(latest.url); setToast("Link dell'APK copiato"); }
-    catch { setToast("Non riesco a copiare: tieni premuto il tasto Scarica e copia il link"); }
-    setTimeout(() => setToast(""), 2600);
-  };
-  const nav = (e, id) => { e.preventDefault(); go(id); try { history.replaceState(null, "", `#${id}`); } catch { /* frame without history */ } };
-
+  const vt = themeOf(N), ft = themeOf(N + 1);
   return (
-    <MotionConfig reducedMotion="user">
-      <nav className="nav">
-        <div className="wrap">
-          <a className="brand" href="#top" onClick={(e) => { e.preventDefault(); window.scrollTo({ top: 0, behavior: "smooth" }); }}>
-            <span className="brand-mark" aria-hidden="true" /> Monolith
-          </a>
-          <div className="nav-links">
-            <a href="#funzioni" onClick={(e) => nav(e, "funzioni")}>Funzioni</a>
-            <a href="#installa" onClick={(e) => nav(e, "installa")}>Installa</a>
-            <a href="#versioni" onClick={(e) => nav(e, "versioni")}>Versioni</a>
-            <a href="#domande" onClick={(e) => nav(e, "domande")}>Domande</a>
-          </div>
-          <a className="btn btn-primary btn-small" href={latest.url} rel="noopener"><Glyph.download /> {latest.version}</a>
-        </div>
-      </nav>
+    <>
+      <Bar />
+      <main>
+        {SCENES.map((s, i) => <Scene key={s.id} s={s} index={i} />)}
 
-      <Hero latest={latest} sizeText={mb(latest.size)} dateText={dateIt(latest.date)} onInstall={() => go("installa")} />
-
-      <section id="schede">
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Le cinque schede</span><h2>Una barra, tutto quello che fate insieme.</h2></div>
-            <p>Monolith si apre su cinque schede in basso. Tocca una scheda per vederla sul telefono.</p>
-          </motion.div>
-          <Tour />
-        </div>
-      </section>
-
-      <section id="funzioni">
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Funzioni</span><h2>Dentro c'è molto. Tutto in bianco e nero.</h2></div>
-            <p>Ogni aggiornamento aggiunge qualcosa scelto insieme. Questo è quello che trovi oggi nella {latest.version}.</p>
-          </motion.div>
-          <div className="features">
-            {FEATURES.map((f) => (
-              <motion.article className="feature" key={f.t} {...rise}>
-                <f.g />
-                <h3>{f.t}</h3>
-                <p>{f.d}</p>
-              </motion.article>
+        <section id="versioni" className="page" data-t={vt === DARK ? "dark" : "light"} style={{ background: css(vt.bg), color: css(vt.ink), "--ink": css(vt.ink), "--bg": css(vt.bg) }}>
+          <div className="text">
+            <span className="kicker">Versioni</span>
+            <h2 className="title">Tutte le versioni</h2>
+            <p className="lead">Dalla più recente. Le vecchie restano qui se vuoi tornare indietro.</p>
+            {groups.map((g) => (
+              <div className="group" key={g.id}>
+                <span className="kicker small">{g.name}</span>
+                <ul className="vers">{g.list.map((v) => <VersionRow key={v.version} v={v} />)}</ul>
+              </div>
             ))}
           </div>
-        </div>
-      </section>
+        </section>
 
-      <section id="schermate" style={{ paddingBottom: "clamp(48px, 6vw, 80px)" }}>
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Schermate</span><h2>Come appare, chiaro o scuro.</h2></div>
-            <p>Schermate vere dell'app con dati di prova. Il tema segue quello del telefono, oppure lo scegli in Impostazioni.</p>
-          </motion.div>
-        </div>
-        <div className="gallery" aria-label="Schermate di Monolith">
-          <div className="gallery-track">
-            {[...GALLERY, ...GALLERY].map(([src, cap], k) => (
-              <figure key={k} aria-hidden={k >= GALLERY.length}>
-                <Phone small src={src} alt={cap} />
-                <figcaption>{cap}</figcaption>
-              </figure>
-            ))}
+        <section id="domande" className="page" data-t={ft === DARK ? "dark" : "light"} style={{ background: css(ft.bg), color: css(ft.ink), "--ink": css(ft.ink), "--bg": css(ft.bg) }}>
+          <div className="text">
+            <span className="kicker">Domande</span>
+            <h2 className="title">Prima di chiedere</h2>
+            <dl className="faq">
+              {FAQ.map(([q, a]) => (
+                <div key={q}><dt>{q}</dt><dd>{a}</dd></div>
+              ))}
+            </dl>
+            <footer>
+              <span>Monolith · di Christian «Xoushal» Vedovi</span>
+              <a href={REPO} rel="noopener">Codice sorgente</a>
+            </footer>
           </div>
-        </div>
-      </section>
-
-      <section id="distintivi">
-        <div className="wrap split">
-          <motion.div {...rise}>
-            <span className="kicker">Distintivi</span>
-            <h2 style={{ fontSize: "clamp(38px, 5.2vw, 66px)" }}>37 distintivi, disegnati uno per uno.</h2>
-            <p className="mute" style={{ marginTop: 18, fontSize: 17, maxWidth: "32em" }}>
-              Si sbloccano usando l'app: il primo messaggio, cento giorni di fila con un amico, una chiamata di un'ora, uno Shard con dieci persone.
-              Ne scegli tre da mostrare sotto il tuo nome, e vedi quelli dei tuoi amici nel loro profilo.
-            </p>
-          </motion.div>
-          <motion.img {...rise} className="badges-img" src="shots/distintivi.webp" alt="La collezione dei distintivi di Monolith" loading="lazy" />
-        </div>
-      </section>
-
-      <section id="privacy">
-        <div className="wrap split">
-          <motion.div {...rise}>
-            <span className="kicker">Privacy</span>
-            <h2 style={{ fontSize: "clamp(38px, 5.2vw, 66px)" }}>Quello che scrivi resta tra voi.</h2>
-          </motion.div>
-          <div className="points">
-            {[
-              [Glyph.key, "Il profilo vive sul telefono", "Niente email, niente numero, niente password da ricordare: il tuo profilo è una chiave salvata solo sul tuo telefono."],
-              [Glyph.shield, "Messaggi cifrati", "Monolith non ha un server suo. I messaggi partono cifrati dal tuo telefono e li apre solo chi li riceve."],
-              [Glyph.eye, "Niente pubblicità", "Nessuna pubblicità e nessun tracciamento. La posizione si condivide solo quando la accendi tu, e solo con chi scegli."],
-            ].map(([G, t, d]) => (
-              <motion.div className="point" key={t} {...rise}>
-                <span className="ico"><G /></span>
-                <div><h3>{t}</h3><p>{d}</p></div>
-              </motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="installa">
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Tutorial</span><h2>Installarla in quattro passi.</h2></div>
-            <p>Monolith non passa dal Play Store: si scarica qui come file APK. Fai tutto dal telefono, ci vogliono due minuti.</p>
-          </motion.div>
-          <div className="steps">
-            <motion.div className="step" {...rise}>
-              <span className="step-n num">01</span>
-              <h3>Scarica l'APK</h3>
-              <p>Dal telefono tocca «Scarica». Se il browser avvisa che il file potrebbe essere dannoso, scegli «Scarica comunque».</p>
-              <div className="mock"><div className="row"><span>Monolith-{latest.build}.apk</span><span className="mute num">{mb(latest.size)}</span></div><div className="act">Scarica comunque</div></div>
-            </motion.div>
-            <motion.div className="step" {...rise}>
-              <span className="step-n num">02</span>
-              <h3>Consenti l'installazione</h3>
-              <p>Apri il file dalla notifica o dall'app File, nella cartella Download. La prima volta Android ti manda nelle impostazioni: attiva «Consenti da questa fonte» e torna indietro.</p>
-              <div className="mock"><div className="row"><span>Consenti da questa fonte</span><span className="sw" /></div></div>
-            </motion.div>
-            <motion.div className="step" {...rise}>
-              <span className="step-n num">03</span>
-              <h3>Installa</h3>
-              <p>Tocca «Installa». Se Play Protect dice che non conosce l'app, apri «Altri dettagli» e scegli «Installa comunque»: succede a tutte le app fuori dal Play Store.</p>
-              <div className="mock"><div className="row"><span className="mute">Altri dettagli</span><span className="act">Installa comunque</span></div></div>
-            </motion.div>
-            <motion.div className="step" {...rise}>
-              <span className="step-n num">04</span>
-              <h3>Apri Monolith</h3>
-              <p>Un breve filmato ti mostra tutte le funzioni. Poi scegli il nome utente e un'emoji, e concedi i permessi che ti servono: notifiche, e la posizione solo se vuoi la mappa.</p>
-              <div className="mock"><div className="row"><span>@il-tuo-nome</span><span className="act">Avanti</span></div></div>
-            </motion.div>
-          </div>
-
-          <motion.div className="note" {...rise} id="aggiornare">
-            <span className="ico"><Glyph.warn /></span>
-            <div>
-              <h3>Aggiornare da una versione vecchia</h3>
-              <p className="mute">Per ora ogni versione ha una firma diversa, quindi Android non la installa sopra quella che hai. Così non perdi niente:</p>
-              <ol>
-                <li>In Monolith apri <b>Impostazioni → Backup cifrato</b> e salva il file con una password. In alternativa copia il <b>codice di recupero</b>: riporta profilo e amici, non le chat.</li>
-                <li>Disinstalla Monolith.</li>
-                <li>Installa la nuova versione con i passi qui sopra.</li>
-                <li>All'apertura tocca <b>Ho già un profilo Monolith</b> e scegli il backup o il codice.</li>
-              </ol>
-            </div>
-          </motion.div>
-
-          <div className="firsts">
-            {[
-              [Glyph.friends, "Aggiungi un amico", "Scheda Amici: cerca il suo nome utente, inquadra il suo codice QR, oppure battete il cinque con i telefoni vicini."],
-              [Glyph.chat, "Scrivi e chiama", "Dal profilo di un amico tocca Scrivi, oppure chiama e videochiama. In chat il tasto per allegare apre foto, sticker, giochi e lavagna."],
-              [Glyph.shard, "Crea uno Shard", "Nella scheda Shard creane uno: dagli un nome, aggiungi stanze scritte e vocali e invita il tuo gruppo."],
-              [Glyph.profile, "Sistema il profilo", "Nel tuo profilo tocca Modifica in alto a destra: immagine, bio, copertina e i tre distintivi in vetrina."],
-            ].map(([G, t, d]) => (
-              <motion.div key={t} {...rise}><G /><h3>{t}</h3><p>{d}</p></motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <section id="versioni">
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Download</span><h2>Tutte le versioni.</h2></div>
-            <p>Raggruppate per serie, dalla più recente. Le versioni vecchie restano qui se ti serve tornare indietro.</p>
-          </motion.div>
-          <Versions />
-          <div style={{ display: "flex", gap: 12, flexWrap: "wrap", marginTop: 32 }}>
-            <button type="button" className="btn btn-ghost btn-small" onClick={copy}><Glyph.copy /> Copia il link dell'ultima versione</button>
-          </div>
-        </div>
-      </section>
-
-      <section id="domande">
-        <div className="wrap">
-          <motion.div className="sec-head" {...rise}>
-            <div><span className="kicker">Domande</span><h2>Prima di chiedere.</h2></div>
-            <p>Le risposte alle domande che arrivano più spesso.</p>
-          </motion.div>
-          <div className="faq">
-            {FAQ.map(([q, a]) => (
-              <motion.div key={q} {...rise}><h3>{q}</h3><p>{a}</p></motion.div>
-            ))}
-          </div>
-        </div>
-      </section>
-
-      <footer>
-        <div className="wrap">
-          <span className="brand"><span className="brand-mark" aria-hidden="true" /> Monolith</span>
-          <span>Ideata e fatta da Christian «Xoushal» Vedovi</span>
-          <span><a href={REPO} rel="noopener">Codice sorgente su GitHub</a></span>
-        </div>
-      </footer>
-      {toast && <div className="toast" role="status">{toast}</div>}
-    </MotionConfig>
+        </section>
+      </main>
+    </>
   );
 }
