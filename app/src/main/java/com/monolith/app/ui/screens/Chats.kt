@@ -133,6 +133,7 @@ import androidx.compose.runtime.mutableStateListOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.produceState
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.runtime.setValue
@@ -429,6 +430,11 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val tick = rememberTicker(5_000)
     val myPub = Graph.identity.keys?.pub ?: ""
     val openedAt = remember { now() }
+    // Monolith Kids: what the parent allows (the chat with the parent is always open)
+    val kidRules by com.monolith.app.kids.Kids.rules.collectAsState()
+    val kidParent by com.monolith.app.kids.Kids.parent.collectAsState()
+    val kidLimit = com.monolith.app.kids.Kids.isKid && conv != kidParent?.pk
+    val voiceOff by rememberUpdatedState(kidLimit && !kidRules.voice)
 
     var text by rememberSaveable(conv) { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
@@ -530,6 +536,10 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         if (res[Manifest.permission.RECORD_AUDIO] == true || hasPerm(ctx, Manifest.permission.RECORD_AUDIO)) Graph.calls.startCall(conv, pendingVideo)
     }
     fun call(video: Boolean) {
+        if (kidLimit && (!kidRules.calls || (video && !kidRules.video))) {
+            Toast.makeText(ctx, t("Il tuo genitore ha messo in pausa le chiamate"), Toast.LENGTH_SHORT).show()
+            return
+        }
         pendingVideo = video
         val need = buildList {
             if (!hasPerm(ctx, Manifest.permission.RECORD_AUDIO)) add(Manifest.permission.RECORD_AUDIO)
@@ -702,7 +712,8 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         }
 
         // ---- composer
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        if (kidLimit && !kidRules.chat) com.monolith.app.kids.KidPausedBar(t("Le chat sono in pausa. La chat con il tuo genitore resta sempre aperta."))
+        else Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
                 AnimatedContent(recording, label = "composer", modifier = Modifier.weight(1f)) { rec ->
                     if (rec) {
@@ -722,10 +733,11 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                             Box {
                                 IconButton(onClick = { attach = true }) { Icon(Icons.Rounded.Add, t("Allega")) }
                                 DropdownMenu(expanded = attach, onDismissRequest = { attach = false }) {
-                                    DropdownMenuItem(text = { Text(t("Galleria")) }, leadingIcon = { Icon(Icons.Rounded.Image, null) }, onClick = {
+                                    val photosOk = !kidLimit || kidRules.photos
+                                    if (photosOk) DropdownMenuItem(text = { Text(t("Galleria")) }, leadingIcon = { Icon(Icons.Rounded.Image, null) }, onClick = {
                                         attach = false; pickPhoto.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                     })
-                                    DropdownMenuItem(text = { Text(t("Fotocamera")) }, leadingIcon = { Icon(Icons.Rounded.PhotoCamera, null) }, onClick = {
+                                    if (photosOk) DropdownMenuItem(text = { Text(t("Fotocamera")) }, leadingIcon = { Icon(Icons.Rounded.PhotoCamera, null) }, onClick = {
                                         attach = false
                                         if (hasPerm(ctx, Manifest.permission.CAMERA)) launchCamera() else camPerm.launch(Manifest.permission.CAMERA)
                                     })
@@ -734,11 +746,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                         attach = false; locPerm.launch(arrayOf(Manifest.permission.ACCESS_FINE_LOCATION, Manifest.permission.ACCESS_COARSE_LOCATION))
                                     })
                                     DropdownMenuItem(text = { Text(t("Evento dall'agenda")) }, leadingIcon = { Icon(Icons.Rounded.Event, null) }, onClick = { attach = false; shareEvent = true })
-                                    DropdownMenuItem(text = { Text(t("Foto a vista unica")) }, leadingIcon = { Icon(Icons.Rounded.LooksOne, null) }, onClick = {
+                                    // a photo that disappears could not be seen by the parent: never in Monolith Kids
+                                    if (!com.monolith.app.kids.Kids.edition) DropdownMenuItem(text = { Text(t("Foto a vista unica")) }, leadingIcon = { Icon(Icons.Rounded.LooksOne, null) }, onClick = {
                                         attach = false; pickOnce.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
                                     })
-                                    DropdownMenuItem(text = { Text(t("Giochi e dadi")) }, leadingIcon = { Icon(Icons.Rounded.SportsEsports, null) }, onClick = { attach = false; funSheet = true })
-                                    DropdownMenuItem(text = { Text(t("Sticker")) }, leadingIcon = { Icon(Icons.Rounded.EmojiEmotions, null) }, onClick = { attach = false; stickerSheet = true })
+                                    if (!kidLimit || kidRules.games) DropdownMenuItem(text = { Text(t("Giochi e dadi")) }, leadingIcon = { Icon(Icons.Rounded.SportsEsports, null) }, onClick = { attach = false; funSheet = true })
+                                    if (photosOk) DropdownMenuItem(text = { Text(t("Sticker")) }, leadingIcon = { Icon(Icons.Rounded.EmojiEmotions, null) }, onClick = { attach = false; stickerSheet = true })
                                     DropdownMenuItem(text = { Text(t("Messaggio da grattare")) }, leadingIcon = { Icon(Icons.Rounded.AutoAwesome, null) }, onClick = { attach = false; scratchDialog = true })
                                     DropdownMenuItem(text = { Text(t("Programma messaggio")) }, leadingIcon = { Icon(Icons.Rounded.Schedule, null) }, onClick = { attach = false; scheduleDialog = true })
                                 }
@@ -798,6 +811,10 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                 .pointerInput(conv) {
                                     awaitEachGesture {
                                         val down = awaitFirstDown()
+                                        if (voiceOff) {
+                                            Toast.makeText(ctx, t("Il tuo genitore ha messo in pausa i vocali"), Toast.LENGTH_SHORT).show()
+                                            return@awaitEachGesture
+                                        }
                                         if (!hasPerm(ctx, Manifest.permission.RECORD_AUDIO)) {
                                             micPerm.launch(Manifest.permission.RECORD_AUDIO)
                                             return@awaitEachGesture

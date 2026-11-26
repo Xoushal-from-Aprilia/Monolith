@@ -112,6 +112,7 @@ object Graph {
         Sounds.watchCalls()
         shards = com.monolith.app.net.ShardManager(application, scope)
         dev = com.monolith.app.net.DevChannel(application, scope)
+        com.monolith.app.kids.Kids.init(application)
         together = com.monolith.app.net.Together(application)
         places = PlacesStore(application)
         location = LocationShare(application, scope)
@@ -159,6 +160,33 @@ object Graph {
         }
     }
 
+    /**
+     * Deletes the account and everything on this phone, then restarts the app on the welcome screen.
+     * A Kids parent first deletes the children's accounts too.
+     */
+    suspend fun wipeEverything(ctx: android.content.Context) {
+        runCatching { com.monolith.app.kids.Kids.wipeAllChildren() }
+        relays.stop()
+        db.clearAllTables()
+        places.clear()
+        scheduled.clear(); pins.clear(); statuses.clear(); together.clear(); bondDays.clear(); favorites.clear(); saved.clear(); guard.clear(); medical.clear(); diary.setEnabled(false); diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx); nearby.clear(); com.monolith.app.core.AutoBackup.clear(ctx)
+        com.monolith.app.kids.Kids.clear()
+        identity.reset()
+        prefs.lastWrapSec = 0
+        prefs.permissionsDone = false
+        AppLock.setEnabled(false)
+        kotlinx.coroutines.withContext(Dispatchers.Main) {
+            MonolithService.stop(ctx)
+            runCatching {
+                ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let {
+                    it.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK or android.content.Intent.FLAG_ACTIVITY_CLEAR_TASK)
+                    ctx.startActivity(it)
+                }
+            }
+            android.os.Process.killProcess(android.os.Process.myPid())
+        }
+    }
+
     /** redraw the home screen agenda widget */
     fun refreshWidget() {
         scope.launch { runCatching { AgendaWidget().updateAll(app) } }
@@ -194,6 +222,7 @@ object Graph {
                 }
             }
             diary.start()
+            com.monolith.app.kids.Kids.start()
         }
         MonolithService.start(app)
     }

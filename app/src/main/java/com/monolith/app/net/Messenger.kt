@@ -226,6 +226,8 @@ class Messenger(
     suspend fun handlePayload(from: String, p: JSONObject, sentAt: Long, viaRtc: Boolean) {
         // accounts blocked by the developer reach nobody
         if (Graph.dev.isBlocked(from)) return
+        // Monolith Kids: on a child's phone only the parent and the approved contacts get through
+        if (com.monolith.app.kids.Kids.intercept(from, p)) return
         val friend = db.friends().get(from)
         val isFriend = friend?.status == FriendStatus.FRIEND
         if (isFriend && viaRtc) markOnline(from)
@@ -868,6 +870,8 @@ class Messenger(
     }
 
     suspend fun publishProfile() {
+        // Monolith Kids accounts never appear in the public directory
+        if (com.monolith.app.kids.Kids.edition) return
         val k = me() ?: return
         val p = identity.profile.value ?: return
         val ev = NostrEvent(

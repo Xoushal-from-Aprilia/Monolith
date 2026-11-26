@@ -196,7 +196,8 @@ fun AgendaScreen(nav: NavHostController) {
                 }
             }
         }
-        ExtendedFloatingActionButton(
+        val kidRules by com.monolith.app.kids.Kids.rules.collectAsState()
+        if (!(com.monolith.app.kids.Kids.isKid && !kidRules.agendaEdit)) ExtendedFloatingActionButton(
             onClick = {
                 when (mode) {
                     0 -> nav.navigate(Routes.event("new", selected))
@@ -603,6 +604,12 @@ fun EventEditorScreen(nav: NavHostController, id: String, date: Long) {
     val reminderSet = reminders.split(",").mapNotNull { it.toIntOrNull() }.toSet()
 
     fun save() {
+        // Monolith Kids: the parent may keep the child's agenda for themselves
+        if (com.monolith.app.kids.Kids.isKid && !com.monolith.app.kids.Kids.rules.value.agendaEdit) {
+            android.widget.Toast.makeText(Graph.app, t("Il tuo genitore gestisce la tua agenda"), android.widget.Toast.LENGTH_SHORT).show()
+            nav.popBackStack()
+            return
+        }
         val base = loaded
         val e = AgendaEvent(
             id = base?.id ?: newId(),
@@ -847,7 +854,8 @@ fun EventEditorScreen(nav: NavHostController, id: String, date: Long) {
             text = { Text(if (!invited && invitees.isNotEmpty()) t("Gli amici invitati riceveranno l'annullamento.") else t("Non potrai annullare questa azione.")) },
             confirmButton = {
                 TextButton(onClick = {
-                    loaded?.let { e -> Graph.scope.launch { Graph.messenger.deleteEvent(e) } }
+                    if (!(com.monolith.app.kids.Kids.isKid && !com.monolith.app.kids.Kids.rules.value.agendaEdit))
+                        loaded?.let { e -> Graph.scope.launch { Graph.messenger.deleteEvent(e) } }
                     confirmDelete = false
                     nav.popBackStack()
                 }) { Text(t("Elimina")) }

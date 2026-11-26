@@ -58,6 +58,7 @@ class Shots {
     @Before
     fun seed() = runBlocking {
         val ctx = ApplicationProvider.getApplicationContext<Context>()
+        com.monolith.app.kids.Kids.preview(com.monolith.app.kids.KidRole.NONE)
         Graph.identity.previewAs(Keys(meSk, me), Profile("christian", "Christian", "🗿", "Costruisco cose. Monolith ogni giorno."))
         val day = 86_400_000L
         val now = System.currentTimeMillis()
@@ -218,6 +219,64 @@ class Shots {
 
     @Test fun verified_profile() = shot("49_verified_profile") { verified(); com.monolith.app.ui.screens.ProfileScreen(it, ada) }
     @Test fun verified_chats() = shot("50_verified_chats") { verified(); com.monolith.app.ui.HomeScreen(it, 1) {} }
+    // ---- Monolith Kids
+    @Test fun kids_roles() = shot("52_kids_roles") { com.monolith.app.kids.RoleChoice {} }
+    @Test fun kids_pair() = shot("53_kids_pair") { kidsKid(paired = false); com.monolith.app.kids.KidPairScreen() }
+    @Test fun kids_parent_home() = shot("54_kids_parent_home") { kidsParent(); com.monolith.app.ui.HomeScreen(it, 5) {} }
+    @Config(qualifiers = "+h1500dp") @Test fun kids_child_messages() = shot("55_kids_child_messages") { kidsParent(); com.monolith.app.kids.ChildScreen(it, kid, 0) }
+    @Config(qualifiers = "+h1500dp") @Test fun kids_child_agenda() = shot("56_kids_child_agenda") { kidsParent(); com.monolith.app.kids.ChildScreen(it, kid, 1) }
+    @Config(qualifiers = "+h1500dp") @Test fun kids_child_contacts() = shot("57_kids_child_contacts") { kidsParent(); com.monolith.app.kids.ChildScreen(it, kid, 2) }
+    @Config(qualifiers = "+h1700dp") @Test fun kids_child_rules() = shot("58_kids_child_rules") { kidsParent(); com.monolith.app.kids.ChildScreen(it, kid, 3) }
+    @Test fun kids_child_chat() = shot("59_kids_child_chat", act = { click("Ada Rossi") }) { kidsParent(); com.monolith.app.kids.ChildScreen(it, kid, 0) }
+    @Test fun kids_kid_friends() = shot("60_kids_kid_friends") { kidsKid(); com.monolith.app.ui.HomeScreen(it, 3) {} }
+    @Test fun kids_kid_chat_paused() = shot("61_kids_kid_paused") { kidsKid(com.monolith.app.kids.KidRules(chat = false)); com.monolith.app.ui.screens.ChatScreen(it, ada) }
+    @Test fun kids_kid_quiet() = shot("62_kids_kid_quiet") { com.monolith.app.kids.QuietWall("Mamma", 7 * 60) {} }
+    @Config(qualifiers = "+h2200dp") @Test fun kids_kid_settings() = shot("63_kids_kid_settings") { kidsKid(); com.monolith.app.ui.screens.SettingsScreen(it) }
+
+    private val kid = newPub()
+    private val mom = newPub()
+
+    private fun kidsParent() {
+        val now = System.currentTimeMillis()
+        val day = 86_400_000L
+        val today = java.util.Calendar.getInstance().apply { set(java.util.Calendar.HOUR_OF_DAY, 0); set(java.util.Calendar.MINUTE, 0); set(java.util.Calendar.SECOND, 0); set(java.util.Calendar.MILLISECOND, 0) }.timeInMillis
+        val child = com.monolith.app.kids.Child(
+            kid, "Sofia", "🐰", now - 30 * day,
+            rules = com.monolith.app.kids.KidRules(video = false, quietFrom = 21 * 60, quietTo = 7 * 60),
+            contacts = listOf(com.monolith.app.kids.KContact(ada, "Ada Rossi", "🦊", "ada"), com.monolith.app.kids.KContact(leo, "Leo Bianchi", "🐻", "leo")),
+            pending = listOf(com.monolith.app.kids.KContact(mia, "Mia Verdi", "🌙", "mia", "qr")),
+            events = listOf(
+                com.monolith.app.kids.KidEvent("k1", "Scuola", "🏫", today + day + 8 * 3_600_000L, null, false, ""),
+                com.monolith.app.kids.KidEvent("k2", "Lezione di piano", "🎹", today + day + 17 * 3_600_000L, null, false, ""),
+                com.monolith.app.kids.KidEvent("k3", "Festa di Leo", "🎂", today + 3 * day, null, true, ""),
+            ),
+            battery = 76, charging = false, seenAt = now - 120_000, version = "1.0.0",
+        )
+        val m = 60_000L
+        val mirror = listOf(
+            com.monolith.app.kids.MirrorMsg("x1", ada, "Ada Rossi", ada, false, now - 50 * m, "text", "Ciao Sofia! Domani vieni al parco?"),
+            com.monolith.app.kids.MirrorMsg("x2", ada, "Ada Rossi", kid, true, now - 48 * m, "text", "Sì! Chiedo alla mamma"),
+            com.monolith.app.kids.MirrorMsg("x3", ada, "Ada Rossi", ada, false, now - 40 * m, "photo", "Guarda il mio disegno"),
+            com.monolith.app.kids.MirrorMsg("x4", ada, "Ada Rossi", kid, true, now - 39 * m, "voice", ""),
+            com.monolith.app.kids.MirrorMsg("x5", ada, "Ada Rossi", ada, false, now - 30 * m, "text", "Allora alle 4 allo scivolo!"),
+            com.monolith.app.kids.MirrorMsg("x6", leo, "Leo Bianchi", leo, false, now - 180 * m, "text", "Hai fatto i compiti di mate?"),
+            com.monolith.app.kids.MirrorMsg("x7", leo, "Leo Bianchi", kid, true, now - 170 * m, "text", "Quasi, mi manca l'ultimo"),
+        )
+        com.monolith.app.kids.Kids.preview(com.monolith.app.kids.KidRole.PARENT, children = listOf(child), mirror = mapOf(kid to mirror))
+        runBlocking { Graph.db.friends().upsert(Friend(kid, "", "Sofia", "🐰", "", FriendStatus.FRIEND, now - 30 * day, lat = 45.46, lon = 9.19, locAt = now - 300_000)) }
+    }
+
+    private fun kidsKid(rules: com.monolith.app.kids.KidRules = com.monolith.app.kids.KidRules(), paired: Boolean = true) {
+        Graph.identity.previewAs(Keys(meSk, me), Profile("kids_a1b2c3d4", "Sofia", "🐰"))
+        runBlocking { Graph.db.friends().delete(tom) }
+        com.monolith.app.kids.Kids.preview(
+            com.monolith.app.kids.KidRole.KID,
+            parent = if (paired) com.monolith.app.kids.KContact(mom, "Mamma", "👩") else null,
+            rules = rules,
+            asks = listOf(com.monolith.app.kids.KContact(newPub(), "Giulia", "🦋", "giulia", "qr")),
+        )
+    }
+
     @Config(qualifiers = "+h1400dp") @Test fun verify_settings() = shot("51_verify_settings") { Graph.dev.preview(com.monolith.app.net.DevState(active = true)); com.monolith.app.ui.screens.SettingsScreen(it) }
 
     private fun verified() {

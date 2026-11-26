@@ -172,6 +172,9 @@ fun SettingsScreen(nav: NavHostController) {
     var backupBusy by remember { mutableStateOf(false) }
     var wipe by remember { mutableStateOf(false) }
     val myPub = Graph.identity.keys?.pub ?: ""
+    // Monolith Kids: a child's settings are fewer, and some things only the parent can do
+    val kidsEd = com.monolith.app.kids.Kids.edition
+    val kid = com.monolith.app.kids.Kids.isKid
 
     val createDoc = rememberLauncherForActivityResult(ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
         if (uri == null) { backupBusy = false; return@rememberLauncherForActivityResult }
@@ -205,17 +208,26 @@ fun SettingsScreen(nav: NavHostController) {
                             Text(p.displayName, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                             com.monolith.app.ui.components.VerifiedBadge(myPub, 20.dp)
                         }
-                        Text("@${p.username}  ·  #${tagOf(myPub)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(
+                            when {
+                                kid -> t("Account Kids")
+                                kidsEd -> t("Account Genitore")
+                                else -> "@${p.username}  ·  #${tagOf(myPub)}"
+                            },
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
                         Text(t("Vedi il tuo profilo"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
                     }
                     Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
+            if (kid) com.monolith.app.kids.KidFollowedCard(Modifier.padding(horizontal = 20.dp, vertical = 4.dp))
             SettingRow(Icons.Rounded.Edit, t("Modifica profilo"), t("Immagine, nome, bio, copertina e distintivi")) { nav.navigate("editprofile") }
             SettingRow(Icons.Rounded.QrCode2, t("Il mio codice QR"), t("Fatti aggiungere di persona")) { showQr = true }
             val devNow by Graph.dev.state.collectAsState()
             val myVerified = devNow.verified[myPub]
-            if (myVerified != null) {
+            if (kidsEd) Unit
+            else if (myVerified != null) {
                 SettingRow(Icons.Rounded.Verified, t("Account verificato"), myVerified.title.ifBlank { t("Verificato dallo sviluppatore") }, trailing = { com.monolith.app.ui.components.VerifiedBadge(myPub, 22.dp) }) {}
             } else {
                 val asked = Graph.dev.verifyAskedAt
@@ -244,7 +256,7 @@ fun SettingsScreen(nav: NavHostController) {
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
             SettingRow(Icons.Rounded.MusicNote, t("Suoni e vibrazione"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
-            SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
+            if (!kidsEd) SettingRow(Icons.Rounded.Apps, t("Icona dell'app"), t("Scegli come appare sulla schermata Home")) { iconSheet = true }
             SettingRow(Icons.Rounded.Wallpaper, t("Sfondo animato"), t("Il monolite tra le stelle come sfondo del telefono")) {
                 val comp = android.content.ComponentName(ctx, com.monolith.app.widget.MonolithWallpaper::class.java)
                 val i = android.content.Intent(android.app.WallpaperManager.ACTION_CHANGE_LIVE_WALLPAPER)
@@ -264,11 +276,11 @@ fun SettingsScreen(nav: NavHostController) {
                 com.monolith.app.net.Weekly.setEnabled(ctx, it)
             }
             SettingRow(Icons.Rounded.AutoAwesome, t("La tua settimana"), t("Gli ultimi 7 giorni, raccontati in breve")) { nav.navigate("wrapped") }
-            SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
-            SettingRow(Icons.Rounded.Movie, t("Rivedi il filmato"), t("Tutte le funzioni di Monolith in un minuto")) { nav.navigate("film") }
+            if (!kidsEd) SettingRow(Icons.Rounded.Route, t("Diario dei luoghi"), t("Dove ti sei fermato, solo su questo telefono")) { nav.navigate("diary") }
+            if (!kidsEd) SettingRow(Icons.Rounded.Movie, t("Rivedi il filmato"), t("Tutte le funzioni di Monolith in un minuto")) { nav.navigate("film") }
 
             SectionLabel(t("Privacy e sicurezza"), Modifier.padding(top = 20.dp))
-            SettingSwitch(Icons.Rounded.Fingerprint, t("Blocco app"), t("Impronta, volto o PIN all'apertura"), lockOn) { on ->
+            if (!kid) SettingSwitch(Icons.Rounded.Fingerprint, t("Blocco app"), t("Impronta, volto o PIN all'apertura"), lockOn) { on ->
                 if (!Unlock.available(ctx)) {
                     Toast.makeText(ctx, t("Imposta prima un blocco schermo sul telefono"), Toast.LENGTH_LONG).show()
                 } else {
@@ -279,14 +291,16 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             SettingRow(Icons.Rounded.MedicalServices, t("Scheda medica"), t("Inviata solo insieme all'SOS")) { medSheet = true }
-            SettingRow(Icons.Rounded.Key, t("Codice di recupero"), t("Serve per ripristinare il profilo su un altro telefono")) {
-                if (Unlock.available(ctx)) Unlock.prompt(ctx, t("Mostra il codice di recupero")) { showCode = true } else showCode = true
+            if (!kid) {
+                SettingRow(Icons.Rounded.Key, t("Codice di recupero"), t("Serve per ripristinare il profilo su un altro telefono")) {
+                    if (Unlock.available(ctx)) Unlock.prompt(ctx, t("Mostra il codice di recupero")) { showCode = true } else showCode = true
+                }
+                SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Salva chat, agenda, liste e amici in un file protetto da password")) { backupDialog = true }
+                AutoBackupRow()
             }
-            SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Salva chat, agenda, liste e amici in un file protetto da password")) { backupDialog = true }
-            AutoBackupRow()
 
             SectionLabel(t("Connessione"), Modifier.padding(top = 20.dp))
-            SettingSwitch(Icons.Rounded.Wifi, t("Sempre attivo"), t("Ricevi messaggi e chiamate anche ad app chiusa"), alwaysOnline) {
+            if (!kid) SettingSwitch(Icons.Rounded.Wifi, t("Sempre attivo"), t("Ricevi messaggi e chiamate anche ad app chiusa"), alwaysOnline) {
                 alwaysOnline = it
                 Graph.prefs.alwaysOnline = it
                 if (it) MonolithService.start(ctx) else if (!Graph.location.sharing.value) MonolithService.stop(ctx)
@@ -294,7 +308,7 @@ fun SettingsScreen(nav: NavHostController) {
             SettingRow(Icons.Rounded.Shield, t("Gestisci permessi"), t("Notifiche, posizione, fotocamera, microfono, batteria")) { nav.navigate("permissions?first=false") }
 
             SectionLabel(t("Monolith"), Modifier.padding(top = 20.dp))
-            SettingRow(Icons.Rounded.AutoStories, t("Journal"), t("Tutte le novità, versione per versione")) { nav.navigate("journal") }
+            if (!kidsEd) SettingRow(Icons.Rounded.AutoStories, t("Journal"), t("Tutte le novità, versione per versione")) { nav.navigate("journal") }
             SettingRow(Icons.Rounded.Favorite, t("Crediti"), "Christian “Xoushal” Vedovi") { nav.navigate("credits") }
             val devState by Graph.dev.state.collectAsState()
             if (devState.latest != null && Graph.dev.updateAvailable) {
@@ -309,7 +323,11 @@ fun SettingsScreen(nav: NavHostController) {
                 modifier = Modifier.padding(horizontal = 24.dp, vertical = 12.dp),
             )
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 20.dp))
-            TextButton(onClick = { wipe = true }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (kid) Text(
+                t("Solo il tuo genitore può eliminare questo account."),
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                modifier = Modifier.padding(horizontal = 24.dp, vertical = 16.dp),
+            ) else TextButton(onClick = { wipe = true }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(t("Esci ed elimina i dati da questo telefono"), color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(24.dp))
@@ -386,28 +404,16 @@ fun SettingsScreen(nav: NavHostController) {
         MonoDialog(
             onDismissRequest = { wipe = false },
             title = { Text(t("Eliminare tutto?")) },
-            text = { Text(t("Chat, agenda, liste e amici verranno cancellati da questo telefono. Senza il codice di recupero o un backup non potrai recuperare questo profilo.")) },
+            text = {
+                Text(
+                    t("Chat, agenda, liste e amici verranno cancellati da questo telefono. Senza il codice di recupero o un backup non potrai recuperare questo profilo.") +
+                        if (com.monolith.app.kids.Kids.isParent && com.monolith.app.kids.Kids.children.value.isNotEmpty()) "\n\n" + t("Verranno eliminati anche gli account dei bambini collegati.") else ""
+                )
+            },
             confirmButton = {
                 TextButton(onClick = {
                     wipe = false
-                    Graph.scope.launch {
-                        Graph.relays.stop()
-                        Graph.db.clearAllTables()
-                        Graph.places.clear()
-                        Graph.scheduled.clear(); Graph.pins.clear(); Graph.statuses.clear(); Graph.together.clear(); Graph.bondDays.clear(); Graph.favorites.clear(); Graph.saved.clear(); Graph.guard.clear(); Graph.medical.clear(); Graph.diary.setEnabled(false); Graph.diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); Graph.profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx); Graph.nearby.clear(); com.monolith.app.core.AutoBackup.clear(ctx)
-                        Graph.identity.reset()
-                        Graph.prefs.lastWrapSec = 0
-                        Graph.prefs.permissionsDone = false
-                        AppLock.setEnabled(false)
-                        withContext(Dispatchers.Main) {
-                            MonolithService.stop(ctx)
-                            ctx.packageManager.getLaunchIntentForPackage(ctx.packageName)?.let {
-                                it.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TASK)
-                                ctx.startActivity(it)
-                            }
-                            Process.killProcess(Process.myPid())
-                        }
-                    }
+                    Graph.scope.launch { Graph.wipeEverything(ctx) }
                 }) { Text(t("Elimina")) }
             },
             dismissButton = { TextButton(onClick = { wipe = false }) { Text(t("Annulla")) } },

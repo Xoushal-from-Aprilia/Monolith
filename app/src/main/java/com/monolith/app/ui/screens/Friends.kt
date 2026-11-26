@@ -142,6 +142,9 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
     var showQr by remember { mutableStateOf(false) }
     val tick by produceState(0) { while (true) { delay(20_000); value++ } }
     val myPub = Graph.identity.keys?.pub ?: ""
+    val kid = com.monolith.app.kids.Kids.isKid
+    val kidsEdition = com.monolith.app.kids.Kids.edition
+    val asks by com.monolith.app.kids.Kids.asks.collectAsState()
 
     val scanner = rememberLauncherForActivityResult(ScanContract()) { res ->
         val parsed = FriendQr.parse(res.contents) ?: run {
@@ -152,6 +155,14 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
         Graph.scope.launch {
             val found = Graph.messenger.searchUsers(parsed.first).firstOrNull()
             val u = found ?: UserResult(parsed.first, Profile(parsed.second, parsed.second, "🙂"), now())
+            if (com.monolith.app.kids.Kids.isKid) {
+                // a child never adds anyone alone: the parent decides
+                com.monolith.app.kids.Kids.askToAdd(com.monolith.app.kids.KContact(u.pubkey, u.profile.displayName, u.profile.emoji, u.profile.username, "qr"))
+                kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+                    Toast.makeText(ctx, t("Chiesto al tuo genitore"), Toast.LENGTH_SHORT).show()
+                }
+                return@launch
+            }
             val wasFriend = Graph.db.friends().get(u.pubkey)?.status == FriendStatus.FRIEND
             Graph.messenger.sendFriendRequest(u, verified = true)
             kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
@@ -195,7 +206,10 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
         item(key = "me") {
             Surface(shape = MaterialTheme.shapes.large, color = MaterialTheme.colorScheme.surfaceContainerLow, modifier = Modifier.padding(horizontal = 16.dp, vertical = 4.dp).fillMaxWidth()) {
                 Column(Modifier.padding(14.dp)) {
-                    Row(Modifier.bounceClick(0.98f) { copyText(ctx, "username", "@" + (profile?.username ?: "")) }, verticalAlignment = Alignment.CenterVertically) {
+                    if (kidsEdition) {
+                        Text(t("Per aggiungere un amico, inquadrate a vicenda il codice QR. Il tuo genitore approva ogni nuovo contatto."),
+                            style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else Row(Modifier.bounceClick(0.98f) { copyText(ctx, "username", "@" + (profile?.username ?: "")) }, verticalAlignment = Alignment.CenterVertically) {
                         Column(Modifier.weight(1f)) {
                             Text(t("Il tuo username"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                             Text("@" + (profile?.username ?: "") + "  #" + tagOf(myPub), style = MaterialTheme.typography.titleMedium)
@@ -216,14 +230,30 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
                             Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(t("Scansiona"))
                         }
                     }
-                    Spacer(Modifier.height(8.dp))
-                    OutlinedButton(onClick = { nav.navigate("highfive") }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
-                        Text("🖐️"); Spacer(Modifier.width(8.dp)); Text(t("Batti cinque per aggiungere"))
+                    if (!kidsEdition) {
+                        Spacer(Modifier.height(8.dp))
+                        OutlinedButton(onClick = { nav.navigate("highfive") }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                            Text("🖐️"); Spacer(Modifier.width(8.dp)); Text(t("Batti cinque per aggiungere"))
+                        }
                     }
                 }
             }
         }
-        item(key = "search") {
+        if (kid && asks.isNotEmpty()) {
+            item(key = "askLabel") { SectionLabel(t("In attesa del tuo genitore")) }
+            items(asks, key = { "a" + it.pk }) { c ->
+                Row(Modifier.fillMaxWidth().animateItem().padding(horizontal = 20.dp, vertical = 8.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(c.emoji, 48.dp)
+                    Spacer(Modifier.width(14.dp))
+                    Column(Modifier.weight(1f)) {
+                        Text(c.name, style = MaterialTheme.typography.titleMedium, maxLines = 1)
+                        Text(t("Richiesta inviata al genitore"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Icon(Icons.Rounded.HourglassTop, null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        }
+        if (!kid) item(key = "search") {
             OutlinedTextField(
                 value = query,
                 onValueChange = { query = it.take(80) },

@@ -35,11 +35,13 @@ import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.material.icons.Icons
 import androidx.compose.material.icons.outlined.CalendarMonth
 import androidx.compose.material.icons.outlined.Forum
+import androidx.compose.material.icons.outlined.FamilyRestroom
 import androidx.compose.material.icons.outlined.Map
 import androidx.compose.material.icons.outlined.People
 import androidx.compose.material.icons.rounded.CalendarMonth
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.FamilyRestroom
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.People
 import androidx.compose.material3.Badge
@@ -197,6 +199,8 @@ private fun LockScreen() {
 @Composable
 fun AppRoot() {
     val profile by Graph.identity.profile.collectAsState()
+    val kidsRole by com.monolith.app.kids.Kids.role.collectAsState()
+    val kidParent by com.monolith.app.kids.Kids.parent.collectAsState()
     var intro by rememberSaveable { mutableStateOf(true) }
     LaunchedEffect(Unit) {
         delay(1450)
@@ -207,6 +211,8 @@ fun AppRoot() {
             targetState = when {
                 intro -> 0
                 profile == null -> 1
+                // Monolith Kids: a child's phone waits for the parent before opening
+                com.monolith.app.kids.Kids.edition && kidsRole == com.monolith.app.kids.KidRole.KID && kidParent == null -> 3
                 else -> 2
             },
             transitionSpec = {
@@ -217,10 +223,12 @@ fun AppRoot() {
         ) { stage ->
             when (stage) {
                 0 -> IntroSplash()
-                1 -> OnboardingFlow()
+                1 -> if (com.monolith.app.kids.Kids.edition) com.monolith.app.kids.KidsOnboarding() else OnboardingFlow()
+                3 -> com.monolith.app.kids.KidPairScreen()
                 else -> MainNav()
             }
         }
+        if (profile != null && !intro) com.monolith.app.kids.KidQuietOverlay()
         if (profile != null && !intro) com.monolith.app.ui.screens.DevOverlays()
         AnimatedVisibility(AppLock.locked && profile != null && !intro, enter = fadeIn(), exit = fadeOut(tween(350))) {
             LockScreen()
@@ -266,7 +274,7 @@ private fun MainNav() {
     val ctx = LocalContext.current
     val nav = rememberNavController()
     LaunchedEffect(nav) { nav.currentBackStackEntryFlow.collect { NavBus.route.value = it.destination.route } }
-    val homeTab = rememberSaveable { mutableIntStateOf(0) }
+    val homeTab = rememberSaveable { mutableIntStateOf(if (com.monolith.app.kids.Kids.isParent) 5 else 0) }
     val req by NavBus.requests.collectAsState()
     val call by Graph.calls.state.collectAsState()
 
@@ -382,6 +390,7 @@ private fun MainNav() {
                 composable("group/new") {
                     CompositionLocalProvider(LocalNavScope provides this) { NewGroupScreen(nav) }
                 }
+                composable("kid/{pk}") { entry -> com.monolith.app.kids.ChildScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("settings") {
                     CompositionLocalProvider(LocalNavScope provides this) { SettingsScreen(nav) }
                 }
@@ -425,13 +434,21 @@ private fun MainNav() {
 
 private data class TabSpec(val label: String, val on: ImageVector, val off: ImageVector)
 
-private val TABS = listOf(
-    TabSpec("Agenda", Icons.Rounded.CalendarMonth, Icons.Outlined.CalendarMonth),
-    TabSpec("Chat", Icons.Rounded.Forum, Icons.Outlined.Forum),
-    TabSpec("Mappa", Icons.Rounded.Map, Icons.Outlined.Map),
-    TabSpec("Amici", Icons.Rounded.People, Icons.Outlined.People),
-    TabSpec("Shard", com.monolith.app.ui.components.ShardIcons.Filled, com.monolith.app.ui.components.ShardIcons.Outline),
+private val TABS = mapOf(
+    0 to TabSpec("Agenda", Icons.Rounded.CalendarMonth, Icons.Outlined.CalendarMonth),
+    1 to TabSpec("Chat", Icons.Rounded.Forum, Icons.Outlined.Forum),
+    2 to TabSpec("Mappa", Icons.Rounded.Map, Icons.Outlined.Map),
+    3 to TabSpec("Amici", Icons.Rounded.People, Icons.Outlined.People),
+    4 to TabSpec("Shard", com.monolith.app.ui.components.ShardIcons.Filled, com.monolith.app.ui.components.ShardIcons.Outline),
+    5 to TabSpec("Bambini", Icons.Rounded.FamilyRestroom, Icons.Outlined.FamilyRestroom),
 )
+
+/** the tabs of the home screen: Monolith Kids shows fewer, and the parent's own */
+private fun tabIds(): List<Int> = when {
+    com.monolith.app.kids.Kids.isParent -> listOf(5, 1, 2)
+    com.monolith.app.kids.Kids.isKid -> listOf(0, 1, 2, 3)
+    else -> listOf(0, 1, 2, 3, 4)
+}
 
 @Composable
 internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) {
@@ -440,12 +457,14 @@ internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) 
     val unreadTotal = unread.filter { !com.monolith.app.net.Shard.isQuietConv(it.convId) && !it.convId.startsWith("g:shard.") }.sumOf { it.n }
     val unreadShards = unread.filter { it.convId.startsWith("g:shard.") }.sumOf { it.n }
     val requests = friends.count { it.status == FriendStatus.INCOMING }
+    val kidsAsks = com.monolith.app.kids.Kids.children.collectAsState().value.sumOf { it.pending.size }
 
     Scaffold(
         containerColor = MaterialTheme.colorScheme.background,
         bottomBar = {
             NavigationBar(containerColor = MaterialTheme.colorScheme.surfaceContainerLow, tonalElevation = 0.dp) {
-                TABS.forEachIndexed { i, tb ->
+                tabIds().forEach { i ->
+                    val tb = TABS.getValue(i)
                     val selected = tab == i
                     val scale by animateFloatAsState(if (selected) 1.12f else 1f, Motion.bouncy(), label = "tabScale")
                     val lift by animateDpAsState(if (selected) (-1).dp else 0.dp, Motion.bouncy(), label = "tabLift")
@@ -457,6 +476,7 @@ internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) 
                                 1 -> unreadTotal
                                 3 -> requests
                                 4 -> unreadShards
+                                5 -> kidsAsks
                                 else -> 0
                             }
                             val badgeScale by animateFloatAsState(if (badge > 0) 1f else 0f, Motion.bouncy(), label = "badge")
@@ -507,6 +527,7 @@ internal fun HomeScreen(nav: NavHostController, tab: Int, onTab: (Int) -> Unit) 
                 1 -> ChatListScreen(nav)
                 2 -> MapScreen(nav)
                 4 -> com.monolith.app.ui.screens.ShardsHome(nav)
+                5 -> com.monolith.app.kids.ParentHome(nav)
                 else -> FriendsScreen(nav, onOpenChat = { pk -> nav.navigate(Routes.chat(pk)) })
             }
         }

@@ -240,6 +240,10 @@ class Notifier(private val ctx: Context) {
 
     fun cancelFriendRequest(pk: String) = nm.cancel(("fr$pk").hashCode())
 
+    /** Monolith Kids: a child would like to add someone */
+    fun kidAsk(child: String, who: String, emoji: String) =
+        simple(("ka$child$who").hashCode(), t("{0} vuole aggiungere {1}", child, who), t("Apri Monolith Kids per approvare o rifiutare"), emoji, openApp(14) { putExtra(EXTRA_TAB, 5) })
+
     fun friendAccepted(name: String, emoji: String) =
         simple(("fa$name").hashCode(), t("{0} ha accettato la tua richiesta", name), t("Ora potete chattare, condividere eventi e posizione"), emoji, openApp(11) { putExtra(EXTRA_TAB, 3) })
 

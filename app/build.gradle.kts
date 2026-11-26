@@ -5,6 +5,9 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Monolith Kids has its own version number
+val kidsVersion = "1.0.0"
+
 android {
     namespace = "com.monolith.app"
     compileSdk = 35
@@ -14,9 +17,24 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "2.4.0"
+        versionName = "2.5.0"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
+    }
+
+    // the same code builds two apps: Monolith, and Monolith Kids (parent and child accounts)
+    flavorDimensions += "edition"
+    productFlavors {
+        create("standard") {
+            dimension = "edition"
+            buildConfigField("boolean", "KIDS", "false")
+        }
+        create("kids") {
+            dimension = "edition"
+            applicationId = "com.monolith.kids"
+            versionName = kidsVersion
+            buildConfigField("boolean", "KIDS", "true")
+        }
     }
 
     signingConfigs {

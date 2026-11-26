@@ -77,8 +77,9 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     fun isBlocked(pk: String) = pk in _state.value.blocked
     fun verifiedOf(pk: String): Verified? = _state.value.verified[pk]
     val blockedMe: Boolean get() = Graph.identity.keys?.pub?.let { isBlocked(it) } == true
-    val updateRequired: Boolean get() = _state.value.min?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
-    val updateAvailable: Boolean get() = _state.value.latest?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
+    // the version numbers are Monolith's: Monolith Kids has its own and is updated from the site
+    val updateRequired: Boolean get() = !BuildConfig.KIDS && _state.value.min?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
+    val updateAvailable: Boolean get() = !BuildConfig.KIDS && _state.value.latest?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
     val updateUrl: String get() = _state.value.latestUrl.ifBlank { RELEASES }
 
     fun start() {
