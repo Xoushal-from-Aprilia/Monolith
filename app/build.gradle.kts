@@ -6,7 +6,7 @@ plugins {
 }
 
 // Monolith Kids has its own version number
-val kidsVersion = "1.0.0"
+val kidsVersion = "1.1.0"
 
 android {
     namespace = "com.monolith.app"
@@ -17,7 +17,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "2.5.1"
+        versionName = "2.6.0"
         vectorDrawables { useSupportLibrary = true }
         ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a") }
     }

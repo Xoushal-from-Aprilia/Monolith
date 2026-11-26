@@ -1,5 +1,17 @@
 [
  {
+  "version": "1.1.0",
+  "date": "2026-11-26",
+  "build": null,
+  "notes": [
+   "Il codice QR ora si legge anche nel tema scuro",
+   "Se la fotocamera non legge il QR, il genitore può scrivere le 6 cifre del codice di controllo",
+   "Il telefono del bambino chiede conferma prima di collegarsi a un genitore",
+   "Le regole arrivano anche se il bambino conferma più tardi, e un collegamento mai confermato si può annullare",
+   "I messaggi dello sviluppatore arrivano come notifiche sullo schermo"
+  ]
+ },
+ {
   "version": "1.0.0",
   "date": "2026-11-26",
   "build": 51,

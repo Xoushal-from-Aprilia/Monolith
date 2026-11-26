@@ -233,6 +233,19 @@ class Shots {
     @Test fun kids_kid_quiet() = shot("62_kids_kid_quiet") { com.monolith.app.kids.QuietWall("Mamma", 7 * 60) {} }
     @Config(qualifiers = "+h2200dp") @Test fun kids_kid_settings() = shot("63_kids_kid_settings") { kidsKid(); com.monolith.app.ui.screens.SettingsScreen(it) }
 
+    // ---- the developer's powers, on the phones that receive them
+    @Test fun dev_message() = shot("64_dev_message") {
+        com.monolith.app.ui.screens.DevMessageDialog(com.monolith.app.net.DevMsg("1", "Grazie!", "Il tema viola arriva nella prossima versione. Intanto prova Lavanda in Impostazioni → Colori.", System.currentTimeMillis())) {}
+    }
+    @Test fun dev_device_wall() = shot("65_device_wall") { com.monolith.app.ui.screens.DeviceWallContent("Account multipli per spam", true) {} }
+    @Test fun dev_deleted() = shot("66_dev_deleted") { com.monolith.app.ui.screens.DeletedNoticeDialog("Spam ripetuto nei gruppi") {} }
+    @Test fun kids_pair_confirm() = shot("67_kids_pair_confirm") {
+        kidsKid(paired = false)
+        com.monolith.app.kids.Kids.preview(com.monolith.app.kids.KidRole.KID, pending = com.monolith.app.kids.PairAsk(mom, "Mamma", "👩", ""))
+        com.monolith.app.kids.KidPairScreen()
+    }
+    @Test fun kids_code() = shot("68_kids_code") { kidsParent(); com.monolith.app.kids.PairCodeDialog(com.monolith.app.kids.PairAsk(kid, "Sofia", "🐰", "")) {} }
+
     private val kid = newPub()
     private val mom = newPub()
 

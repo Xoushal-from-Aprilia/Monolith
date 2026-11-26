@@ -171,6 +171,7 @@ fun SettingsScreen(nav: NavHostController) {
     var backupPassword by remember { mutableStateOf("") }
     var backupBusy by remember { mutableStateOf(false) }
     var wipe by remember { mutableStateOf(false) }
+    var devInboxDialog by remember { mutableStateOf(false) }
     val myPub = Graph.identity.keys?.pub ?: ""
     // Monolith Kids: a child's settings are fewer, and some things only the parent can do
     val kidsEd = com.monolith.app.kids.Kids.edition
@@ -321,6 +322,8 @@ fun SettingsScreen(nav: NavHostController) {
                 }
             }
             if (devState.active) SettingRow(Icons.Rounded.Mail, t("Scrivi allo sviluppatore"), t("Idee, problemi o complimenti, cifrati")) { feedbackDialog = true }
+            val devInbox by Graph.dev.inbox.collectAsState()
+            if (devInbox.isNotEmpty()) SettingRow(Icons.Rounded.Mail, t("Messaggi dallo sviluppatore"), if (devInbox.size == 1) t("1 messaggio") else t("{0} messaggi", devInbox.size)) { devInboxDialog = true }
             Text(
                 t("Versione {0}", BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -377,6 +380,7 @@ fun SettingsScreen(nav: NavHostController) {
         )
     }
 
+    if (devInboxDialog) DevInboxDialog { devInboxDialog = false }
     if (backupDialog) {
         MonoDialog(
             onDismissRequest = { backupDialog = false },
@@ -457,6 +461,14 @@ internal fun SettingSwitch(icon: ImageVector, title: String, subtitle: String, c
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "2.6.0", "2026-11-26",
+        listOf(
+            "I messaggi dello sviluppatore arrivano come notifiche sullo schermo: annunci a tutti, nuove versioni e messaggi solo per te, che restano in Impostazioni",
+            "Lo sviluppatore può eliminare un account spiegando il motivo e bloccare un telefono; per riconoscere il telefono l'app gli manda un codice anonimo, cifrato",
+            "I codici QR si leggono sempre, anche nel tema scuro: prima comparivano in negativo e molte fotocamere non li riconoscevano",
+        ),
+    ),
     Release(
         "2.5.1", "2026-11-26",
         listOf(

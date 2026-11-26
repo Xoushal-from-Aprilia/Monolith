@@ -230,6 +230,9 @@ fun AppRoot() {
         }
         if (profile != null && !intro) com.monolith.app.kids.KidQuietOverlay()
         if (profile != null && !intro) com.monolith.app.ui.screens.DevOverlays()
+        if (profile == null && !intro) com.monolith.app.ui.screens.DeletedNotice()
+        // a phone blocked by the developer stays blocked, with or without an account
+        if (!intro) com.monolith.app.ui.screens.DeviceWall()
         AnimatedVisibility(AppLock.locked && profile != null && !intro, enter = fadeIn(), exit = fadeOut(tween(350))) {
             LockScreen()
         }

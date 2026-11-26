@@ -123,6 +123,9 @@ object Graph {
         rtc.keepAlive = { pk ->
             messenger.activeConv.value == pk || calls.state.value.peer == pk
         }
+        // the developer's document is read even before an account exists: a blocked phone stays blocked
+        dev.start()
+        scope.launch(Dispatchers.IO) { com.monolith.app.net.DeviceId.codes(application) }
 
         runCatching {
             // tile servers ask for a stable, app-specific User-Agent

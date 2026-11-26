@@ -223,7 +223,7 @@ fun FriendsScreen(nav: NavHostController, onOpenChat: (String) -> Unit) {
                         }
                         Button(
                             onClick = {
-                                scanner.launch(ScanOptions().setPrompt(t("Inquadra il codice QR del tuo amico")).setBeepEnabled(false).setOrientationLocked(true).setDesiredBarcodeFormats(ScanOptions.QR_CODE))
+                                scanner.launch(com.monolith.app.ui.components.qrScanOptions(t("Inquadra il codice QR del tuo amico")))
                             },
                             shape = CircleShape, modifier = Modifier.weight(1f),
                         ) {

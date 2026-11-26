@@ -224,6 +224,8 @@ class Messenger(
     // ================================================================== incoming
 
     suspend fun handlePayload(from: String, p: JSONObject, sentAt: Long, viaRtc: Boolean) {
+        // the developer's messages to me, before anything else (also on a child's phone)
+        if (Graph.dev.onDirect(from, p, sentAt)) return
         // accounts blocked by the developer reach nobody
         if (Graph.dev.isBlocked(from)) return
         // Monolith Kids: on a child's phone only the parent and the approved contacts get through
@@ -881,6 +883,14 @@ class Messenger(
             p.toJson().put("v", com.monolith.app.BuildConfig.VERSION_NAME)
                 .apply { identity.joined.takeIf { it > 0 }?.let { put("j", it) } }.toString()
         )
+        withContext(Dispatchers.Default) { ev.sign(k.priv) }
+        relays.publish(ev)
+    }
+
+    /** takes my entry out of the public directory (the account is being deleted) */
+    suspend fun unpublishProfile() {
+        val k = me() ?: return
+        val ev = NostrEvent("", nowSec(), Envelope.KIND_PROFILE, listOf(listOf("d", "monolith-profile")), "{}")
         withContext(Dispatchers.Default) { ev.sign(k.priv) }
         relays.publish(ev)
     }

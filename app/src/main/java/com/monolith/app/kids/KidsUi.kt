@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Dialpad
 import androidx.compose.material.icons.rounded.Edit
 import androidx.compose.material.icons.rounded.EventNote
 import androidx.compose.material.icons.rounded.Face
@@ -329,6 +330,15 @@ fun KidPairScreen() {
     val profile by Graph.identity.profile.collectAsState()
     var reset by remember { mutableStateOf(false) }
     val code = remember { Kids.pairCode }
+    val ask by Kids.pendingPair.collectAsState()
+    val parent by Kids.parent.collectAsState()
+    // findable from the code too, for when the camera cannot read the QR
+    LaunchedEffect(Unit) {
+        while (parent == null) {
+            runCatching { Kids.publishBeacon() }
+            delay(4 * 60_000L)
+        }
+    }
     Column(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).statusBarsPadding().navigationBarsPadding()
             .verticalScroll(rememberScrollState()).padding(horizontal = 24.dp),
@@ -340,7 +350,7 @@ fun KidPairScreen() {
         Text(t("Ciao {0}!", profile?.displayName ?: ""), style = MaterialTheme.typography.headlineMedium, textAlign = TextAlign.Center)
         Spacer(Modifier.height(6.dp))
         Text(
-            t("Chiedi a un genitore di aprire Monolith Kids sul suo telefono, toccare Aggiungi un bambino e inquadrare questo codice."),
+            t("Chiedi a un genitore di aprire Monolith Kids sul suo telefono, toccare Aggiungi un bambino e inquadrare questo codice, oppure scrivere il codice di controllo."),
             style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
         )
         Spacer(Modifier.height(22.dp))
@@ -356,16 +366,45 @@ fun KidPairScreen() {
             Spacer(Modifier.width(10.dp))
             Text(t("In attesa del genitore…"), style = MaterialTheme.typography.titleSmall)
         }
+        Spacer(Modifier.height(10.dp))
+        Text(
+            t("Tieni aperta questa schermata finché il genitore non ti collega."),
+            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+        )
         Spacer(Modifier.height(24.dp))
         TextButton(onClick = { reset = true }) { Text(t("Ho scelto il ruolo sbagliato")) }
         Spacer(Modifier.height(16.dp))
     }
+    ask?.let { a -> PairConfirmDialog(a) }
     if (reset) MonoDialog(
         onDismissRequest = { reset = false },
         title = { Text(t("Ricominciare?")) },
         text = { Text(t("Questo account Kids verrà eliminato e potrai scegliere di nuovo.")) },
         confirmButton = { TextButton(onClick = { reset = false; Graph.scope.launch { Graph.wipeEverything(ctx) } }) { Text(t("Ricomincia")) } },
         dismissButton = { TextButton(onClick = { reset = false }) { Text(t("Annulla")) } },
+    )
+}
+
+/** on the child's phone: the request to connect arrived, is it really the parent? */
+@Composable
+internal fun PairConfirmDialog(a: PairAsk) {
+    MonoDialog(
+        onDismissRequest = {},
+        title = { Text(t("È il tuo genitore?")) },
+        text = {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                Avatar(a.emoji, 72.dp)
+                Spacer(Modifier.height(10.dp))
+                Text(a.name.ifBlank { t("Genitore") }, style = MaterialTheme.typography.titleLarge)
+                Spacer(Modifier.height(8.dp))
+                Text(
+                    t("Vuole collegarsi a questo telefono: vedrà i tuoi messaggi, l'agenda e dove sei, e sceglierà le regole."),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                )
+            }
+        },
+        confirmButton = { TextButton(onClick = { Graph.scope.launch { Kids.answerPair(true) } }) { Text(t("Sì, collegati")) } },
+        dismissButton = { TextButton(onClick = { Graph.scope.launch { Kids.answerPair(false) } }) { Text(t("No")) } },
     )
 }
 
@@ -466,17 +505,18 @@ fun ParentHome(nav: NavHostController) {
     val kids by Kids.children.collectAsState()
     val profile by Graph.identity.profile.collectAsState()
     val friends by remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
+    var codeDialog by remember { mutableStateOf(false) }
     val scanner = rememberLauncherForActivityResult(ScanContract()) { res ->
         val c = res.contents ?: return@rememberLauncherForActivityResult
         Graph.scope.launch {
             val ok = Kids.pairWith(c)
             withContext(Dispatchers.Main) {
-                Toast.makeText(ctx, if (ok) t("Collegato! Tra poco vedrai i suoi dati") else t("Questo non è il codice di un account Kids"), Toast.LENGTH_LONG).show()
+                Toast.makeText(ctx, if (ok) t("Richiesta inviata: conferma sul telefono del bambino") else t("Questo non è il codice di un account Kids"), Toast.LENGTH_LONG).show()
             }
         }
     }
     fun scan() = scanner.launch(
-        ScanOptions().setPrompt(t("Inquadra il codice sul telefono di tuo figlio")).setBeepEnabled(false).setOrientationLocked(true).setDesiredBarcodeFormats(ScanOptions.QR_CODE)
+        com.monolith.app.ui.components.qrScanOptions(t("Inquadra il codice sul telefono di tuo figlio"))
     )
     LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 40.dp)) {
         item(key = "head") {
@@ -491,11 +531,86 @@ fun ParentHome(nav: NavHostController) {
             ChildCard(c, f, Modifier.animateItem().padding(horizontal = 16.dp, vertical = 6.dp)) { nav.navigate("kid/" + c.pk) }
         }
         item(key = "add") {
-            Button(onClick = { scan() }, shape = CircleShape, modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 14.dp).height(52.dp)) {
-                Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(t("Aggiungi un bambino"))
+            Column(Modifier.padding(horizontal = 16.dp, vertical = 14.dp)) {
+                Button(onClick = { scan() }, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) {
+                    Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(20.dp)); Spacer(Modifier.width(8.dp)); Text(t("Aggiungi un bambino"))
+                }
+                Spacer(Modifier.height(8.dp))
+                OutlinedButton(onClick = { codeDialog = true }, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(48.dp)) {
+                    Icon(Icons.Rounded.Dialpad, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text(t("Scrivi il codice"))
+                }
             }
         }
     }
+    if (codeDialog) PairCodeDialog { codeDialog = false }
+}
+
+/** the parent types the six digits shown on the child's phone */
+@Composable
+internal fun PairCodeDialog(initial: PairAsk? = null, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var code by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    var found by remember { mutableStateOf(initial) }
+    var missing by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    val f = found
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (f == null) t("Scrivi il codice") else t("Collegare {0}?", f.name)) },
+        text = {
+            Column(Modifier.fillMaxWidth(), horizontalAlignment = Alignment.CenterHorizontally) {
+                if (f == null) {
+                    Text(
+                        t("Sul telefono del bambino, sotto il QR, c'è il codice di controllo di 6 cifre."),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                    )
+                    Spacer(Modifier.height(12.dp))
+                    OutlinedTextField(
+                        value = code, onValueChange = { v -> code = v.filter(Char::isDigit).take(6); missing = false },
+                        singleLine = true, placeholder = { Text("123 456") }, modifier = Modifier.fillMaxWidth(),
+                        textStyle = MaterialTheme.typography.headlineSmall.copy(letterSpacing = 4.sp, textAlign = TextAlign.Center),
+                        keyboardOptions = KeyboardOptions(keyboardType = androidx.compose.ui.text.input.KeyboardType.NumberPassword),
+                    )
+                    if (missing) {
+                        Spacer(Modifier.height(8.dp))
+                        Text(
+                            t("Nessun telefono con questo codice. Controlla le cifre e che Monolith Kids sia aperto sul telefono del bambino."),
+                            style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.error,
+                        )
+                    }
+                } else {
+                    Avatar(f.emoji, 72.dp)
+                    Spacer(Modifier.height(10.dp))
+                    Text(f.name, style = MaterialTheme.typography.titleLarge)
+                    Spacer(Modifier.height(6.dp))
+                    Text(
+                        t("Sul suo telefono comparirà una richiesta: tocca Sì, collegati."),
+                        style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center,
+                    )
+                }
+            }
+        },
+        confirmButton = {
+            if (f == null) TextButton(enabled = code.length == 6 && !busy, onClick = {
+                busy = true
+                scope.launch {
+                    val r = Kids.findByCode(code)
+                    busy = false
+                    if (r == null) missing = true else found = r
+                }
+            }) { Text(if (busy) t("Cerco…") else t("Cerca")) }
+            else TextButton(onClick = {
+                val c = code
+                onDismiss()
+                Graph.scope.launch {
+                    Kids.pair(f.pk, c, f.name, f.emoji)
+                    withContext(Dispatchers.Main) { Toast.makeText(ctx, t("Richiesta inviata: conferma sul telefono del bambino"), Toast.LENGTH_LONG).show() }
+                }
+            }) { Text(t("Collega")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Annulla")) } },
+    )
 }
 
 @Composable
@@ -532,7 +647,7 @@ private fun ChildCard(c: Child, f: com.monolith.app.data.Friend?, modifier: Modi
                 Column(Modifier.weight(1f)) {
                     Text(c.name, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                     Text(
-                        if (c.seenAt > 0 && tick >= 0) t("Attivo {0}", Fmt.ago(c.seenAt)) else t("In attesa del primo contatto"),
+                        if (c.seenAt > 0 && tick >= 0) t("Attivo {0}", Fmt.ago(c.seenAt)) else t("In attesa di conferma sul suo telefono"),
                         style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
                 }
@@ -616,7 +731,7 @@ fun ChildScreen(nav: NavHostController, pk: String, startSection: Int = 0) {
                         if (child.seenAt > 0) add(t("Attivo {0}", Fmt.ago(child.seenAt)))
                         if (child.battery >= 0) add(t("batteria {0}%", child.battery))
                         if (child.version.isNotBlank()) add("Kids " + child.version)
-                    }.joinToString(" · ").ifBlank { t("In attesa del primo contatto") },
+                    }.joinToString(" · ").ifBlank { t("In attesa di conferma sul suo telefono") },
                     style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Spacer(Modifier.height(16.dp))
@@ -672,7 +787,12 @@ fun ChildScreen(nav: NavHostController, pk: String, startSection: Int = 0) {
             }
             Spacer(Modifier.height(24.dp))
             HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant, modifier = Modifier.padding(horizontal = 20.dp))
-            TextButton(onClick = { wipe = true }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+            if (child.seenAt == 0L) {
+                // never answered: nothing to delete over there, just forget it here
+                TextButton(onClick = { Graph.scope.launch { Kids.forgetChild(pk) }; nav.popBackStack() }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
+                    Text(t("Annulla il collegamento"), color = MaterialTheme.colorScheme.error)
+                }
+            } else TextButton(onClick = { wipe = true }, modifier = Modifier.padding(horizontal = 12.dp, vertical = 8.dp)) {
                 Text(t("Elimina l'account di {0}", child.name), color = MaterialTheme.colorScheme.error)
             }
             Spacer(Modifier.height(24.dp))
@@ -992,7 +1112,7 @@ private fun ContactsSection(child: Child) {
     }
     Row(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 8.dp), horizontalArrangement = Arrangement.spacedBy(10.dp)) {
         OutlinedButton(onClick = {
-            scanner.launch(ScanOptions().setPrompt(t("Inquadra il codice QR del contatto")).setBeepEnabled(false).setOrientationLocked(true).setDesiredBarcodeFormats(ScanOptions.QR_CODE))
+            scanner.launch(com.monolith.app.ui.components.qrScanOptions(t("Inquadra il codice QR del contatto")))
         }, shape = CircleShape, modifier = Modifier.weight(1f)) {
             Icon(Icons.Rounded.QrCodeScanner, null, Modifier.size(18.dp)); Spacer(Modifier.width(6.dp)); Text(t("Scansiona"))
         }

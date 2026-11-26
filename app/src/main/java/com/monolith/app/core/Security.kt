@@ -156,7 +156,7 @@ object Backup {
     // by this phone's keystore (the key itself travels as "sk"), the automatic backup's folder and password,
     // the icon in use, the developer channel's cache, the permission screen and map tiles.
 
-    private val SKIP_PREFS = setOf("monolith_identity", "autobackup", "app_icon", "dev_channel")
+    private val SKIP_PREFS = setOf("monolith_identity", "autobackup", "app_icon", "dev_channel", "dev_notice")
     private val SKIP_KEYS = mapOf("monolith_prefs" to setOf("perm_done"))
     private val SKIP_DIRS = setOf("media", "osmdroid")
 

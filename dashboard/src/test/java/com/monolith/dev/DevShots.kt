@@ -36,11 +36,18 @@ class DevShots {
         Dev.preview(
             key(), users,
             Doc(newsId = "n1", newsTitle = "Benvenuti nella 2.4", newsBody = "Temi di colore e chiamate nuove.", latest = "2.4.0", latestUrl = "https://github.com/x/y", blocked = setOf(users[7].pk),
-                verified = mapOf(users[0].pk to Ver("Sviluppatore", "mono", "ink"), users[1].pk to Ver("Creator", "seal", "blue")), at = now - 3600),
+                verified = mapOf(users[0].pk to Ver("Sviluppatore", "mono", "ink"), users[1].pk to Ver("Creator", "seal", "blue")),
+                deleted = mapOf(users[6].pk to "Spam ripetuto nei gruppi"),
+                devices = mapOf("7c1e9a40b2d35f6e8a9b0c1d2e3f4a5b" to "Account multipli per spam"), at = now - 3600),
             listOf(
                 Msg("m0", users[5].pk, now - 300, "verify", users[5].pk, "Giulia (@giulia)", "", "Sono Giulia, la sorella di Christian. Mi trovi anche su Instagram come @giulia.", "2.4.0", false),
                 Msg("m1", reporter, now - 600, "report", users[7].pk, "Marco", "Spam", "Manda link strani nei gruppi", "2.4.0", false),
                 Msg("m2", users[1].pk, now - 7200, "feedback", "", "", "", "Le cuffie funzionano benissimo! Si potrebbe avere un tema viola scuro?", "2.4.0", false),
+                Msg("m3", users[1].pk, now - 3000, "out", users[1].pk, "Ada Rossi", "Grazie!", "Il tema viola arriva nella prossima versione.", "", true),
+            ),
+            devices = mapOf(
+                users[1].pk to DeviceInfo(listOf("2b4d6f8a0c1e3a5b7d9f1a2b3c4d5e6f", "9e8d7c6b5a4f3e2d1c0b9a8f7e6d5c4b"), "Google Pixel 8", 34, "monolith", now - 600),
+                users[7].pk to DeviceInfo(listOf("7c1e9a40b2d35f6e8a9b0c1d2e3f4a5b"), "Samsung Galaxy A14", 33, "monolith", now - 9000),
             ),
         )
     }
@@ -60,5 +67,5 @@ class DevShots {
     @Config(qualifiers = "+h1700dp") @Test fun publish() = shot("d6_publish") { seed(); MainScreen(3) }
     @Test fun verifyDialog() = shot("d8_verify") { androidx.compose.runtime.remember { seed() }; VerifyDialog(Dev.users.value[5].pk, "Giulia", inline = true) {} }
     @Test fun unlinked() = shot("d9_unlinked") { androidx.compose.runtime.remember { seed(); Dev.previewLinked(false) }; MainScreen(0) }
-    @Test fun userDialog() = shot("d7_user", act = { compose.onAllNodesWithText("Ada Rossi").onFirst().performClick() }) { seed(); MainScreen(1) }
+    @Config(qualifiers = "+h1500dp") @Test fun userDialog() = shot("d7_user", act = { compose.onAllNodesWithText("Ada Rossi").onFirst().performClick() }) { seed(); MainScreen(1) }
 }

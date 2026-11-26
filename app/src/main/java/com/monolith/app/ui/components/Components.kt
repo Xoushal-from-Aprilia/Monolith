@@ -428,16 +428,24 @@ fun Pill(text: String, modifier: Modifier = Modifier, strong: Boolean = false) {
 /** QR code drawn in the current theme colours */
 @Composable
 fun QrImage(text: String, modifier: Modifier = Modifier) {
-    val dark = LocalDark.current
-    val bmp = remember(text, dark) {
-        FriendQr.bitmap(
-            text, 512,
-            dark = if (dark) android.graphics.Color.rgb(242, 242, 242) else android.graphics.Color.rgb(10, 10, 10),
-            light = if (dark) android.graphics.Color.rgb(10, 10, 10) else android.graphics.Color.WHITE,
-        ).asImageBitmap()
+    // always dark squares on white, also in the dark theme: many cameras cannot read a code in negative
+    val bmp = remember(text) {
+        FriendQr.bitmap(text, 512, dark = android.graphics.Color.rgb(10, 10, 10), light = android.graphics.Color.WHITE).asImageBitmap()
     }
     androidx.compose.foundation.Image(bmp, contentDescription = "QR", modifier = modifier, filterQuality = androidx.compose.ui.graphics.FilterQuality.None)
 }
 
 @Suppress("unused")
 private val unusedSize = Size.Zero
+
+/**
+ * The options of every QR scanner in the app. Codes shown in negative (light on dark, as versions before
+ * 2.6.0 drew them in the dark theme) are read too: "SCAN_TYPE" 2 is the scanner's mixed mode.
+ */
+fun qrScanOptions(prompt: String): com.journeyapps.barcodescanner.ScanOptions =
+    com.journeyapps.barcodescanner.ScanOptions()
+        .setPrompt(prompt)
+        .setBeepEnabled(false)
+        .setOrientationLocked(true)
+        .setDesiredBarcodeFormats(com.journeyapps.barcodescanner.ScanOptions.QR_CODE)
+        .addExtra("SCAN_TYPE", 2)

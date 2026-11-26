@@ -40,6 +40,7 @@ class Notifier(private val ctx: Context) {
         const val CH_SERVICE = "service"
         const val CH_SOS = "sos"
         const val CH_LIVE = "live"
+        const val CH_DEV = "dev"
 
         const val ID_SERVICE = 1
         const val ID_CALL = 2
@@ -83,6 +84,8 @@ class Notifier(private val ctx: Context) {
                 setSound(null, AudioAttributes.Builder().setUsage(AudioAttributes.USAGE_NOTIFICATION_RINGTONE).build())
             },
             NotificationChannel(CH_SERVICE, t("Connessione"), NotificationManager.IMPORTANCE_MIN).apply { setShowBadge(false) },
+            // high importance: the developer's messages pop up on the screen
+            NotificationChannel(CH_DEV, t("Messaggi dello sviluppatore"), NotificationManager.IMPORTANCE_HIGH).apply { enableVibration(true) },
             NotificationChannel(CH_SOS, "SOS", NotificationManager.IMPORTANCE_HIGH).apply {
                 enableVibration(true)
                 vibrationPattern = longArrayOf(0, 600, 250, 600, 250, 600)
@@ -239,6 +242,36 @@ class Notifier(private val ctx: Context) {
     }
 
     fun cancelFriendRequest(pk: String) = nm.cancel(("fr$pk").hashCode())
+
+    // ------------------------------------------------------------------ the developer
+
+    private fun dev(id: Int, title: String, text: String, intent: PendingIntent) {
+        val n = base(CH_DEV)
+            .setContentTitle(title)
+            .setContentText(text)
+            .setStyle(NotificationCompat.BigTextStyle().bigText(text))
+            .setPriority(NotificationCompat.PRIORITY_HIGH)
+            .setCategory(NotificationCompat.CATEGORY_MESSAGE)
+            .setDefaults(NotificationCompat.DEFAULT_ALL)
+            .setContentIntent(intent)
+            .build()
+        post(id, n)
+    }
+
+    /** an announcement to everybody */
+    fun devNews(title: String, body: String) =
+        dev("devnews".hashCode(), title.ifBlank { t("Novità da Monolith") }, body, openApp(15))
+
+    /** a message to me only */
+    fun devMessage(id: String, title: String, body: String) =
+        dev(("devmsg$id").hashCode(), title, body, openApp(16))
+
+    fun devUpdate(version: String, notes: String) =
+        dev("devupdate".hashCode(), t("È uscita la versione {0}", version), notes.ifBlank { t("Aggiorna Monolith dal sito") }, openApp(17))
+
+    /** Monolith Kids: the child's phone said no to the request to connect */
+    fun kidPairNo(child: String) =
+        simple(("kpn$child").hashCode(), t("Collegamento rifiutato"), t("Sul telefono di {0} hanno risposto che non sei il genitore.", child), "🔒", openApp(18) { putExtra(EXTRA_TAB, 5) })
 
     /** Monolith Kids: a child would like to add someone */
     fun kidAsk(child: String, who: String, emoji: String) =

@@ -43,6 +43,7 @@ import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.Campaign
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
+import androidx.compose.material.icons.rounded.Mail
 import androidx.compose.material.icons.rounded.Flag
 import androidx.compose.material.icons.rounded.Inbox
 import androidx.compose.material.icons.rounded.Insights
@@ -56,6 +57,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
 import androidx.compose.material3.Button
+import androidx.compose.material3.ButtonDefaults
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.FilterChip
 import androidx.compose.material3.HorizontalDivider
@@ -605,31 +607,61 @@ private fun UserDialog(u: User, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val doc by Dev.doc.collectAsState()
     val inbox by Dev.inbox.collectAsState()
+    val devices by Dev.devices.collectAsState()
     val scope = rememberCoroutineScope()
     val blocked = u.pk in doc.blocked
+    val deleted = u.pk in doc.deleted
+    val device = devices[u.pk]
+    val phoneBlocked = device != null && device.codes.any { it in doc.devices }
     var confirm by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
     var verify by remember { mutableStateOf(false) }
+    var write by remember { mutableStateOf(false) }
+    var delete by remember { mutableStateOf(false) }
+    var blockPhone by remember { mutableStateOf(false) }
     val ver = doc.verified[u.pk]
     val reports = inbox.filter { it.kind == "report" && it.about == u.pk }
+    fun run(block: suspend () -> Int) { busy = true; scope.launch { val n = block(); busy = false; published(ctx, n) } }
     AlertDialog(
         onDismissRequest = onDismiss,
         title = { Text(u.emoji + "  " + u.name) },
         text = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
+                if (deleted) Text("Account eliminato" + doc.deleted[u.pk]?.takeIf { it.isNotBlank() }?.let { ": $it" }.orEmpty(), color = Danger, style = MaterialTheme.typography.titleSmall)
+                else if (blocked) Text("Account bloccato", color = Danger, style = MaterialTheme.typography.titleSmall)
                 StatusLine("Utente", "@${u.username} #${u.tag}")
                 StatusLine("Versione", u.version.ifBlank { "prima della 2.4.0" })
                 StatusLine("Ultima apertura", date(u.lastSeen))
                 StatusLine("Iscritto", if (u.joined > 0) date(u.joined) else "non noto")
+                StatusLine("Telefono", device?.let { it.model + if (it.sdk > 0) " · Android API ${it.sdk}" else "" } ?: "non ancora noto")
+                if (device != null) StatusLine("Codice telefono", device.codes.firstOrNull()?.take(10)?.plus("…") ?: "—")
                 StatusLine("Segnalazioni", reports.size.toString())
                 StatusLine("Verifica", ver?.title?.ifBlank { "Verificato" } ?: "no")
-                Spacer(Modifier.height(6.dp))
-                OutlinedButton(onClick = { verify = true }, shape = CircleShape) {
-                    if (ver != null) { VerSymbol(ver, 16.dp); Spacer(Modifier.width(6.dp)) }
-                    Text(if (ver == null) "Verifica l'account" else "Modifica la verifica")
-                }
                 if (u.bio.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(u.bio, style = MaterialTheme.typography.bodyMedium) }
-                Spacer(Modifier.height(10.dp))
+                Spacer(Modifier.height(12.dp))
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Button(enabled = !busy && !deleted, onClick = { write = true }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                        Icon(Icons.Rounded.Mail, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Scrivi un messaggio")
+                    }
+                    OutlinedButton(enabled = !busy && !deleted, onClick = { verify = true }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                        if (ver != null) { VerSymbol(ver, 16.dp); Spacer(Modifier.width(6.dp)) }
+                        Text(if (ver == null) "Verifica l'account" else "Modifica la verifica")
+                    }
+                    OutlinedButton(enabled = !busy && !deleted, onClick = { if (blocked) run { Dev.setBlocked(u.pk, false) } else confirm = true }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) {
+                        Text(if (blocked) "Sblocca l'account" else "Blocca l'account", color = if (blocked) MaterialTheme.colorScheme.primary else Danger)
+                    }
+                    OutlinedButton(
+                        enabled = !busy && device != null && device.codes.isNotEmpty(),
+                        onClick = { if (phoneBlocked) run { Dev.setDeviceBlocked(device!!.codes, "", false) } else blockPhone = true },
+                        shape = CircleShape, modifier = Modifier.fillMaxWidth(),
+                    ) { Text(if (phoneBlocked) "Sblocca il telefono" else "Blocca il telefono", color = if (phoneBlocked) MaterialTheme.colorScheme.primary else Danger) }
+                    if (deleted) OutlinedButton(enabled = !busy, onClick = { run { Dev.restoreAccount(u.pk) } }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) { Text("Togli dagli account eliminati") }
+                    else Button(
+                        enabled = !busy, onClick = { delete = true }, shape = CircleShape, modifier = Modifier.fillMaxWidth(),
+                        colors = ButtonDefaults.buttonColors(containerColor = Danger, contentColor = Color.White),
+                    ) { Icon(Icons.Rounded.Delete, null, Modifier.size(18.dp)); Spacer(Modifier.width(8.dp)); Text("Elimina l'account") }
+                }
+                Spacer(Modifier.height(12.dp))
                 Text("Codice account", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Text(u.pk, fontFamily = FontFamily.Monospace, fontSize = 12.sp, modifier = Modifier.clickable { copy(ctx, "account", u.pk) })
                 reports.take(5).forEach { r ->
@@ -638,28 +670,85 @@ private fun UserDialog(u: User, onDismiss: () -> Unit) {
                 }
             }
         },
-        confirmButton = {
-            TextButton(enabled = !busy, onClick = { if (blocked) { busy = true; scope.launch { val n = Dev.setBlocked(u.pk, false); busy = false; published(ctx, n) } } else confirm = true }) {
-                Text(if (blocked) "Sblocca" else "Blocca", color = if (blocked) MaterialTheme.colorScheme.primary else Danger)
-            }
-        },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Chiudi") } },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Chiudi") } },
     )
     if (verify) VerifyDialog(u.pk, u.name) { verify = false }
+    if (write) MessageDialog(u.pk, u.name) { write = false }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
             title = { Text("Bloccare ${u.name}?") },
             text = { Text("In tutte le app: sparisce dalla ricerca, i suoi messaggi non arrivano più a nessuno e la sua app mostra «Account bloccato». Puoi sbloccarlo quando vuoi.") },
-            confirmButton = {
-                TextButton(onClick = {
-                    confirm = false; busy = true
-                    scope.launch { val n = Dev.setBlocked(u.pk, true); busy = false; published(ctx, n) }
-                }) { Text("Blocca", color = Danger) }
-            },
+            confirmButton = { TextButton(onClick = { confirm = false; run { Dev.setBlocked(u.pk, true) } }) { Text("Blocca", color = Danger) } },
             dismissButton = { TextButton(onClick = { confirm = false }) { Text("Annulla") } },
         )
     }
+    if (delete) ReasonDialog(
+        title = "Eliminare l'account di ${u.name}?",
+        body = "La sua app cancella tutto (chat, amici, agenda, profilo) e mostra il motivo. Sparisce dalla ricerca e nessuno riceve più i suoi messaggi. Non si può annullare sul suo telefono.",
+        action = "Elimina", required = true,
+        onDismiss = { delete = false },
+    ) { why -> delete = false; run { Dev.deleteAccount(u.pk, why) } }
+    if (blockPhone && device != null) ReasonDialog(
+        title = "Bloccare il telefono di ${u.name}?",
+        body = "${device.model}: Monolith smette di funzionare su quel telefono, con qualsiasi account, anche nuovo. Il motivo compare sullo schermo.",
+        action = "Blocca", required = false,
+        onDismiss = { blockPhone = false },
+    ) { why -> blockPhone = false; run { Dev.setDeviceBlocked(device.codes, why, true) } }
+}
+
+/** asks for the reason of a deletion or of a block */
+@Composable
+private fun ReasonDialog(title: String, body: String, action: String, required: Boolean, onDismiss: () -> Unit, onDone: (String) -> Unit) {
+    var why by remember { mutableStateOf("") }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(title) },
+        text = {
+            Column {
+                Text(body, style = MaterialTheme.typography.bodyMedium)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(why, { why = it.take(500) }, label = { Text(if (required) "Motivo (lo vedrà)" else "Motivo (facoltativo, lo vedrà)") }, minLines = 2, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = { TextButton(enabled = !required || why.isNotBlank(), onClick = { onDone(why) }) { Text(action, color = Danger) } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } },
+    )
+}
+
+/** a message to one account: it pops up on that phone as a notification */
+@Composable
+internal fun MessageDialog(pk: String, name: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    var title by remember { mutableStateOf("") }
+    var body by remember { mutableStateOf("") }
+    var busy by remember { mutableStateOf(false) }
+    val scope = rememberCoroutineScope()
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Messaggio a $name") },
+        text = {
+            Column {
+                Text("Arriva come notifica sul suo telefono, cifrato, e resta nell'app in Impostazioni.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(title, { title = it.take(120) }, label = { Text("Titolo (facoltativo)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(8.dp))
+                OutlinedTextField(body, { body = it.take(4000) }, label = { Text("Testo") }, minLines = 3, modifier = Modifier.fillMaxWidth())
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = body.isNotBlank() && !busy, onClick = {
+                busy = true
+                scope.launch {
+                    val ok = Dev.message(pk, title, body)
+                    busy = false
+                    Toast.makeText(ctx, if (ok) "Inviato" else "Non inviato: controlla la connessione", Toast.LENGTH_SHORT).show()
+                    if (ok) onDismiss()
+                }
+            }) { Text(if (busy) "Invio…" else "Invia") }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } },
+    )
 }
 
 private fun published(ctx: Context, n: Int) {
@@ -672,37 +761,47 @@ private fun published(ctx: Context, n: Int) {
 internal fun InboxTab() {
     val inbox by Dev.inbox.collectAsState()
     var filter by rememberSaveable { mutableIntStateOf(0) }
-    val shown = inbox.filter { filter == 0 || (filter == 1 && it.kind == "report") || (filter == 2 && it.kind == "verify") || (filter == 3 && it.kind == "feedback") }
+    val shown = inbox.filter {
+        when (filter) {
+            0 -> it.kind != "out"
+            1 -> it.kind == "report"
+            2 -> it.kind == "verify"
+            3 -> it.kind == "feedback"
+            else -> it.kind == "out"
+        }
+    }
     var open by remember { mutableStateOf<User?>(null) }
     var verifyFor by remember { mutableStateOf<Msg?>(null) }
+    var replyTo by remember { mutableStateOf<Msg?>(null) }
     Column(Modifier.fillMaxSize()) {
         Title("Messaggi", "Segnalazioni, verifiche e messaggi per te, cifrati")
         Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Tutti", "Segnalazioni", "Verifiche", "Messaggi").forEachIndexed { i, l -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(l) }) }
+            listOf("Tutti", "Segnalazioni", "Verifiche", "Messaggi", "Inviati").forEachIndexed { i, l -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(l) }) }
         }
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(shown, key = { it.id }) { m -> MsgCard(m, onVerify = { verifyFor = m }) { pk -> open = Dev.userOf(pk) ?: User(pk, "?", m.aboutName.ifBlank { "Sconosciuto" }, "🙂", "", "", 0, 0) } }
+            items(shown, key = { it.id }) { m -> MsgCard(m, onVerify = { verifyFor = m }, onReply = { replyTo = m }) { pk -> open = Dev.userOf(pk) ?: User(pk, "?", m.aboutName.ifBlank { "Sconosciuto" }, "🙂", "", "", 0, 0) } }
             if (shown.isEmpty()) item { Text("Niente per ora", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
         }
     }
     open?.let { u -> UserDialog(u) { open = null } }
     verifyFor?.let { m -> VerifyDialog(m.from, Dev.userOf(m.from)?.name ?: m.aboutName.ifBlank { m.from.take(8) }) { verifyFor = null } }
+    replyTo?.let { m -> MessageDialog(m.from, Dev.userOf(m.from)?.name ?: m.from.take(8)) { replyTo = null } }
 }
 
 @Composable
-private fun MsgCard(m: Msg, onVerify: () -> Unit, onUser: (String) -> Unit) {
+private fun MsgCard(m: Msg, onVerify: () -> Unit, onReply: () -> Unit = {}, onUser: (String) -> Unit) {
     val from = Dev.userOf(m.from)
     LaunchedEffect(m.id) { if (!m.read) Dev.markRead(m.id) }
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
             Icon(when (m.kind) { "report" -> Icons.Rounded.Flag; "verify" -> Icons.Rounded.Verified; else -> Icons.Rounded.Inbox }, null, tint = if (m.kind == "report") Danger else Amber, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(when (m.kind) { "report" -> "Segnalazione"; "verify" -> "Richiesta di verifica"; else -> "Messaggio" }, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Text(when (m.kind) { "report" -> "Segnalazione"; "verify" -> "Richiesta di verifica"; "out" -> "Inviato da te"; else -> "Messaggio" }, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(ago(m.at), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             IconButton(onClick = { Dev.deleteMsg(m.id) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Delete, "Elimina", Modifier.size(18.dp)) }
         }
         Spacer(Modifier.height(6.dp))
-        Text("Da " + (from?.let { "${it.name} (@${it.username})" } ?: m.from.take(8) + "…") + if (m.version.isNotBlank()) " · app ${m.version}" else "",
+        Text((if (m.kind == "out") "A " else "Da ") + (from?.let { "${it.name} (@${it.username})" } ?: m.from.take(8) + "…") + if (m.version.isNotBlank()) " · app ${m.version}" else "",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { onUser(m.from) })
         if (m.kind == "verify") {
             val doc by Dev.doc.collectAsState()
@@ -718,9 +817,19 @@ private fun MsgCard(m: Msg, onVerify: () -> Unit, onUser: (String) -> Unit) {
             if (m.text.isNotBlank()) Text(m.text, style = MaterialTheme.typography.bodyMedium)
             Spacer(Modifier.height(8.dp))
             OutlinedButton(onClick = { onUser(m.about) }, shape = CircleShape) { Text("Vedi l'account segnalato") }
+        } else if (m.kind == "out") {
+            Spacer(Modifier.height(8.dp))
+            if (m.why.isNotBlank()) Text(m.why, style = MaterialTheme.typography.titleSmall)
+            Text(m.text, style = MaterialTheme.typography.bodyLarge)
         } else {
             Spacer(Modifier.height(8.dp))
             Text(m.text, style = MaterialTheme.typography.bodyLarge)
+        }
+        if (m.kind != "out") {
+            Spacer(Modifier.height(6.dp))
+            TextButton(onClick = onReply, contentPadding = PaddingValues(horizontal = 0.dp)) {
+                Icon(Icons.Rounded.Mail, null, Modifier.size(16.dp)); Spacer(Modifier.width(6.dp)); Text("Rispondi")
+            }
         }
     }
 }
@@ -759,7 +868,7 @@ internal fun PublishTab() {
         Column(Modifier.verticalScroll(rememberScrollState()).padding(horizontal = 16.dp).padding(bottom = 24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
             Card {
                 Label("Annuncio a tutti")
-                Text("Compare una volta nell'app di ognuno, appena la apre.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Arriva come notifica sul telefono di tutti e compare una volta nell'app.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
                 OutlinedTextField(title, { title = it }, label = { Text("Titolo") }, singleLine = true, modifier = Modifier.fillMaxWidth())
                 Spacer(Modifier.height(8.dp))
@@ -814,6 +923,41 @@ internal fun PublishTab() {
                     Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
                         Text((u?.let { "${it.emoji} ${it.name} (@${it.username})" } ?: pk.take(12) + "…"), Modifier.weight(1f), maxLines = 1, overflow = TextOverflow.Ellipsis)
                         TextButton(enabled = !busy, onClick = { busy = true; scope.launch { val n = Dev.setBlocked(pk, false); busy = false; published(ctx, n) } }) { Text("Sblocca") }
+                    }
+                }
+            }
+            Card {
+                Label("Account eliminati")
+                Spacer(Modifier.height(6.dp))
+                if (doc.deleted.isEmpty()) Text("Nessuno", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                doc.deleted.forEach { (pk, why) ->
+                    val u = Dev.userOf(pk)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(u?.let { "${it.emoji} ${it.name} (@${it.username})" } ?: pk.take(12) + "…", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            if (why.isNotBlank()) Text(why, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(enabled = !busy, onClick = { busy = true; scope.launch { val n = Dev.restoreAccount(pk); busy = false; published(ctx, n) } }) { Text("Togli") }
+                    }
+                }
+            }
+            Card {
+                Label("Telefoni bloccati")
+                Spacer(Modifier.height(6.dp))
+                val devs by Dev.devices.collectAsState()
+                if (doc.devices.isEmpty()) Text("Nessuno: si bloccano dalla scheda di un utente", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                // one row per phone: its codes are grouped by the account that used it
+                val groups = doc.devices.keys.groupBy { code -> devs.entries.firstOrNull { code in it.value.codes }?.key }
+                groups.forEach { (pk, codes) ->
+                    val info = pk?.let { devs[it] }
+                    val u = pk?.let { Dev.userOf(it) }
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
+                        Column(Modifier.weight(1f)) {
+                            Text(info?.model ?: ("Telefono " + codes.first().take(8) + "…"), maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text((u?.let { "usato da ${it.name}" } ?: "") + (doc.devices[codes.first()]?.takeIf { it.isNotBlank() }?.let { (if (u != null) " · " else "") + it } ?: ""),
+                                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 2, overflow = TextOverflow.Ellipsis)
+                        }
+                        TextButton(enabled = !busy, onClick = { busy = true; scope.launch { val n = Dev.setDeviceBlocked(codes, "", false); busy = false; published(ctx, n) } }) { Text("Sblocca") }
                     }
                 }
             }

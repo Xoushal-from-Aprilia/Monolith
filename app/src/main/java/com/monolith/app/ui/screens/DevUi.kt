@@ -77,6 +77,14 @@ fun DevOverlays() {
             return
         }
     }
+    // a message for me only comes first
+    val inbox by Graph.dev.inbox.collectAsState()
+    val seenMsg by Graph.dev.seenMsg.collectAsState()
+    val msg = inbox.firstOrNull()
+    if (msg != null && msg.id != seenMsg) {
+        DevMessageDialog(msg) { Graph.dev.markMsgSeen(msg.id) }
+        return
+    }
     val news = s.news
     if (news != null && news.id != seenNews) {
         MonoDialog(
@@ -100,8 +108,92 @@ fun DevOverlays() {
     }
 }
 
+/** a message from the developer, as a dialog (it also arrived as a pop-up notification) */
 @Composable
-private fun DevWall(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String, onAction: () -> Unit) {
+fun DevMessageDialog(m: com.monolith.app.net.DevMsg, onDismiss: () -> Unit) {
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        title = {
+            Column {
+                Text(t("Messaggio dallo sviluppatore"), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                if (m.title.isNotBlank()) Text(m.title)
+            }
+        },
+        text = { Text(m.body, modifier = Modifier.heightIn(max = 380.dp).verticalScroll(rememberScrollState())) },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Ok")) } },
+    )
+}
+
+/** every message the developer wrote to me */
+@Composable
+fun DevInboxDialog(onDismiss: () -> Unit) {
+    val inbox by Graph.dev.inbox.collectAsState()
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Messaggi dallo sviluppatore")) },
+        text = {
+            Column(Modifier.heightIn(max = 440.dp).verticalScroll(rememberScrollState()), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+                inbox.forEach { m ->
+                    Column {
+                        Text(
+                            java.text.SimpleDateFormat("d MMM, HH:mm", com.monolith.app.core.I18n.locale).format(java.util.Date(m.at)),
+                            style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                        )
+                        if (m.title.isNotBlank()) Text(m.title, style = MaterialTheme.typography.titleSmall)
+                        Text(m.body, style = MaterialTheme.typography.bodyMedium)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text(t("Chiudi")) } },
+    )
+}
+
+/** the developer blocked this phone: nothing works, whoever uses it */
+@Composable
+fun DeviceWall() {
+    val s by Graph.dev.state.collectAsState()
+    val why = remember(s) { Graph.dev.deviceBlock } ?: return
+    var feedback by remember { mutableStateOf(false) }
+    DeviceWallContent(why, Graph.identity.keys != null) { feedback = true }
+    if (feedback) FeedbackDialog { feedback = false }
+}
+
+@Composable
+internal fun DeviceWallContent(why: String, canWrite: Boolean, onWrite: () -> Unit) {
+    DevWall(
+        Icons.Rounded.Block, t("Telefono bloccato"),
+        t("Lo sviluppatore di Monolith ha bloccato questo telefono: qui Monolith non si può usare.") + if (why.isNotBlank()) "\n\n" + t("Motivo: {0}", why) else "",
+        if (canWrite) t("Scrivi allo sviluppatore") else null,
+        onWrite,
+    )
+}
+
+/** after the developer deleted my account: why, once, on the welcome screen */
+@Composable
+fun DeletedNotice() {
+    var why by remember { mutableStateOf(Graph.dev.deletedNotice) }
+    val w = why ?: return
+    DeletedNoticeDialog(w) { Graph.dev.clearDeletedNotice(); why = null }
+}
+
+@Composable
+internal fun DeletedNoticeDialog(why: String, onOk: () -> Unit) {
+    MonoDialog(
+        onDismissRequest = {},
+        title = { Text(t("Il tuo account è stato eliminato")) },
+        text = {
+            Text(
+                t("Lo sviluppatore di Monolith ha eliminato il tuo account e i dati su questo telefono.") +
+                    if (why.isNotBlank()) "\n\n" + t("Motivo: {0}", why) else "",
+            )
+        },
+        confirmButton = { TextButton(onClick = onOk) { Text(t("Ho capito")) } },
+    )
+}
+
+@Composable
+private fun DevWall(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String?, onAction: () -> Unit) {
     Box(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).bounceClick(1f) {},
         contentAlignment = Alignment.Center,
@@ -115,7 +207,7 @@ private fun DevWall(icon: androidx.compose.ui.graphics.vector.ImageVector, title
             Spacer(Modifier.height(10.dp))
             Text(body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(28.dp))
-            Button(onClick = onAction, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(action) }
+            if (action != null) Button(onClick = onAction, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(action) }
         }
     }
 }

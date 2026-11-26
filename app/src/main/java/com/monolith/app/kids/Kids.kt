@@ -95,6 +95,9 @@ data class KidEvent(val id: String, val title: String, val emoji: String, val st
     }
 }
 
+/** someone who asked to become this child's parent: the child's phone asks for a yes first */
+data class PairAsk(val pk: String, val name: String, val emoji: String, val username: String)
+
 /** a child followed by this (parent) phone */
 data class Child(
     val pk: String,
@@ -135,6 +138,9 @@ object Kids {
     val parent: StateFlow<KContact?> = _parent.asStateFlow()
     private val _rules = MutableStateFlow(KidRules())
     val rules: StateFlow<KidRules> = _rules.asStateFlow()
+    private val _pendingPair = MutableStateFlow<PairAsk?>(null)
+    /** a parent's request to connect, waiting for a yes on the child's phone */
+    val pendingPair: StateFlow<PairAsk?> = _pendingPair.asStateFlow()
     private val _asks = MutableStateFlow<List<KContact>>(emptyList())
     /** people the child asked to add, waiting for the parent */
     val asks: StateFlow<List<KContact>> = _asks.asStateFlow()
@@ -325,17 +331,8 @@ object Kids {
         when (p.optString("k")) {
             "pair" -> {
                 if (_parent.value != null || p.optString("code") != pairCode) return
-                val parent = KContact(from, p.optString("n"), p.optString("e").ifBlank { "🙂" }, p.optString("u"))
-                _parent.value = parent
-                // the parent's commands must arrive even with the app closed
-                Graph.prefs.alwaysOnline = true
-                Graph.db.friends().upsert(Friend(from, parent.username, parent.name, parent.emoji, "", FriendStatus.FRIEND, now(), verified = true))
-                save()
-                sendToParent(JSONObject().put("k", "paired").put("n", Graph.identity.profile.value?.displayName ?: "").put("e", Graph.identity.profile.value?.emoji ?: "🙂"))
-                Graph.messenger.sendStored(from, Graph.messenger.profilePayload("facc"))
-                sendState()
-                sendEvents()
-                applyLocation()
+                // the code is right: the child's phone still asks whether this is really the parent
+                _pendingPair.value = PairAsk(from, p.optString("n").take(40), p.optString("e").ifBlank { "🙂" }, p.optString("u"))
             }
             "rules" -> { _rules.value = KidRules.fromJson(p.optJSONObject("r")); save(); applyLocation() }
             "allow" -> {
@@ -383,11 +380,80 @@ object Kids {
         }
     }
 
+    /** the child (or the parent holding the child's phone) answers the request to connect */
+    suspend fun answerPair(yes: Boolean) {
+        val a = _pendingPair.value ?: return
+        _pendingPair.value = null
+        if (!yes) {
+            runCatching { Graph.messenger.sendStored(a.pk, JSONObject().put("t", "kid").put("k", "pairno")) }
+            return
+        }
+        if (_parent.value != null) return
+        val parent = KContact(a.pk, a.name, a.emoji, a.username)
+        _parent.value = parent
+        // the parent's commands must arrive even with the app closed
+        Graph.prefs.alwaysOnline = true
+        Graph.db.friends().upsert(Friend(a.pk, parent.username, parent.name, parent.emoji, "", FriendStatus.FRIEND, now(), verified = true))
+        save()
+        sendToParent(JSONObject().put("k", "paired").put("n", Graph.identity.profile.value?.displayName ?: "").put("e", Graph.identity.profile.value?.emoji ?: "🙂"))
+        Graph.messenger.sendStored(a.pk, Graph.messenger.profilePayload("facc"))
+        sendState()
+        sendEvents()
+        applyLocation()
+    }
+
+    // ------------------------------------------------ pairing with the code, when the camera cannot read the QR
+
+    private fun codeTag(code: String) =
+        com.monolith.app.crypto.Hex.encode(java.security.MessageDigest.getInstance("SHA-256").digest("monolith-kidpair|${code.trim()}".toByteArray())).take(32)
+
+    /** while it waits for a parent, the child's phone says where it can be found from its code */
+    suspend fun publishBeacon() {
+        val k = Graph.identity.keys ?: return
+        val prof = Graph.identity.profile.value ?: return
+        val ev = com.monolith.app.nostr.NostrEvent(
+            "", com.monolith.app.core.nowSec(), com.monolith.app.nostr.Envelope.KIND_PROFILE,
+            listOf(listOf("d", "monolith-kidpair"), listOf("c", codeTag(pairCode)), listOf("expiration", (com.monolith.app.core.nowSec() + 3600).toString())),
+            JSONObject().put("n", prof.displayName).put("e", prof.emoji).toString(),
+        )
+        kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ev.sign(k.priv) }
+        Graph.relays.publish(ev)
+    }
+
+    /** the parent typed the code shown on the child's phone */
+    suspend fun findByCode(code: String): PairAsk? {
+        val c = code.filter(Char::isDigit)
+        if (c.length != 6) return null
+        val tag = codeTag(c)
+        val f = JSONObject().put("kinds", JSONArray().put(com.monolith.app.nostr.Envelope.KIND_PROFILE))
+            .put("#c", JSONArray().put(tag)).put("since", com.monolith.app.core.nowSec() - 2 * 3600).put("limit", 10)
+        val list = runCatching { Graph.relays.query(listOf(f)) }.getOrDefault(emptyList())
+            .filter { it.firstTag("d") == "monolith-kidpair" && it.firstTag("c") == tag }
+            .sortedByDescending { it.createdAt }
+        for (ev in list) {
+            if (!kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) { ev.verify() }) continue
+            val o = runCatching { JSONObject(ev.content) }.getOrDefault(JSONObject())
+            return PairAsk(ev.pubkey, o.optString("n").take(40).ifBlank { "Bambino" }, o.optString("e").ifBlank { "🙂" }, "")
+        }
+        return null
+    }
+
     // ------------------------------------------------ parent's phone: what the children send
 
     private suspend fun onChild(from: String, p: JSONObject) {
         when (p.optString("k")) {
-            "paired" -> updateChild(from) { it.copy(name = p.optString("n").ifBlank { it.name }, emoji = p.optString("e").ifBlank { it.emoji }) }
+            "paired" -> {
+                updateChild(from) { it.copy(name = p.optString("n").ifBlank { it.name }, emoji = p.optString("e").ifBlank { it.emoji }, seenAt = now()) }
+                // the rules sent with the request arrived before the yes: send them again
+                _children.value.firstOrNull { it.pk == from }?.let { sendToChild(from, JSONObject().put("k", "rules").put("r", it.rules.toJson())) }
+            }
+            "pairno" -> {
+                val name = _children.value.firstOrNull { it.pk == from }?.name ?: ""
+                if (_children.value.firstOrNull { it.pk == from }?.seenAt == 0L) {
+                    forgetChild(from)
+                    Graph.notifier.kidPairNo(name)
+                }
+            }
             "state" -> {
                 val fr = p.optJSONArray("friends") ?: JSONArray()
                 val pe = p.optJSONArray("pending") ?: JSONArray()
@@ -433,16 +499,30 @@ object Kids {
         val parts = s.removePrefix("monolithkids:").split(":")
         val pk = parts.getOrNull(0)?.lowercase() ?: return false
         val code = parts.getOrNull(1) ?: return false
-        if (pk.length != 64) return false
+        if (pk.length != 64 || !com.monolith.app.crypto.Hex.isHex64(pk)) return false
         val name = runCatching { URLDecoder.decode(parts.getOrNull(2) ?: "", "UTF-8") }.getOrDefault("")
         val emoji = runCatching { URLDecoder.decode(parts.getOrNull(3) ?: "", "UTF-8") }.getOrDefault("🙂")
+        pair(pk, code, name, emoji)
+        return true
+    }
+
+    /** sends the request to connect; the child's phone asks for a yes, then answers with "paired" */
+    suspend fun pair(pk: String, code: String, name: String, emoji: String) {
         if (_children.value.none { it.pk == pk }) _children.value = _children.value + Child(pk, name.ifBlank { "Bambino" }, emoji.ifBlank { "🙂" }, now())
         save()
         Graph.db.friends().upsert(Friend(pk, "", name, emoji, "", FriendStatus.FRIEND, now(), verified = true))
         val me = Graph.identity.profile.value
         sendToChild(pk, JSONObject().put("k", "pair").put("code", code).put("n", me?.displayName ?: "").put("e", me?.emoji ?: "🙂").put("u", me?.username ?: ""))
         sendToChild(pk, JSONObject().put("k", "rules").put("r", (_children.value.first { it.pk == pk }.rules).toJson()))
-        return true
+    }
+
+    /** a child that never answered: forgotten on this phone only */
+    suspend fun forgetChild(child: String) {
+        _children.value = _children.value.filter { it.pk != child }
+        mirrors.remove(child)
+        File(ctx.filesDir, "kids_mirror_$child.json").delete()
+        Graph.db.friends().delete(child)
+        save()
     }
 
     suspend fun setRules(child: String, r: KidRules) {
@@ -568,12 +648,13 @@ object Kids {
         if (!edition) return
         sp.edit().clear().apply()
         ctx.filesDir.listFiles()?.filter { it.name.startsWith("kids_mirror_") }?.forEach { it.delete() }
-        _role.value = KidRole.NONE; _parent.value = null; _children.value = emptyList(); _asks.value = emptyList(); allowed = emptySet()
+        _role.value = KidRole.NONE; _parent.value = null; _children.value = emptyList(); _asks.value = emptyList(); allowed = emptySet(); _pendingPair.value = null
     }
 
     /** for the screenshots */
-    internal fun preview(role: KidRole, parent: KContact? = null, children: List<Child> = emptyList(), rules: KidRules = KidRules(), asks: List<KContact> = emptyList(), mirror: Map<String, List<MirrorMsg>> = emptyMap()) {
+    internal fun preview(role: KidRole, parent: KContact? = null, children: List<Child> = emptyList(), rules: KidRules = KidRules(), asks: List<KContact> = emptyList(), mirror: Map<String, List<MirrorMsg>> = emptyMap(), pending: PairAsk? = null) {
         forced = role != KidRole.NONE
+        _pendingPair.value = pending
         _role.value = role; _parent.value = parent; _children.value = children; _rules.value = rules; _asks.value = asks
         mirror.forEach { (k, v) -> mirrors.getOrPut(k) { MutableStateFlow(emptyList()) }.value = v }
     }

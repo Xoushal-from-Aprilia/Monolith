@@ -66,6 +66,10 @@ data class Doc(
     val min: String = "",
     val blocked: Set<String> = emptySet(),
     val verified: Map<String, Ver> = emptyMap(),
+    /** accounts deleted, with the reason: their app erases everything and says why */
+    val deleted: Map<String, String> = emptyMap(),
+    /** phones blocked (anonymous codes), with the reason */
+    val devices: Map<String, String> = emptyMap(),
     /** when it was published (seconds), 0 = never */
     val at: Long = 0,
 ) {
@@ -78,6 +82,8 @@ data class Doc(
         if (min.isNotBlank()) o.put("min", min)
         o.put("blocked", JSONArray(blocked.sorted()))
         o.put("verified", JSONArray(verified.toSortedMap().map { (pk, v) -> JSONObject().put("pk", pk).put("t", v.title).put("s", v.shape).put("c", v.color) }))
+        o.put("deleted", JSONArray(deleted.toSortedMap().map { (pk, why) -> JSONObject().put("pk", pk).put("why", why) }))
+        o.put("devices", JSONArray(devices.toSortedMap().map { (d, why) -> JSONObject().put("d", d).put("why", why) }))
         return o
     }
 
@@ -87,6 +93,8 @@ data class Doc(
             val l = o.optJSONObject("latest")
             val b = o.optJSONArray("blocked") ?: JSONArray()
             val vs = o.optJSONArray("verified") ?: JSONArray()
+            val del = o.optJSONArray("deleted") ?: JSONArray()
+            val dv = o.optJSONArray("devices") ?: JSONArray()
             return Doc(
                 newsId = n?.optString("id").orEmpty(), newsTitle = n?.optString("title").orEmpty(),
                 newsBody = n?.optString("body").orEmpty(), newsLink = n?.optString("link").orEmpty(),
@@ -98,13 +106,34 @@ data class Doc(
                     val pk = e.optString("pk").lowercase().takeIf { it.length == 64 } ?: return@mapNotNull null
                     pk to Ver(e.optString("t"), e.optString("s").ifBlank { "seal" }, e.optString("c").ifBlank { "blue" })
                 }.toMap(),
+                deleted = (0 until del.length()).mapNotNull { i ->
+                    val e = del.optJSONObject(i) ?: return@mapNotNull null
+                    val pk = e.optString("pk").lowercase().takeIf { it.length == 64 } ?: return@mapNotNull null
+                    pk to e.optString("why")
+                }.toMap(),
+                devices = (0 until dv.length()).mapNotNull { i ->
+                    val e = dv.optJSONObject(i) ?: return@mapNotNull null
+                    val d = e.optString("d").lowercase().takeIf { it.length == 32 } ?: return@mapNotNull null
+                    d to e.optString("why")
+                }.toMap(),
                 at = at,
             )
         }
     }
 }
 
-/** a report or a message that reached the developer */
+/** the phone an account was last used on, as its app told the developer (anonymous codes) */
+data class DeviceInfo(val codes: List<String>, val model: String, val sdk: Int, val edition: String, val at: Long) {
+    fun toJson(): JSONObject = JSONObject().put("d", JSONArray(codes)).put("m", model).put("a", sdk).put("e", edition).put("at", at)
+    companion object {
+        fun fromJson(o: JSONObject) = DeviceInfo(
+            o.optJSONArray("d")?.let { a -> (0 until a.length()).map { a.getString(it) } } ?: emptyList(),
+            o.optString("m"), o.optInt("a"), o.optString("e"), o.optLong("at"),
+        )
+    }
+}
+
+/** a report or a message that reached the developer (kind "out" = a message I sent, [from] = to whom) */
 data class Msg(
     val id: String,
     val from: String,
@@ -160,6 +189,10 @@ object Dev {
     private val _inbox = MutableStateFlow<List<Msg>>(emptyList())
     val inbox: StateFlow<List<Msg>> = _inbox.asStateFlow()
 
+    private val _devices = MutableStateFlow<Map<String, DeviceInfo>>(emptyMap())
+    /** account -> the phone it was last used on */
+    val devices: StateFlow<Map<String, DeviceInfo>> = _devices.asStateFlow()
+
     private val _linked = MutableStateFlow<Boolean?>(null)
     /** whether the apps know this key: its public code is the one in dev/developer.pub (null = not checked) */
     val linked: StateFlow<Boolean?> = _linked.asStateFlow()
@@ -212,6 +245,7 @@ object Dev {
         _doc.value = Doc()
         _inbox.value = emptyList()
         _linked.value = null
+        _devices.value = emptyMap()
         saveLocal()
     }
 
@@ -264,6 +298,16 @@ object Dev {
         if (p.optString("t") != "dev") return
         if (_inbox.value.any { it.id == inner.id }) return
         val kind = p.optString("k")
+        if (kind == "hello") {
+            // not a message: the phone this account uses, for blocking phones
+            val codes = p.optJSONArray("d")?.let { a -> (0 until a.length()).map { a.optString(it).lowercase() }.filter { it.length == 32 } } ?: emptyList()
+            val cur = _devices.value[inner.from]
+            if (cur == null || inner.createdAt >= cur.at) {
+                _devices.value = _devices.value + (inner.from to DeviceInfo(codes, p.optString("m"), p.optInt("a"), p.optString("e"), inner.createdAt))
+                saveLocal()
+            }
+            return
+        }
         val m = if (kind == "verify") Msg(
             inner.id, inner.from, inner.createdAt, kind, inner.from, p.optString("n") + if (p.optString("u").isNotBlank()) " (@" + p.optString("u") + ")" else "",
             "", p.optString("text"), p.optString("v"), false,
@@ -328,6 +372,53 @@ object Dev {
         return publish(d.copy(blocked = if (blocked) d.blocked + pk else d.blocked - pk))
     }
 
+    /** deletes an account: its app erases everything and shows the reason; it also disappears for everybody */
+    suspend fun deleteAccount(pk: String, why: String): Int {
+        val d = _doc.value
+        val n = publish(d.copy(deleted = d.deleted + (pk to why.trim()), verified = d.verified - pk))
+        if (n > 0) sendTo(pk, JSONObject().put("k", "check"))
+        return n
+    }
+
+    /** takes an account off the deleted list (whoever still has its recovery code can use it again) */
+    suspend fun restoreAccount(pk: String): Int {
+        val d = _doc.value
+        return publish(d.copy(deleted = d.deleted - pk))
+    }
+
+    /** blocks or unblocks a phone (all its anonymous codes) */
+    suspend fun setDeviceBlocked(codes: List<String>, why: String, blocked: Boolean): Int {
+        val d = _doc.value
+        val devs = if (blocked) d.devices + codes.associateWith { why.trim() } else d.devices - codes.toSet()
+        return publish(d.copy(devices = devs))
+    }
+
+    /** a message to one account: it pops up on that phone as a notification */
+    suspend fun message(pk: String, title: String, body: String): Boolean {
+        val id = java.util.UUID.randomUUID().toString()
+        val ok = sendTo(pk, JSONObject().put("k", "msg").put("id", id).put("title", title.trim()).put("body", body.trim()))
+        if (ok) {
+            _inbox.value = (_inbox.value + Msg(id, pk, System.currentTimeMillis() / 1000, "out", pk, userOf(pk)?.name ?: "", title.trim(), body.trim(), "", true))
+                .sortedByDescending { it.at }
+            saveLocal()
+        }
+        return ok
+    }
+
+    /** sends a payload to one account, encrypted like a chat message; true when a relay took it */
+    private suspend fun sendTo(pk: String, payload: JSONObject): Boolean {
+        val k = _keys.value ?: return false
+        payload.put("t", "dev")
+        val ev = withContext(Dispatchers.Default) { Envelope.wrap(k, pk, payload, false, 30L * 86400) }
+        val accepted = java.util.concurrent.atomic.AtomicInteger(0)
+        val counter = scope.launch { relays.oks.filter { it.first == ev.id }.collect { if (it.second) accepted.incrementAndGet() } }
+        kotlinx.coroutines.delay(100)
+        relays.publish(ev)
+        withTimeoutOrNull(6000) { while (accepted.get() < 1) kotlinx.coroutines.delay(150) }
+        counter.cancel()
+        return accepted.get() > 0
+    }
+
     // ================================================================== directory
 
     suspend fun refreshUsers() {
@@ -351,6 +442,8 @@ object Dev {
             val list = withContext(Dispatchers.Default) {
                 all.values.filter { it.verify() }.mapNotNull { e ->
                     val o = runCatching { JSONObject(e.content) }.getOrNull() ?: return@mapNotNull null
+                    // an empty entry: the account was deleted
+                    if (o.optString("u").isBlank()) return@mapNotNull null
                     User(e.pubkey, o.optString("u"), o.optString("n").ifBlank { o.optString("u") }, o.optString("e").ifBlank { "🙂" }, o.optString("b"),
                         o.optString("v"), o.optLong("j"), e.createdAt)
                 }.sortedByDescending { it.lastSeen }
@@ -366,8 +459,9 @@ object Dev {
     }
 
     /** for the screenshots: fill the dashboard without going online */
-    internal fun preview(k: Keys, users: List<User>, doc: Doc, inbox: List<Msg>, linked: Boolean? = true) {
+    internal fun preview(k: Keys, users: List<User>, doc: Doc, inbox: List<Msg>, linked: Boolean? = true, devices: Map<String, DeviceInfo> = emptyMap()) {
         previewing = true
+        _devices.value = devices
         _keys.value = k; _users.value = users; _doc.value = doc; _inbox.value = inbox; _usersAt.value = System.currentTimeMillis(); _linked.value = linked
     }
 
@@ -384,7 +478,11 @@ object Dev {
                 val r = arr.getJSONObject(i)
                 val tagName = r.optString("tag_name")
                 if (r.optBoolean("prerelease") || !tagName.startsWith("build-")) return@mapNotNull null
-                val apk = r.optJSONArray("assets")?.let { a -> (0 until a.length()).map { a.getJSONObject(it) }.firstOrNull { it.optString("name").endsWith(".apk") } }
+                // since 2.5.0 a build also carries Monolith Kids: take Monolith's APK
+                val apk = r.optJSONArray("assets")?.let { a ->
+                    val all = (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optString("name").endsWith(".apk") }
+                    all.firstOrNull { !it.optString("name").startsWith("Monolith-Kids-") } ?: all.firstOrNull()
+                }
                     ?: return@mapNotNull null
                 val version = Regex("Monolith ([0-9]+\\.[0-9]+\\.[0-9]+)").find(r.optString("name"))?.groupValues?.get(1) ?: ""
                 Release(tagName, version, tagName.removePrefix("build-").toIntOrNull() ?: 0, apk.optString("browser_download_url"), r.optString("published_at").take(10))
@@ -407,6 +505,7 @@ object Dev {
                         .put("v", it.version).put("j", it.joined).put("s", it.lastSeen)
                 }))
                 .put("usersAt", _usersAt.value)
+                .put("devices", JSONObject().apply { _devices.value.forEach { (pk, d) -> put(pk, d.toJson()) } })
             file().writeText(o.toString())
         }
     }
@@ -422,6 +521,7 @@ object Dev {
                 }
             }
             _usersAt.value = o.optLong("usersAt")
+            o.optJSONObject("devices")?.let { d -> _devices.value = d.keys().asSequence().associateWith { DeviceInfo.fromJson(d.getJSONObject(it)) } }
         }
     }
 }
