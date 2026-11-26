@@ -2,7 +2,7 @@
  {
   "version": "1.2.0",
   "date": "2026-11-26",
-  "build": null,
+  "build": 57,
   "notes": [
    "Funziona solo la versione ufficiale: quando ne esce una nuova, quella vecchia si ferma e porta a monolith.support",
    "I messaggi delle versioni vecchie non vengono più riconosciuti"

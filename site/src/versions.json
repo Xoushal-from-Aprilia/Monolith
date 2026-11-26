@@ -1,5 +1,17 @@
 [
  {
+  "version": "2.7.0",
+  "date": "2026-11-26",
+  "notes": [
+   "Funziona solo la versione ufficiale: quando ne esce una nuova, quella vecchia si ferma e porta a monolith.support per scaricarla",
+   "I messaggi delle versioni vecchie non vengono più riconosciuti e chi le usa riceve un avviso per aggiornare; quelli mandati prima arrivano comunque",
+   "Gli account rimasti su una versione vecchia non compaiono più nella ricerca finché non aggiornano"
+  ],
+  "build": 57,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-57/Monolith-57.apk",
+  "size": 23887753
+ },
+ {
   "version": "2.6.0",
   "date": "2026-11-26",
   "notes": [
