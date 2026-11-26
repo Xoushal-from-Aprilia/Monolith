@@ -1,5 +1,20 @@
 [
  {
+  "version": "2.4.0",
+  "date": "2026-11-26",
+  "notes": [
+   "Colori: dodici temi da scegliere in Impostazioni, più uno che prende i colori dal tuo sfondo",
+   "Il cambio dell'icona ora funziona: Monolith si chiude un attimo e si riapre dalla nuova icona",
+   "Chiamate e videochiamate ridisegnate: cinque tasti uguali in basso, il resto in «Altro», e durante il video i comandi si nascondono con un tocco",
+   "Cuffie Bluetooth, con filo o USB: in chiamata Monolith le trova da solo e ci porta l'audio, e puoi scegliere da dove ascoltare e quale microfono usare",
+   "Videocamera anche nelle chiamate vocali e nelle stanze vocali degli Shard: la accendi quando vuoi",
+   "Avvisi dallo sviluppatore su novità e aggiornamenti; puoi scrivergli dalle Impostazioni e segnalare un account dal suo profilo"
+  ],
+  "build": 45,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-45/Monolith-45.apk",
+  "size": 23782821
+ },
+ {
   "version": "2.3.1",
   "date": "2026-11-21",
   "notes": [
