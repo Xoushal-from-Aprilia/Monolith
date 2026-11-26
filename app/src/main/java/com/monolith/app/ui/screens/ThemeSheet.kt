@@ -5,7 +5,6 @@ import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.FlowRow
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.aspectRatio
@@ -64,10 +63,14 @@ fun ThemeSheet(onDismiss: () -> Unit) {
 internal fun ThemeGrid() {
     val cur by Graph.prefs.palette.collectAsState()
     val list = Palettes.ALL + if (Palettes.dynamicAvailable) listOf(Palettes.DYNAMIC_PALETTE) else emptyList()
-    FlowRow(horizontalArrangement = Arrangement.spacedBy(12.dp), verticalArrangement = Arrangement.spacedBy(14.dp), maxItemsInEachRow = 3) {
-        list.forEach { p -> ThemeCard(p, p.key == cur, Modifier.weight(1f)) { Graph.prefs.setPalette(p.key) } }
-        // keeps the last row aligned to the grid
-        repeat((3 - list.size % 3) % 3) { Spacer(Modifier.weight(1f)) }
+    Column(verticalArrangement = Arrangement.spacedBy(14.dp)) {
+        list.chunked(3).forEach { row ->
+            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+                row.forEach { p -> ThemeCard(p, p.key == cur, Modifier.weight(1f)) { Graph.prefs.setPalette(p.key) } }
+                // keeps the last row aligned to the grid
+                repeat(3 - row.size) { Spacer(Modifier.weight(1f)) }
+            }
+        }
     }
 }
 

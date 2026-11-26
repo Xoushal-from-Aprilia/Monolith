@@ -86,11 +86,12 @@ private val FILM = listOf(
     Scene("Agenda" /*i18n*/, "Il tuo tempo, condiviso" /*i18n*/, listOf("Eventi e inviti agli amici" /*i18n*/, "Conto alla rovescia e meteo" /*i18n*/, "Compleanni e anniversari d'amicizia" /*i18n*/), "agenda"),
     Scene("Chat" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Sticker, inoltri e foto a vista unica" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
-    Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
+    Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Cuffie Bluetooth e microfono a scelta" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
     Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Tutto si modifica da un solo tasto" /*i18n*/), "profile"),
+    Scene("Colori" /*i18n*/, "Del colore che vuoi" /*i18n*/, listOf("Dodici temi da scegliere" /*i18n*/, "Chiaro, scuro o dal tuo sfondo" /*i18n*/, "E l'icona che preferisci" /*i18n*/), "colors"),
     Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
-    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
+    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Videocamera anche nelle stanze vocali" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Blocco e avviso screenshot" /*i18n*/, "Backup cifrato automatico" /*i18n*/), "safe"),
     Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
@@ -253,6 +254,20 @@ private fun SceneArt(art: String, ink: Color, bg: Color, p: Float, clock: Float)
                 }
                 drawRect(ink.copy(alpha = 0.3f), Offset(w * 0.12f, h * 0.78f), Size(w * 0.76f, 2.5f))
                 monolith(c.x, h * 0.78f, w * 0.2f, h * 0.55f, ink, stage(p, 0f, 0.35f))
+            }
+            "colors" -> {
+                // the only scene in colour: the twelve themes around the monolith
+                val darkBg = (bg.red + bg.green + bg.blue) / 3f < 0.5f
+                val accents = com.monolith.app.ui.theme.Palettes.ALL.drop(1).map { Color(if (darkBg) it.dark else it.light) }
+                val ring = min(w, h) * 0.36f
+                val dot = min(w, h) * 0.07f
+                accents.forEachIndexed { k, col ->
+                    val s = stage(p, k * 0.035f, k * 0.035f + 0.22f)
+                    val a = tau * k / accents.size - tau / 4 + clock * tau * 0.15f
+                    drawCircle(col, dot * s, Offset(c.x + cos(a) * ring, c.y + sin(a) * ring))
+                }
+                drawCircle(ink.copy(alpha = 0.12f), ring, c, style = Stroke(2f))
+                monolith(c.x, c.y + h * 0.15f, w * 0.13f, h * 0.3f, ink, stage(p, 0.3f, 0.65f))
             }
             "agenda" -> {
                 val cols = 7

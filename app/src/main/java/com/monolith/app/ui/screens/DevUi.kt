@@ -71,7 +71,7 @@ fun DevOverlays() {
         Graph.dev.updateRequired -> {
             DevWall(
                 Icons.Rounded.SystemUpdate, t("Aggiorna Monolith"),
-                t("Questa versione ({0}) non funziona più. Scarica la nuova versione per continuare: i tuoi dati restano.", BuildConfig.VERSION_NAME),
+                t("Questa versione ({0}) non funziona più. Scarica la nuova versione per continuare.", BuildConfig.VERSION_NAME),
                 t("Scarica l'aggiornamento"),
             ) { open(ctx, Graph.dev.updateUrl) }
             return

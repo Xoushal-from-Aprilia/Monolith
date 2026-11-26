@@ -427,6 +427,17 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.4.0", "2026-11-26",
+        listOf(
+            "Colori: dodici temi da scegliere in Impostazioni, più uno che prende i colori dal tuo sfondo",
+            "Il cambio dell'icona ora funziona: Monolith si chiude un attimo e si riapre dalla nuova icona",
+            "Chiamate e videochiamate ridisegnate: cinque tasti uguali in basso, il resto in «Altro», e durante il video i comandi si nascondono con un tocco",
+            "Cuffie Bluetooth, con filo o USB: in chiamata Monolith le trova da solo e ci porta l'audio, e puoi scegliere da dove ascoltare e quale microfono usare",
+            "Videocamera anche nelle chiamate vocali e nelle stanze vocali degli Shard: la accendi quando vuoi",
+            "Avvisi dallo sviluppatore su novità e aggiornamenti; puoi scrivergli dalle Impostazioni e segnalare un account dal suo profilo",
+        ),
+    ),
+    Release(
         "2.3.1", "2026-11-21",
         listOf(
             "Una piccola vibrazione quando tocchi un tasto, leggera come quella della tastiera",

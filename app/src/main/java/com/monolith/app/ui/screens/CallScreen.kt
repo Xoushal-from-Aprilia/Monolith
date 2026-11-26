@@ -269,6 +269,8 @@ internal fun CallContent(st: CallUi) {
                     Avatar(emoji, 150.dp, Modifier.graphicsLayer { scaleX = s; scaleY = s })
                 }
                 Spacer(Modifier.height(24.dp))
+                Text(title, color = FG, fontFamily = Grotesk, style = MaterialTheme.typography.headlineLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                Spacer(Modifier.height(8.dp))
                 if (room != null && remotes.isEmpty() && st.phase == CallPhase.ACTIVE) {
                     Text(t("Sei solo nella stanza: gli altri ti sentono appena entrano"), color = FG.copy(alpha = 0.6f), style = MaterialTheme.typography.bodyMedium, textAlign = TextAlign.Center)
                 } else if (remotes.size == 1 && st.phase == CallPhase.ACTIVE && room != null) {
@@ -304,7 +306,7 @@ internal fun CallContent(st: CallUi) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     Column(Modifier.weight(1f)) {
                         Text(kicker, color = FG.copy(alpha = 0.55f), style = MaterialTheme.typography.labelSmall, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                        Text(title, color = FG, fontFamily = Grotesk, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
+                        if (showGrid || fullBleed) Text(title, color = FG, fontFamily = Grotesk, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = TextOverflow.Ellipsis)
                         AnimatedContent(
                             when (st.phase) {
                                 CallPhase.OUTGOING -> t("Squilla…")
@@ -485,7 +487,7 @@ private fun CallGrid(remotes: List<Participant>, byPk: Map<String, com.monolith.
 /** one control of the bottom bar: all the same size, the label under it */
 @Composable
 private fun DockButton(icon: ImageVector, label: String, on: Boolean, modifier: Modifier = Modifier, danger: Boolean = false, onClick: () -> Unit) {
-    Column(modifier, horizontalAlignment = Alignment.CenterHorizontally) {
+    Column(modifier.bounceClick(0.9f, onClick = onClick), horizontalAlignment = Alignment.CenterHorizontally) {
         Box(
             Modifier.size(54.dp).clip(CircleShape).background(
                 when {
@@ -493,7 +495,7 @@ private fun DockButton(icon: ImageVector, label: String, on: Boolean, modifier: 
                     on -> FG
                     else -> FG.copy(alpha = 0.12f)
                 },
-            ).bounceClick(0.86f, onClick = onClick),
+            ),
             contentAlignment = Alignment.Center,
         ) { Icon(icon, label, tint = if (on && !danger) BG else FG, modifier = Modifier.size(26.dp)) }
         Spacer(Modifier.height(6.dp))

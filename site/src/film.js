@@ -125,6 +125,23 @@ export function drawArt(ctx, art, w, h, ink, bg, p, clock) {
       monolith(ctx, c.x, h * 0.78, w * 0.2, h * 0.55, ink, 1, stage(p, 0, 0.35));
       break;
     }
+    case "colors": {
+      // the only scene in colour: the twelve themes around the monolith
+      const darkBg = (bg[0] + bg[1] + bg[2]) / 3 < 128;
+      const accents = darkBg
+        ? ["#9CC4FF", "#9AD5A5", "#FFB38E", "#CFBDFF", "#FFB2B9", "#F5C66A", "#7EDCCB", "#FFB0D4", "#BAC4FF", "#E3C3A1", "#C0E173"]
+        : ["#1D5FA8", "#2D6A3E", "#B5481A", "#6A4EB0", "#AD2638", "#8A5A00", "#00796B", "#AE3A78", "#3B4AA8", "#7A5B3C", "#4F6E00"];
+      const ring = m * 0.36, dot = m * 0.07;
+      accents.forEach((col, k) => {
+        const s = stage(p, k * 0.035, k * 0.035 + 0.22);
+        const a = (TAU * k) / accents.length - TAU / 4 + clock * TAU * 0.15;
+        circle(ctx, c.x + Math.cos(a) * ring, c.y + Math.sin(a) * ring, dot * s);
+        ctx.fillStyle = col; ctx.fill();
+      });
+      circle(ctx, c.x, c.y, ring); ctx.strokeStyle = rgba(ink, 0.12); ctx.lineWidth = u(2); ctx.stroke();
+      monolith(ctx, c.x, c.y + h * 0.15, w * 0.13, h * 0.3, ink, 1, stage(p, 0.3, 0.65));
+      break;
+    }
     case "agenda": {
       const cols = 7, rows = 5, gw = w * 0.9, cell = gw / cols, ox = (w - gw) / 2;
       const oy = Math.max(h * 0.12, (h * 0.78 - rows * cell) / 2);

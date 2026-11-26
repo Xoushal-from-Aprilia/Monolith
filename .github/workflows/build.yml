@@ -3,8 +3,8 @@ name: Build APK
 on:
   push:
     branches: [ main ]
-    # the download site lives in site/ and doesn't need a new APK
-    paths-ignore: [ "site/**" ]
+    # the download site (site/) and the developer key (dev/) do not need a new APK
+    paths-ignore: [ "site/**", "dev/**" ]
   workflow_dispatch:
 
 permissions:
