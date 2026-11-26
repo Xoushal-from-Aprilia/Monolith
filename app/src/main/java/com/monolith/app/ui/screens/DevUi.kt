@@ -148,8 +148,8 @@ internal fun UpdateWallContent(onBackup: (() -> Unit)? = null, onUpdate: () -> U
         t("Funziona solo la versione ufficiale{0}. Questa ({1}) non funziona più: scarica quella nuova da monolith.support. Prima salva un backup, perché per installarla dovrai disinstallare questa.",
             off?.let { " (" + it.version + ")" } ?: "", BuildConfig.VERSION_NAME),
         t("Vai a monolith.support"),
-        onUpdate,
         secondary = onBackup?.let { t("Prima salva un backup") to it },
+        onAction = onUpdate,
     )
 }
 
@@ -210,7 +210,7 @@ internal fun DeviceWallContent(why: String, canWrite: Boolean, onWrite: () -> Un
         Icons.Rounded.Block, t("Telefono bloccato"),
         t("Lo sviluppatore di Monolith ha bloccato questo telefono: qui Monolith non si può usare.") + if (why.isNotBlank()) "\n\n" + t("Motivo: {0}", why) else "",
         if (canWrite) t("Scrivi allo sviluppatore") else null,
-        onWrite,
+        onAction = onWrite,
     )
 }
 
@@ -239,8 +239,9 @@ internal fun DeletedNoticeDialog(why: String, onOk: () -> Unit) {
 
 @Composable
 private fun DevWall(
-    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String?, onAction: () -> Unit,
+    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String?,
     secondary: Pair<String, () -> Unit>? = null,
+    onAction: () -> Unit,
 ) {
     Box(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).bounceClick(1f) {},
