@@ -221,6 +221,7 @@ fun AppRoot() {
                 else -> MainNav()
             }
         }
+        if (profile != null && !intro) com.monolith.app.ui.screens.DevOverlays()
         AnimatedVisibility(AppLock.locked && profile != null && !intro, enter = fadeIn(), exit = fadeOut(tween(350))) {
             LockScreen()
         }

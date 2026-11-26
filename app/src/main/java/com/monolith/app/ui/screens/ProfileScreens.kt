@@ -406,6 +406,7 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
             NearbyCard(pk, friend?.displayName ?: "")
         }
         if (!mine && saved.isNotEmpty()) SavedSection(nav, saved, friend?.displayName ?: "")
+        if (!mine) ReportLink(pk, friend?.displayName ?: "")
         Spacer(Modifier.navigationBarsPadding().height(36.dp))
     }
 

@@ -165,6 +165,11 @@ class Prefs(ctx: Context) {
     val theme: StateFlow<Int> = _theme.asStateFlow()
     fun setTheme(v: Int) { sp.edit().putInt("theme", v).apply(); _theme.value = v }
 
+    private val _palette = MutableStateFlow(sp.getString("palette", "mono") ?: "mono")
+    /** key of the colour theme, see Palettes */
+    val palette: StateFlow<String> = _palette.asStateFlow()
+    fun setPalette(v: String) { sp.edit().putString("palette", v).apply(); _palette.value = v }
+
     private val _mapStyle = MutableStateFlow(sp.getInt("map_style", 0))
     /** index into MapLook.STYLES */
     val mapStyle: StateFlow<Int> = _mapStyle.asStateFlow()
@@ -274,9 +279,14 @@ class IdentityStore(private val ctx: Context) {
 
     fun hasIdentity() = keys != null && _profile.value != null
 
+    /** when this account was created on this phone (seconds); 0 when unknown (older or restored accounts) */
+    val joined: Long get() = sp.getLong("joined", 0)
+
     fun create(profile: Profile, importedSecret: ByteArray? = null): Keys {
         val sk = importedSecret ?: Secp256k1.generatePrivateKey()
-        sp.edit().putString("sk", encrypt(sk)).putString("profile", profile.toJson().toString()).apply()
+        val ed = sp.edit().putString("sk", encrypt(sk)).putString("profile", profile.toJson().toString())
+        if (importedSecret == null) ed.putLong("joined", System.currentTimeMillis() / 1000)
+        ed.apply()
         val k = Keys(sk, Hex.encode(Secp256k1.publicKey(sk)))
         keys = k
         _profile.value = profile

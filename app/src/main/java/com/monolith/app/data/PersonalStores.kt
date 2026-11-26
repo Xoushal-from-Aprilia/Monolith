@@ -74,13 +74,34 @@ object AppIcons {
 
     fun current(ctx: Context): String = ctx.getSharedPreferences("app_icon", Context.MODE_PRIVATE).getString("key", "IconClassic") ?: "IconClassic"
 
+    private fun comp(ctx: Context, key: String) = ComponentName(ctx.packageName, "com.monolith.app.$key")
+
+    private fun isOn(pm: PackageManager, ctx: Context, key: String): Boolean = when (pm.getComponentEnabledSetting(comp(ctx, key))) {
+        PackageManager.COMPONENT_ENABLED_STATE_ENABLED -> true
+        PackageManager.COMPONENT_ENABLED_STATE_DEFAULT -> key == "IconClassic"   // the manifest turns on only the classic one
+        else -> false
+    }
+
+    /**
+     * Switches the home screen entry. The launcher only notices for sure when the app is closed, so the entry
+     * in use is turned off last and without DONT_KILL_APP: the system closes Monolith and the launcher
+     * redraws the icon. The choice is saved first, because the process ends right after.
+     */
     fun apply(ctx: Context, key: String) {
         val pm = ctx.packageManager
-        // enable the new one first, so there is never a moment without a launcher entry
-        pm.setComponentEnabledSetting(ComponentName(ctx.packageName, "com.monolith.app.$key"), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP)
-        LOOKS.filter { it.key != key }.forEach {
-            pm.setComponentEnabledSetting(ComponentName(ctx.packageName, "com.monolith.app.${it.key}"), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP)
+        ctx.getSharedPreferences("app_icon", Context.MODE_PRIVATE).edit().putString("key", key).commit()
+        val sync = if (android.os.Build.VERSION.SDK_INT >= 33) PackageManager.SYNCHRONOUS else 0
+        pm.setComponentEnabledSetting(comp(ctx, key), PackageManager.COMPONENT_ENABLED_STATE_ENABLED, PackageManager.DONT_KILL_APP or sync)
+        val inUse = LOOKS.filter { it.key != key && isOn(pm, ctx, it.key) }.map { it.key }
+        LOOKS.filter { it.key != key && it.key !in inUse }.forEach {
+            pm.setComponentEnabledSetting(comp(ctx, it.key), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, PackageManager.DONT_KILL_APP or sync)
         }
-        ctx.getSharedPreferences("app_icon", Context.MODE_PRIVATE).edit().putString("key", key).apply()
+        inUse.forEachIndexed { i, k ->
+            val last = i == inUse.lastIndex
+            pm.setComponentEnabledSetting(comp(ctx, k), PackageManager.COMPONENT_ENABLED_STATE_DISABLED, if (last) sync else PackageManager.DONT_KILL_APP or sync)
+        }
     }
+
+    /** the entry that is really on (the saved choice can be wrong if the app was closed halfway) */
+    fun actual(ctx: Context): String = LOOKS.firstOrNull { isOn(ctx.packageManager, ctx, it.key) }?.key ?: current(ctx)
 }

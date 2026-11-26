@@ -72,6 +72,7 @@ object Graph {
     val nearbyActive: Boolean get() = ::nearby.isInitialized && nearby.active
     lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
+    lateinit var dev: com.monolith.app.net.DevChannel
 
     @Volatile
     var foreground = false
@@ -110,6 +111,7 @@ object Graph {
         calls = CallManager(application, scope)
         Sounds.watchCalls()
         shards = com.monolith.app.net.ShardManager(application, scope)
+        dev = com.monolith.app.net.DevChannel(application, scope)
         together = com.monolith.app.net.Together(application)
         places = PlacesStore(application)
         location = LocationShare(application, scope)
@@ -133,6 +135,7 @@ object Graph {
                 foreground = true
                 AppLock.onForeground()
                 messenger.onForeground()
+                dev.onForeground()
             }
 
             override fun onStop(owner: LifecycleOwner) {

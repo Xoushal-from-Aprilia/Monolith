@@ -3,7 +3,6 @@ package com.monolith.app.rtc
 import android.Manifest
 import android.content.Context
 import android.content.pm.PackageManager
-import android.media.AudioManager
 import android.media.Ringtone
 import android.media.RingtoneManager
 import android.os.Build
@@ -102,7 +101,8 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
     private var screenHelper: SurfaceTextureHelper? = null
     private var ringtone: Ringtone? = null
     private var timeout: ScheduledFuture<*>? = null
-    private val audio = ctx.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+    /** speaker, earpiece, headphones and microphone of the call */
+    val routes = AudioRouter(ctx)
 
     val inCall: Boolean
         get() = _state.value.phase.let { it == CallPhase.OUTGOING || it == CallPhase.CONNECTING || it == CallPhase.ACTIVE || it == CallPhase.INCOMING }
@@ -194,6 +194,9 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
     }
 
     private fun isRoom(st: CallUi = _state.value) = st.cid?.startsWith("room.") == true
+
+    /** for the screenshots: show a call without calling anyone */
+    internal fun preview(st: CallUi) { _state.value = st }
 
     fun accept() {
         exec.execute {
@@ -456,29 +459,26 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
                 audioSource = s
                 audioTrack = factory.createAudioTrack("monolith-audio", s).also { it.setEnabled(true) }
             }
-            if (video && videoTrack == null && granted(Manifest.permission.CAMERA)) {
-                val enumerator = Camera2Enumerator(ctx)
-                val name = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull()
-                if (name != null) {
-                    val cap = enumerator.createCapturer(name, null)
-                    val helper = SurfaceTextureHelper.create("monolith-camera", RtcFactory.egl.eglBaseContext)
-                    val src = factory.createVideoSource(false)
-                    cap.initialize(helper, ctx, src.capturerObserver)
-                    cap.startCapture(960, 540, 24)
-                    capturer = cap
-                    surfaceHelper = helper
-                    videoSource = src
-                    videoTrack = factory.createVideoTrack("monolith-video", src).also { it.setEnabled(true) }
-                }
-            }
-            @Suppress("DEPRECATION")
-            run {
-                audio.mode = AudioManager.MODE_IN_COMMUNICATION
-                audio.isSpeakerphoneOn = video
-            }
+            if (video && videoTrack == null && granted(Manifest.permission.CAMERA)) startCamera()
+            routes.start(video)
         } catch (e: Throwable) {
             Log.w(tag, "media failed", e)
         }
+    }
+
+    private fun startCamera() {
+        val factory = RtcFactory.get(ctx)
+        val enumerator = Camera2Enumerator(ctx)
+        val name = enumerator.deviceNames.firstOrNull { enumerator.isFrontFacing(it) } ?: enumerator.deviceNames.firstOrNull() ?: return
+        val cap = enumerator.createCapturer(name, null)
+        val helper = SurfaceTextureHelper.create("monolith-camera", RtcFactory.egl.eglBaseContext)
+        val src = factory.createVideoSource(false)
+        cap.initialize(helper, ctx, src.capturerObserver)
+        cap.startCapture(960, 540, 24)
+        capturer = cap
+        surfaceHelper = helper
+        videoSource = src
+        videoTrack = factory.createVideoTrack("monolith-video", src).also { it.setEnabled(true) }
     }
 
     // ================================================================== screen sharing
@@ -577,11 +577,7 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
         videoTrack = null
         audioSource = null
         audioTrack = null
-        @Suppress("DEPRECATION")
-        runCatching {
-            audio.isSpeakerphoneOn = false
-            audio.mode = AudioManager.MODE_NORMAL
-        }
+        routes.stop()
     }
 
     fun toggleMute() {
@@ -592,19 +588,37 @@ class CallManager(private val ctx: Context, private val scope: CoroutineScope) {
         }
     }
 
-    @Suppress("DEPRECATION")
-    fun toggleSpeaker() {
-        exec.execute {
-            val on = !_state.value.speaker
-            audio.isSpeakerphoneOn = on
-            _state.update { it.copy(speaker = on) }
-        }
-    }
+    fun toggleSpeaker() = routes.toggleSpeaker()
 
-    fun toggleCamera() {
+    fun toggleCamera() = setCamera(!_state.value.camOn)
+
+    /**
+     * Camera on or off. In a voice call or a Shard room that had no camera yet, it starts one and
+     * offers the video to everyone in the call.
+     */
+    fun setCamera(on: Boolean) {
         exec.execute {
+            if (!inCall) return@execute
+            if (on && videoTrack == null) {
+                if (!granted(Manifest.permission.CAMERA)) return@execute
+                runCatching { startCamera() }.onFailure { Log.w(tag, "camera failed", it) }
+                val track = videoTrack ?: return@execute
+                if (screenTrack == null) links.values.forEach { link ->
+                    val sender = link.pc.senders.firstOrNull { it.track()?.kind() == "video" }
+                    if (sender != null) sender.setTrack(track, false)
+                    else {
+                        link.pc.addTrack(track, listOf("monolith"))
+                        renegotiate(link)
+                    }
+                }
+                _state.update { it.copy(video = true, localVideo = track, camOn = true) }
+                routes.onVideo()
+                MonolithService.refresh(ctx)
+                _state.value.participants.keys.forEach { send(it, "cam") { put("on", true) } }
+                return@execute
+            }
             val track = videoTrack ?: return@execute
-            val on = !_state.value.camOn
+            if (on == _state.value.camOn) return@execute
             track.setEnabled(on)
             if (on) runCatching { capturer?.startCapture(960, 540, 24) } else runCatching { capturer?.stopCapture() }
             _state.update { it.copy(camOn = on) }

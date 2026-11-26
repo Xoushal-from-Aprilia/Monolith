@@ -64,6 +64,14 @@ object RtcFactory {
 
     val egl: EglBase by lazy { EglBase.create() }
 
+    @Volatile
+    private var adm: JavaAudioDeviceModule? = null
+
+    /** the microphone calls should use; null lets the system pick the one of the chosen output */
+    fun preferInput(dev: android.media.AudioDeviceInfo?) {
+        adm?.setPreferredInputDevice(dev)
+    }
+
     @Synchronized
     fun get(ctx: Context): PeerConnectionFactory {
         factory?.let { return it }
@@ -74,6 +82,7 @@ object RtcFactory {
             .setUseHardwareAcousticEchoCanceler(true)
             .setUseHardwareNoiseSuppressor(true)
             .createAudioDeviceModule()
+        this.adm = adm
         val f = PeerConnectionFactory.builder()
             .setOptions(PeerConnectionFactory.Options())
             .setAudioDeviceModule(adm)

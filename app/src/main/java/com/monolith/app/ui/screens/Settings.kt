@@ -57,6 +57,9 @@ import androidx.compose.material.icons.rounded.Key
 import androidx.compose.material.icons.rounded.QrCode2
 import androidx.compose.material.icons.rounded.Restore
 import androidx.compose.material.icons.rounded.Shield
+import androidx.compose.material.icons.rounded.Palette
+import androidx.compose.material.icons.rounded.SystemUpdate
+import androidx.compose.material.icons.rounded.Mail
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Cake
@@ -156,6 +159,8 @@ fun SettingsScreen(nav: NavHostController) {
     val mapTone by Graph.prefs.mapTone.collectAsState()
     var alwaysOnline by remember { mutableStateOf(Graph.prefs.alwaysOnline) }
     var iconSheet by remember { mutableStateOf(false) }
+    var themeSheet by remember { mutableStateOf(false) }
+    var feedbackDialog by remember { mutableStateOf(false) }
     var medSheet by remember { mutableStateOf(false) }
     var shakeOn by remember { mutableStateOf(com.monolith.app.ui.screens.ChatLooks.shake) }
     var weeklyOn by remember { mutableStateOf(com.monolith.app.net.Weekly.enabled(ctx)) }
@@ -214,6 +219,8 @@ fun SettingsScreen(nav: NavHostController) {
                     ) { Text(label) }
                 }
             }
+            val paletteKey by Graph.prefs.palette.collectAsState()
+            SettingRow(Icons.Rounded.Palette, t("Colori"), t(com.monolith.app.ui.theme.Palettes.byKey(paletteKey).name), trailing = { PaletteSwatch() }) { themeSheet = true }
             SettingRow(Icons.Rounded.Translate, t("Lingua"), I18n.LANGS.first { it.first == I18n.lang }.second) { langDialog = true }
             SettingRow(Icons.Rounded.Map, t("Mappa"), t(MapLook.style(mapStyleIdx).name) + " · " + MapLook.toneLabel(mapTone)) { mapSheet = true }
             SettingRow(Icons.Rounded.MusicNote, t("Suoni e vibrazione"), t("Tasti, suoneria e notifiche")) { nav.navigate("sounds") }
@@ -269,6 +276,13 @@ fun SettingsScreen(nav: NavHostController) {
             SectionLabel(t("Monolith"), Modifier.padding(top = 20.dp))
             SettingRow(Icons.Rounded.AutoStories, t("Journal"), t("Tutte le novità, versione per versione")) { nav.navigate("journal") }
             SettingRow(Icons.Rounded.Favorite, t("Crediti"), "Christian “Xoushal” Vedovi") { nav.navigate("credits") }
+            val devState by Graph.dev.state.collectAsState()
+            if (devState.latest != null && Graph.dev.updateAvailable) {
+                SettingRow(Icons.Rounded.SystemUpdate, t("Aggiornamento disponibile"), t("Versione {0}: tocca per scaricarla", devState.latest ?: "")) {
+                    runCatching { ctx.startActivity(android.content.Intent(android.content.Intent.ACTION_VIEW, android.net.Uri.parse(Graph.dev.updateUrl))) }
+                }
+            }
+            if (devState.active) SettingRow(Icons.Rounded.Mail, t("Scrivi allo sviluppatore"), t("Idee, problemi o complimenti, cifrati")) { feedbackDialog = true }
             Text(
                 t("Versione {0}", BuildConfig.VERSION_NAME),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -285,6 +299,8 @@ fun SettingsScreen(nav: NavHostController) {
     if (showQr) MyQrDialog { showQr = false }
     if (mapSheet) MapStyleSheet { mapSheet = false }
     if (iconSheet) com.monolith.app.ui.screens.IconSheet { iconSheet = false }
+    if (themeSheet) ThemeSheet { themeSheet = false }
+    if (feedbackDialog) FeedbackDialog { feedbackDialog = false }
     if (medSheet) com.monolith.app.ui.screens.MedicalSheet { medSheet = false }
     if (bdayPicker) BirthdayPickerDialog { bdayPicker = false }
     if (langDialog) LanguageDialog(onDismiss = { langDialog = false }) { I18n.set(ctx, it); langDialog = false }

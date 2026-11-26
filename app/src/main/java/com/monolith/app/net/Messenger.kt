@@ -150,6 +150,7 @@ class Messenger(
         scope.launch {
             delay(2500)
             publishProfile()
+            Graph.dev.start()
             resendPending()
             db.misc().pruneProcessed(now() - 45L * 86_400_000)
             db.misc().pruneChunks(now() - 15L * 86_400_000)
@@ -223,6 +224,8 @@ class Messenger(
     // ================================================================== incoming
 
     suspend fun handlePayload(from: String, p: JSONObject, sentAt: Long, viaRtc: Boolean) {
+        // accounts blocked by the developer reach nobody
+        if (Graph.dev.isBlocked(from)) return
         val friend = db.friends().get(from)
         val isFriend = friend?.status == FriendStatus.FRIEND
         if (isFriend && viaRtc) markOnline(from)
@@ -870,7 +873,9 @@ class Messenger(
         val ev = NostrEvent(
             "", nowSec(), Envelope.KIND_PROFILE,
             listOf(listOf("d", "monolith-profile"), listOf("u", p.username), listOf("t", "monolith")),
-            p.toJson().toString()
+            // app version and sign-up day go in the public directory entry, for the developer's statistics
+            p.toJson().put("v", com.monolith.app.BuildConfig.VERSION_NAME)
+                .apply { identity.joined.takeIf { it > 0 }?.let { put("j", it) } }.toString()
         )
         withContext(Dispatchers.Default) { ev.sign(k.priv) }
         relays.publish(ev)
@@ -908,7 +913,7 @@ class Messenger(
                     val prof = runCatching { Profile.fromJson(JSONObject(latest.content)) }.getOrNull() ?: return@mapNotNull null
                     UserResult(pk, prof, latest.createdAt)
                 }
-                .filter { it.pubkey != myPub }
+                .filter { it.pubkey != myPub && !Graph.dev.isBlocked(it.pubkey) }
                 .filter { tagFilter.isEmpty() || it.pubkey.startsWith(tagFilter) }
                 .sortedBy { it.createdAt }
         }

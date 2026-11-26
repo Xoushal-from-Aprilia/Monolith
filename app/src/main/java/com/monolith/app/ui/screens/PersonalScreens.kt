@@ -137,12 +137,22 @@ fun MedicalSheet(onDismiss: () -> Unit) {
 @Composable
 fun IconSheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
-    var cur by remember { mutableStateOf(AppIcons.current(ctx)) }
+    val cur = remember { AppIcons.actual(ctx) }
+    var ask by remember { mutableStateOf<AppIcons.Look?>(null) }
+    ask?.let { look ->
+        MonoDialog(
+            onDismissRequest = { ask = null },
+            title = { Text(t("Cambiare icona?")) },
+            text = { Text(t("Per cambiare l'icona Monolith si chiude un attimo: riaprila dalla nuova icona. Se sparisce dalla schermata Home, la trovi tra tutte le app e puoi rimetterla.")) },
+            confirmButton = { TextButton(onClick = { ask = null; AppIcons.apply(ctx, look.key) }) { Text(t("Cambia")) } },
+            dismissButton = { TextButton(onClick = { ask = null }) { Text(t("Annulla")) } },
+        )
+    }
     MonoSheet(onDismissRequest = onDismiss, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
         Column(Modifier.padding(horizontal = 20.dp).padding(bottom = 28.dp)) {
             Text(t("Icona dell'app"), style = MaterialTheme.typography.titleLarge)
             Text(
-                t("Alcune schermate Home tolgono l'icona vecchia: potrebbe servire rimetterla."),
+                t("Dopo la scelta Monolith si chiude e si riapre dalla nuova icona."),
                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(14.dp))
@@ -154,13 +164,7 @@ fun IconSheet(onDismiss: () -> Unit) {
                         Box(
                             Modifier.fillMaxWidth().aspectRatio(1f).clip(RoundedCornerShape(26.dp)).background(Color(look.bg))
                                 .border(if (sel) 3.dp else 1.dp, if (sel) MaterialTheme.colorScheme.onSurface else MaterialTheme.colorScheme.outlineVariant, RoundedCornerShape(26.dp))
-                                .bounceClick(0.92f) {
-                                    if (!sel) {
-                                        AppIcons.apply(ctx, look.key)
-                                        cur = look.key
-                                        Toast.makeText(ctx, t("Icona cambiata"), Toast.LENGTH_SHORT).show()
-                                    }
-                                },
+                                .bounceClick(0.92f) { if (!sel) ask = look },
                             contentAlignment = Alignment.Center,
                         ) { if (res != 0) Image(painterResource(res), null, Modifier.fillMaxSize()) }
                         Spacer(Modifier.height(4.dp))

@@ -44,7 +44,8 @@ class MainActivity : FragmentActivity() {
 
         setContent {
             val mode by Graph.prefs.theme.collectAsState()
-            MonolithTheme(mode) {
+            val palette by Graph.prefs.palette.collectAsState()
+            MonolithTheme(mode, palette) {
                 val dark = LocalDark.current
                 LaunchedEffect(dark) {
                     val style = if (dark) SystemBarStyle.dark(Color.TRANSPARENT) else SystemBarStyle.light(Color.TRANSPARENT, Color.TRANSPARENT)

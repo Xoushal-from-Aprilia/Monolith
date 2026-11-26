@@ -5,6 +5,7 @@ import androidx.compose.runtime.Composable
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.height
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -124,9 +125,9 @@ class Shots {
     }
 
     @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
-    private fun shot(name: String, dark: Boolean = false, act: (() -> Unit)? = null, content: @Composable (NavHostController) -> Unit) {
+    private fun shot(name: String, dark: Boolean = false, palette: String = "mono", act: (() -> Unit)? = null, content: @Composable (NavHostController) -> Unit) {
         compose.setContent {
-            MonolithTheme(if (dark) 2 else 1) {
+            MonolithTheme(if (dark) 2 else 1, palette) {
                 // like MainActivity: a surface gives the right text colour in dark mode
                 androidx.compose.material3.Surface(androidx.compose.ui.Modifier.fillMaxSize(), color = androidx.compose.material3.MaterialTheme.colorScheme.background) {
                     val nav = rememberNavController()
@@ -189,6 +190,61 @@ class Shots {
     @Test fun badges() = shot("10_badges") { BadgeBoard(false) }
     @Test fun badges_dark() = shot("11_badges_dark", dark = true) { BadgeBoard(true) }
     @Test fun chat() = shot("09_chat") { com.monolith.app.ui.screens.ChatScreen(it, ada) }
+
+    // ---- 2.4.0: colours, calls, audio, developer channel
+    @Config(qualifiers = "+h1300dp") @Test fun themes() = shot("36_themes") { ThemeBoard() }
+    @Config(qualifiers = "+h1300dp") @Test fun themes_dark() = shot("37_themes_dark", dark = true) { ThemeBoard() }
+    @Test fun home_ocean() = shot("38_home_ocean", palette = "ocean") { com.monolith.app.ui.HomeScreen(it, 1) {} }
+    @Test fun chat_rose_dark() = shot("39_chat_rose_dark", dark = true, palette = "rose") { com.monolith.app.ui.screens.ChatScreen(it, ada) }
+    @Test fun agenda_forest() = shot("40_agenda_forest", palette = "forest") { com.monolith.app.ui.HomeScreen(it, 0) {} }
+    @Config(qualifiers = "+h2900dp") @Test fun settings_sunset() = shot("41_settings_sunset", palette = "sunset") { com.monolith.app.ui.screens.SettingsScreen(it) }
+    @Test fun call_voice() = shot("42_call_voice") { voiceCall(); com.monolith.app.ui.screens.CallContent(Graph.calls.state.value) }
+    @Test fun call_audio_sheet() = shot("43_call_audio", act = { click("AirPods Pro") }) { voiceCall(); com.monolith.app.ui.screens.CallContent(Graph.calls.state.value) }
+    @Test fun call_more() = shot("44_call_more", act = { click("Altro") }) { voiceCall(); com.monolith.app.ui.screens.CallContent(Graph.calls.state.value) }
+    @Test fun call_room() = shot("45_call_room") { roomCall(); com.monolith.app.ui.screens.CallContent(Graph.calls.state.value) }
+    @Test fun call_incoming() = shot("46_call_incoming") {
+        Graph.calls.preview(com.monolith.app.rtc.CallUi(phase = com.monolith.app.rtc.CallPhase.INCOMING, cid = "c1", caller = ada, members = listOf(me, ada), peer = ada, video = true))
+        com.monolith.app.ui.screens.CallContent(Graph.calls.state.value)
+    }
+    @Test fun dev_news() = shot("47_dev_news") {
+        Graph.dev.preview(com.monolith.app.net.DevState(active = true, news = com.monolith.app.net.DevNews("n1", "Benvenuti nella 2.4", "Temi di colore, chiamate nuove e cuffie Bluetooth. Grazie a tutti per le idee!", "")))
+        com.monolith.app.ui.HomeScreen(it, 1) {}
+        com.monolith.app.ui.screens.DevOverlays()
+    }
+    @Test fun dev_update() = shot("48_dev_update") {
+        Graph.dev.preview(com.monolith.app.net.DevState(active = true, latest = "9.0.0", min = "9.0.0"))
+        com.monolith.app.ui.screens.DevOverlays()
+    }
+
+    private fun voiceCall() {
+        val bt = com.monolith.app.rtc.AudioRoute("BT:AirPods Pro", com.monolith.app.rtc.RouteKind.BLUETOOTH, "AirPods Pro")
+        Graph.calls.routes.preview(
+            listOf(bt, com.monolith.app.rtc.AudioRoute("EARPIECE", com.monolith.app.rtc.RouteKind.EARPIECE, "Telefono"), com.monolith.app.rtc.AudioRoute("SPEAKER", com.monolith.app.rtc.RouteKind.SPEAKER, "Vivavoce")),
+            bt,
+            listOf(com.monolith.app.rtc.AudioRoute("BT:AirPods Pro", com.monolith.app.rtc.RouteKind.BLUETOOTH, "Microfono di AirPods Pro"), com.monolith.app.rtc.AudioRoute("MIC", com.monolith.app.rtc.RouteKind.EARPIECE, "Microfono del telefono")),
+        )
+        Graph.calls.preview(com.monolith.app.rtc.CallUi(
+            phase = com.monolith.app.rtc.CallPhase.ACTIVE, cid = "c1", caller = me, members = listOf(me, ada), peer = ada,
+            participants = mapOf(ada to com.monolith.app.rtc.Participant(ada, connected = true)), since = System.currentTimeMillis() - 754_000,
+        ))
+    }
+
+    private fun roomCall() {
+        Graph.calls.routes.preview(listOf(com.monolith.app.rtc.AudioRoute("SPEAKER", com.monolith.app.rtc.RouteKind.SPEAKER, "Vivavoce")), com.monolith.app.rtc.AudioRoute("SPEAKER", com.monolith.app.rtc.RouteKind.SPEAKER, "Vivavoce"), emptyList())
+        Graph.calls.preview(com.monolith.app.rtc.CallUi(
+            phase = com.monolith.app.rtc.CallPhase.ACTIVE, cid = "room.s1.voice", caller = me, members = listOf(me, ada, leo, mia),
+            participants = listOf(ada, leo, mia).associateWith { com.monolith.app.rtc.Participant(it, connected = true) }, since = System.currentTimeMillis() - 1_830_000,
+        ))
+    }
+
+    @Composable
+    private fun ThemeBoard() {
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(20.dp)) {
+            androidx.compose.material3.Text("Colori", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+            androidx.compose.foundation.layout.Spacer(androidx.compose.ui.Modifier.height(16.dp))
+            com.monolith.app.ui.screens.ThemeGrid()
+        }
+    }
 
     @Composable
     private fun BadgeBoard(dark: Boolean) {
