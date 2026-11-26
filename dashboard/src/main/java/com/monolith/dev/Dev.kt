@@ -314,6 +314,11 @@ object Dev {
         }
     }
 
+    /** for the screenshots: fill the dashboard without going online */
+    internal fun preview(k: Keys, users: List<User>, doc: Doc, inbox: List<Msg>) {
+        _keys.value = k; _users.value = users; _doc.value = doc; _inbox.value = inbox; _usersAt.value = System.currentTimeMillis()
+    }
+
     fun userOf(pk: String): User? = _users.value.firstOrNull { it.pk == pk }
 
     /** the builds of the app on GitHub, newest first */

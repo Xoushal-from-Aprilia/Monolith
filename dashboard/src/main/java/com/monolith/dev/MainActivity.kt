@@ -103,7 +103,12 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         enableEdgeToEdge()
-        setContent {
+        setContent { DevTheme { Root() } }
+    }
+}
+
+@Composable
+internal fun DevTheme(content: @Composable () -> Unit) {
             MaterialTheme(
                 colorScheme = darkColorScheme(
                     primary = Color(0xFFF2F2F2), onPrimary = Color(0xFF0A0A0A),
@@ -118,10 +123,8 @@ class MainActivity : ComponentActivity() {
                     error = Danger,
                 ),
             ) {
-                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { Root() }
+                Surface(Modifier.fillMaxSize(), color = MaterialTheme.colorScheme.background) { content() }
             }
-        }
-    }
 }
 
 // ====================================================================== helpers
@@ -175,7 +178,7 @@ private fun Title(text: String, sub: String? = null, actions: @Composable () -> 
 // ====================================================================== root
 
 @Composable
-private fun Root() {
+internal fun Root() {
     val keys by Dev.keys.collectAsState()
     var keyIntro by rememberSaveable { mutableStateOf(false) }
     when {
@@ -186,7 +189,7 @@ private fun Root() {
 }
 
 @Composable
-private fun SetupScreen(onCreated: () -> Unit) {
+internal fun SetupScreen(onCreated: () -> Unit) {
     var importing by remember { mutableStateOf(false) }
     var code by remember { mutableStateOf("") }
     var error by remember { mutableStateOf(false) }
@@ -216,7 +219,7 @@ private fun SetupScreen(onCreated: () -> Unit) {
 }
 
 @Composable
-private fun KeyIntro(onDone: () -> Unit) {
+internal fun KeyIntro(onDone: () -> Unit) {
     val ctx = LocalContext.current
     val keys by Dev.keys.collectAsState()
     val pub = keys?.pub ?: ""
@@ -255,8 +258,8 @@ private fun KeyIntro(onDone: () -> Unit) {
 }
 
 @Composable
-private fun MainScreen() {
-    var tab by rememberSaveable { mutableIntStateOf(0) }
+internal fun MainScreen(start: Int = 0) {
+    var tab by rememberSaveable { mutableIntStateOf(start) }
     val inbox by Dev.inbox.collectAsState()
     val unread = inbox.count { !it.read }
     Scaffold(
@@ -289,7 +292,7 @@ private fun MainScreen() {
 // ====================================================================== overview
 
 @Composable
-private fun OverviewTab() {
+internal fun OverviewTab() {
     val users by Dev.users.collectAsState()
     val loading by Dev.loading.collectAsState()
     val at by Dev.usersAt.collectAsState()
@@ -416,7 +419,7 @@ private fun Bars(values: List<Int>, modifier: Modifier) {
 // ====================================================================== users
 
 @Composable
-private fun UsersTab() {
+internal fun UsersTab() {
     val users by Dev.users.collectAsState()
     val doc by Dev.doc.collectAsState()
     val loading by Dev.loading.collectAsState()
@@ -517,7 +520,7 @@ private fun published(ctx: Context, n: Int) {
 // ====================================================================== inbox
 
 @Composable
-private fun InboxTab() {
+internal fun InboxTab() {
     val inbox by Dev.inbox.collectAsState()
     var filter by rememberSaveable { mutableIntStateOf(0) }
     val shown = inbox.filter { filter == 0 || (filter == 1 && it.kind == "report") || (filter == 2 && it.kind != "report") }
@@ -566,7 +569,7 @@ private fun MsgCard(m: Msg, onUser: (String) -> Unit) {
 // ====================================================================== publish
 
 @Composable
-private fun PublishTab() {
+internal fun PublishTab() {
     val ctx = LocalContext.current
     val doc by Dev.doc.collectAsState()
     val scope = rememberCoroutineScope()
@@ -679,7 +682,7 @@ private fun ReleasePicker(onDismiss: () -> Unit, onPick: (Release) -> Unit) {
 // ====================================================================== key
 
 @Composable
-private fun KeySheet(onDismiss: () -> Unit) {
+internal fun KeySheet(onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val keys by Dev.keys.collectAsState()
     val pub = keys?.pub ?: ""
