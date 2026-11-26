@@ -1,0 +1,16 @@
+[
+ {
+  "version": "1.0.0",
+  "date": "2026-11-26",
+  "build": null,
+  "notes": [
+   "La prima versione: un account Genitore sul tuo telefono e un account Kids su quello del bambino, collegati con un codice QR",
+   "Il genitore vede una copia dei messaggi, l'agenda, la batteria e la posizione, e può eliminare messaggi e impegni",
+   "Contatti solo approvati dal genitore: il bambino chiede, il genitore decide",
+   "Regole per chat, foto, vocali, giochi, chiamate, videochiamate, agenda e posizione, più l'ora di riposo",
+   "Se il genitore elimina il suo account, si elimina anche quello del bambino"
+  ],
+  "url": null,
+  "size": null
+ }
+]

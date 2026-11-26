@@ -454,6 +454,14 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.5.0", "2026-11-26",
+        listOf(
+            "Account verificati: chiedi la verifica dalle Impostazioni e, se va bene, accanto al tuo nome compare un simbolo con un titolo",
+            "Il simbolo di verificato si vede nel profilo, nelle chat e tra gli amici, con forma e colore scelti dallo sviluppatore",
+            "Arriva Monolith Kids, un'app a parte per i bambini: il genitore segue messaggi, agenda e posizione e approva i contatti. Si scarica dal sito",
+        ),
+    ),
+    Release(
         "2.4.0", "2026-11-26",
         listOf(
             "Colori: dodici temi da scegliere in Impostazioni, più uno che prende i colori dal tuo sfondo",

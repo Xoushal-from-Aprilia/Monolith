@@ -88,7 +88,7 @@ private val FILM = listOf(
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
     Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Cuffie Bluetooth e microfono a scelta" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
-    Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Tutto si modifica da un solo tasto" /*i18n*/), "profile"),
+    Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Account verificati, con il simbolo accanto al nome" /*i18n*/), "profile"),
     Scene("Colori" /*i18n*/, "Del colore che vuoi" /*i18n*/, listOf("Dodici temi da scegliere" /*i18n*/, "Chiaro, scuro o dal tuo sfondo" /*i18n*/, "E l'icona che preferisci" /*i18n*/), "colors"),
     Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
     Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Videocamera anche nelle stanze vocali" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
@@ -96,6 +96,7 @@ private val FILM = listOf(
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Blocco e avviso screenshot" /*i18n*/, "Backup cifrato automatico" /*i18n*/), "safe"),
     Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
     Scene("Domenica" /*i18n*/, "La tua settimana in slide" /*i18n*/, listOf("Persone, emoji e ritmo" /*i18n*/, "Un titolo tutto tuo" /*i18n*/), "wrapped"),
+    Scene("Monolith Kids" /*i18n*/, "Anche per i più piccoli" /*i18n*/, listOf("Un'app a parte, sul telefono del bambino" /*i18n*/, "Il genitore vede messaggi, agenda e posizione" /*i18n*/, "Solo contatti approvati e ora di riposo" /*i18n*/), "kids"),
     Scene("", "Pronto?" /*i18n*/, listOf("Il resto lo scopri usandola." /*i18n*/), "end"),
 )
 
@@ -254,6 +255,26 @@ private fun SceneArt(art: String, ink: Color, bg: Color, p: Float, clock: Float)
                 }
                 drawRect(ink.copy(alpha = 0.3f), Offset(w * 0.12f, h * 0.78f), Size(w * 0.76f, 2.5f))
                 monolith(c.x, h * 0.78f, w * 0.2f, h * 0.55f, ink, stage(p, 0f, 0.35f))
+            }
+            "kids" -> {
+                // the parent's monolith and the child's, joined by a line of dots
+                val base = h * 0.8f
+                drawRect(ink.copy(alpha = 0.3f), Offset(w * 0.12f, base), Size(w * 0.76f, 2.5f))
+                monolith(w * 0.38f, base, w * 0.17f, h * 0.52f, ink, stage(p, 0f, 0.35f))
+                monolith(w * 0.66f, base, w * 0.1f, h * 0.25f, ink.copy(alpha = 0.8f), stage(p, 0.2f, 0.5f))
+                val s = stage(p, 0.45f, 0.9f)
+                val p0 = Offset(w * 0.44f, base - h * 0.6f)
+                val p2 = Offset(w * 0.69f, base - h * 0.33f)
+                val cc = Offset(w * 0.62f, base - h * 0.78f)
+                val n = 11
+                for (k in 0 until n) {
+                    val f = k / (n - 1f)
+                    if (f > s) break
+                    val q = 1 - f
+                    val pt = Offset(q * q * p0.x + 2 * q * f * cc.x + f * f * p2.x, q * q * p0.y + 2 * q * f * cc.y + f * f * p2.y)
+                    val tw = 0.55f + 0.45f * sin(clock * tau * 2 - k * 0.6f)
+                    drawCircle(ink.copy(alpha = 0.7f * tw), min(w, h) * 0.012f, pt)
+                }
             }
             "colors" -> {
                 // the only scene in colour: the twelve themes around the monolith

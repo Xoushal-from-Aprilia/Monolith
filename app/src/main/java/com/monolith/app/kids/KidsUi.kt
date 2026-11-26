@@ -481,7 +481,7 @@ fun ParentHome(nav: NavHostController) {
     LazyColumn(Modifier.fillMaxSize().statusBarsPadding(), contentPadding = PaddingValues(bottom = 40.dp)) {
         item(key = "head") {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                BigTitle(t("Bambini"), Modifier.weight(1f), subtitle = if (kids.isEmpty()) t("Nessun bambino collegato") else t("{0} collegati", kids.size))
+                BigTitle(t("Bambini"), Modifier.weight(1f), subtitle = when (kids.size) { 0 -> t("Nessun bambino collegato"); 1 -> t("1 bambino collegato"); else -> t("{0} collegati", kids.size) })
                 Avatar(profile?.emoji ?: "🧑", 44.dp, Modifier.padding(end = 20.dp).bounceClick { nav.navigate("settings") })
             }
         }
@@ -634,13 +634,29 @@ fun ChildScreen(nav: NavHostController, pk: String, startSection: Int = 0) {
                 }
             }
             Spacer(Modifier.height(18.dp))
-            Row(Modifier.horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                val pend = child.pending.size
-                listOf(t("Messaggi"), t("Agenda"), if (pend > 0) t("Contatti") + " · $pend" else t("Contatti"), t("Regole")).forEachIndexed { i, label ->
-                    FilterChip(
-                        selected = section == i, onClick = { section = i }, label = { Text(label) },
-                        colors = FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = MaterialTheme.colorScheme.onPrimary),
-                    )
+            // four sections, always all in view: a coral dot says there is something to approve
+            Row(
+                Modifier.padding(horizontal = 16.dp).fillMaxWidth().clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHigh).padding(4.dp),
+            ) {
+                listOf(t("Messaggi"), t("Agenda"), t("Contatti"), t("Regole")).forEachIndexed { i, label ->
+                    val on = section == i
+                    Box(
+                        Modifier.weight(1f).height(40.dp).clip(CircleShape)
+                            .background(if (on) MaterialTheme.colorScheme.primary else Color.Transparent)
+                            .clickable { section = i },
+                        contentAlignment = Alignment.Center,
+                    ) {
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(
+                                label, style = MaterialTheme.typography.labelLarge, maxLines = 1,
+                                color = if (on) MaterialTheme.colorScheme.onPrimary else MaterialTheme.colorScheme.onSurface,
+                            )
+                            if (i == 2 && child.pending.isNotEmpty()) {
+                                Spacer(Modifier.width(4.dp))
+                                Box(Modifier.size(7.dp).clip(CircleShape).background(KidCoral))
+                            }
+                        }
+                    }
                 }
             }
             Spacer(Modifier.height(8.dp))

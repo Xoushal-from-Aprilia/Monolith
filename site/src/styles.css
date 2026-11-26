@@ -107,6 +107,31 @@ a { color: inherit; }
 .faq dd { margin: 6px 0 0; font-size: 16px; line-height: 1.5; opacity: .65; }
 footer { margin-top: 56px; padding-top: 22px; border-top: 1px solid color-mix(in srgb, currentColor 14%, transparent); display: flex; flex-wrap: wrap; gap: 8px 24px; justify-content: space-between; font-size: 14px; opacity: .6; }
 
+/* ------------------------------------------------ the two apps */
+.news { display: inline-block; margin-top: 14px; font-size: 15px; opacity: .7; text-decoration: none; border-bottom: 1.5px solid color-mix(in srgb, currentColor 35%, transparent); padding-bottom: 2px; }
+.news b { font-weight: 700; }
+.btn-kids { background: #F0604F; color: #140806; }
+.btn-off { background: color-mix(in srgb, currentColor 14%, transparent); color: inherit; opacity: .7; cursor: default; }
+.bar nav a.bar-kids { opacity: 1; color: #F0604F; }
+.apps { display: grid; gap: 14px; margin: 28px 0 8px; }
+.app { border-radius: 28px; padding: 20px; display: grid; gap: 12px; justify-items: start; border: 1.5px solid color-mix(in srgb, currentColor 16%, transparent); }
+.app-kids { border-color: rgba(240, 96, 79, .55); background: rgba(240, 96, 79, .07); }
+.app-head { display: flex; align-items: center; gap: 14px; }
+.app-mark { width: 54px; height: 62px; flex: none; }
+.app-name { font-size: 24px; font-weight: 700; letter-spacing: -0.02em; }
+.app-sub { font-size: 14.5px; line-height: 1.4; opacity: .6; }
+.app-ver { margin: 0; font-size: 14px; opacity: .55; font-variant-numeric: tabular-nums; }
+.app .btn { height: 50px; font-size: 16px; padding: 0 24px; }
+.app-link { font-size: 14px; font-weight: 600; opacity: .6; }
+.app-list { margin-top: 48px; }
+.sub { margin: 6px 0 10px; font-size: clamp(28px, 7vw, 40px); font-weight: 700; letter-spacing: -0.03em; line-height: 1.05; }
+.kicker-kids { color: #F0604F; opacity: 1; }
+.page-kids .tag { background: #F0604F; color: #140806; }
+.page-kids .apk-on { background: #F0604F; color: #140806; }
+@media (min-width: 900px) {
+  .apps { grid-template-columns: 1fr 1fr; }
+}
+
 /* ------------------------------------------------ wide screens: drawing left, words right */
 @media (min-width: 900px) {
   :root { --bar: 78px; }

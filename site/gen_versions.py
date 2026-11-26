@@ -14,11 +14,14 @@ for page in range(1, 5):
     chunk = json.loads(out)
     if not chunk: break
     rel += chunk
-assets = {}
+assets, kids_assets = {}, {}
 for r in rel:
     if r["tag_name"].startswith("build-") and r["assets"]:
-        a = r["assets"][0]
-        assets[int(r["tag_name"][6:])] = {"url": a["browser_download_url"], "size": a["size"], "at": r["created_at"]}
+        n = int(r["tag_name"][6:])
+        for a in r["assets"]:
+            info = {"url": a["browser_download_url"], "size": a["size"], "at": r["created_at"]}
+            # since 2.5.0 a release also carries Monolith Kids
+            (kids_assets if a["name"].startswith("Monolith-Kids-") else assets)[n] = info
 
 s = open(SETTINGS, encoding="utf-8").read()
 body = s[s.index("private val JOURNAL = listOf("):]
@@ -45,3 +48,12 @@ json.dump(versions, open(os.path.join(HERE, "src/versions.json"), "w", encoding=
 print(len(versions), "versions; latest", versions[0]["version"], versions[0]["build"], versions[0]["size"])
 missing = [x["version"] for x in versions if not x["url"]]
 print("without apk:", missing)
+
+# Monolith Kids: its own versions, notes in data/kids.json
+kids = []
+for k in json.load(open(os.path.join(HERE, "data/kids.json"))):
+    a = kids_assets.get(k["build"]) if k.get("build") else None
+    kids.append({**k, "url": a["url"] if a else None, "size": a["size"] if a else None})
+kids.sort(key=lambda x: [int(p) for p in x["version"].split(".")], reverse=True)
+json.dump(kids, open(os.path.join(HERE, "src/kids.json"), "w", encoding="utf-8"), ensure_ascii=False, indent=1)
+print(len(kids), "Kids versions; latest", kids[0]["version"], kids[0]["build"], kids[0]["size"])

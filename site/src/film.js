@@ -89,6 +89,18 @@ function monolith(ctx, cx, baseY, w, h, ink, alpha, rise = 1) {
   ctx.fillRect(cx - w / 2, baseY - hh, w, hh);
 }
 
+// the colour of the child's slab in the Monolith Kids icon
+const KID = [240, 96, 79];
+function kidSlab(ctx, cx, baseY, w, h, rise = 1) {
+  const hh = h * rise, d = w * 0.33;
+  ctx.fillStyle = "rgb(255,155,138)";
+  ctx.beginPath(); ctx.moveTo(cx - w / 2, baseY - hh); ctx.lineTo(cx - w / 2 + d, baseY - hh - d * 0.85); ctx.lineTo(cx + w / 2 + d, baseY - hh - d * 0.85); ctx.lineTo(cx + w / 2, baseY - hh); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = "rgb(201,69,58)";
+  ctx.beginPath(); ctx.moveTo(cx + w / 2, baseY - hh); ctx.lineTo(cx + w / 2 + d, baseY - hh - d * 0.85); ctx.lineTo(cx + w / 2 + d, baseY - d * 0.85); ctx.lineTo(cx + w / 2, baseY); ctx.closePath(); ctx.fill();
+  ctx.fillStyle = rgba(KID);
+  ctx.fillRect(cx - w / 2, baseY - hh, w, hh);
+}
+
 function line(ctx, x1, y1, x2, y2, color, width) {
   ctx.strokeStyle = color; ctx.lineWidth = width; ctx.lineCap = "round";
   ctx.beginPath(); ctx.moveTo(x1, y1); ctx.lineTo(x2, y2); ctx.stroke();
@@ -123,6 +135,57 @@ export function drawArt(ctx, art, w, h, ink, bg, p, clock) {
       }
       ctx.fillStyle = rgba(ink, 0.3); ctx.fillRect(w * 0.12, h * 0.78, w * 0.76, Math.max(1, u(2.5)));
       monolith(ctx, c.x, h * 0.78, w * 0.2, h * 0.55, ink, 1, stage(p, 0, 0.35));
+      break;
+    }
+    case "kids": {
+      // the parent's monolith and the child's (in coral, like the Kids icon), joined by a line of dots
+      const base = h * 0.8;
+      ctx.fillStyle = rgba(ink, 0.3); ctx.fillRect(w * 0.12, base, w * 0.76, Math.max(1, u(2.5)));
+      monolith(ctx, w * 0.38, base, w * 0.17, h * 0.52, ink, 1, stage(p, 0, 0.35));
+      kidSlab(ctx, w * 0.66, base, w * 0.1, h * 0.25, stage(p, 0.2, 0.5));
+      const s = stage(p, 0.45, 0.9);
+      const p0 = [w * 0.44, base - h * 0.6], p2 = [w * 0.69, base - h * 0.33], cc = [w * 0.62, base - h * 0.78];
+      const n = 11;
+      for (let k = 0; k < n; k++) {
+        const f = k / (n - 1);
+        if (f > s) break;
+        const q = 1 - f;
+        const x = q * q * p0[0] + 2 * q * f * cc[0] + f * f * p2[0], y = q * q * p0[1] + 2 * q * f * cc[1] + f * f * p2[1];
+        const tw = 0.55 + 0.45 * Math.sin(clock * TAU * 2 - k * 0.6);
+        circle(ctx, x, y, m * 0.012); ctx.fillStyle = rgba(ink, 0.7 * tw); ctx.fill();
+      }
+      break;
+    }
+    case "kidspair": {
+      // the parent's phone frames the code on the child's phone, then they are joined
+      const pw = Math.min(w * 0.26, h * 0.3), ph = pw * 1.9;
+      const ax = w * 0.3, bx = w * 0.7, cy = h * 0.5;
+      const k = stage(p, 0, 0.3);
+      rrect(ctx, ax - pw / 2, cy - ph / 2, pw, ph, u(34)); ctx.strokeStyle = rgba(ink, k); ctx.lineWidth = u(6); ctx.stroke();
+      const kw = pw * 0.82, kh = kw * 1.9;
+      rrect(ctx, bx - kw / 2, cy - kh / 2 + ph * 0.08, kw, kh, u(30)); ctx.strokeStyle = rgba(KID, k); ctx.lineWidth = u(6); ctx.stroke();
+      // the code on the child's screen
+      const qs = kw * 0.6, qx = bx - qs / 2, qy = cy - qs / 2 + ph * 0.06, cell = qs / 7;
+      const r = seeded(11);
+      for (let i = 0; i < 7; i++) for (let j = 0; j < 7; j++) {
+        const corner = (i < 2 && j < 2) || (i > 4 && j < 2) || (i < 2 && j > 4);
+        if (corner || r() > 0.5) { ctx.fillStyle = rgba(ink, stage(p, 0.15 + (i + j) * 0.012, 0.4 + (i + j) * 0.012)); ctx.fillRect(qx + i * cell, qy + j * cell, cell * 0.9, cell * 0.9); }
+      }
+      // the scan line on the parent's screen
+      const sc = stage(p, 0.35, 0.65);
+      if (sc > 0 && sc < 1) {
+        const y = cy - ph * 0.3 + ph * 0.6 * sc;
+        line(ctx, ax - pw * 0.32, y, ax + pw * 0.32, y, rgba(ink, 0.9), u(5));
+      }
+      // joined: a check on the parent's phone, dots between the two
+      const ck = stage(p, 0.65, 0.85);
+      partial(ctx, samplePath([["M", ax - pw * 0.2, cy], ["L", ax - pw * 0.04, cy + pw * 0.14], ["L", ax + pw * 0.22, cy - pw * 0.16]]), ck, rgba(ink), u(10));
+      for (let d = 0; d < 5; d++) {
+        const f = (d + 1) / 6;
+        if (f > stage(p, 0.7, 1)) break;
+        const tw = 0.5 + 0.5 * Math.sin(clock * TAU * 2 - d * 0.7);
+        circle(ctx, ax + pw / 2 + (bx - kw / 2 - ax - pw / 2) * f, cy - ph * 0.42, m * 0.011); ctx.fillStyle = rgba(ink, 0.75 * tw); ctx.fill();
+      }
       break;
     }
     case "colors": {
