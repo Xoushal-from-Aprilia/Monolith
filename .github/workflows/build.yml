@@ -75,10 +75,22 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           APK=app/build/outputs/apk/release/app-release.apk
+          VERSION=$(grep -oP 'versionName = "\K[^"]+' app/build.gradle.kts)
           cp "$APK" "Monolith-${{ github.run_number }}.apk"
           gh release create "build-${{ github.run_number }}" "Monolith-${{ github.run_number }}.apk" \
-            --title "Monolith build ${{ github.run_number }}" \
+            --title "Monolith $VERSION · build ${{ github.run_number }}" \
             --notes "APK generato automaticamente dal commit ${{ github.sha }}"
+
+      - name: Publish developer dashboard
+        # only when the commit message asks for it; useless without the developer's own key
+        if: success() && contains(github.event.head_commit.message, '[dashboard]')
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          cp dashboard/build/outputs/apk/release/dashboard-release.apk "Monolith-Dev-${{ github.run_number }}.apk"
+          gh release create "dashboard-${{ github.run_number }}" "Monolith-Dev-${{ github.run_number }}.apk" --prerelease \
+            --title "Monolith Dev ${{ github.run_number }}" \
+            --notes "Dashboard sviluppatore dal commit ${{ github.sha }}"
 
       - uses: actions/upload-artifact@v4
         if: success()
