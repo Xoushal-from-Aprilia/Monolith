@@ -7,7 +7,7 @@ plugins {
 // the crypto and the relay code are the app's own, copied in at build time so both always speak the same protocol
 val shared = layout.buildDirectory.dir("generated/shared")
 val syncShared by tasks.registering(Sync::class) {
-    from("../app/src/main/java") { include("com/monolith/app/crypto/**", "com/monolith/app/nostr/**") }
+    from("../app/src/main/java") { include("com/monolith/app/crypto/**", "com/monolith/app/nostr/**", "com/monolith/app/ui/components/VerifiedMark.kt") }
     into(shared)
 }
 
@@ -20,7 +20,7 @@ android {
         minSdk = 26
         targetSdk = 35
         versionCode = (System.getenv("VERSION_CODE") ?: "1").toInt()
-        versionName = "1.0.0"
+        versionName = "1.1.0"
     }
 
     sourceSets["main"].java.srcDir(shared)

@@ -265,11 +265,16 @@ fun ProfileScreen(nav: NavHostController, pk: String) {
                     name, style = MaterialTheme.typography.headlineSmall, fontWeight = androidx.compose.ui.text.font.FontWeight.SemiBold,
                     textAlign = TextAlign.Center, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false),
                 )
+                com.monolith.app.ui.components.VerifiedBadge(pk, 22.dp)
                 if (!mine) com.monolith.app.ui.components.BondBadge(pk)
             }
             if (user.isNotBlank()) {
                 Spacer(Modifier.height(2.dp))
                 Text("@$user  ·  #${com.monolith.app.core.tagOf(pk)}", style = MaterialTheme.typography.bodyMedium, color = muted)
+            }
+            if (Graph.dev.verifiedOf(pk) != null) {
+                Spacer(Modifier.height(10.dp))
+                com.monolith.app.ui.components.VerifiedTitle(pk)
             }
             if (featured.isNotEmpty()) {
                 Spacer(Modifier.height(14.dp))

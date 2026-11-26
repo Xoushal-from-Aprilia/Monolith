@@ -21,6 +21,9 @@ import java.net.URL
 
 data class DevNews(val id: String, val title: String, val body: String, val link: String)
 
+/** a verified account: the title and the look of the symbol are chosen by the developer */
+data class Verified(val title: String, val shape: String, val color: String)
+
 data class DevState(
     /** the developer key is known: reports and feedback can be sent */
     val active: Boolean = false,
@@ -30,6 +33,7 @@ data class DevState(
     val latestNotes: String = "",
     val min: String? = null,
     val blocked: Set<String> = emptySet(),
+    val verified: Map<String, Verified> = emptyMap(),
 )
 
 /**
@@ -71,6 +75,7 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
 
     val devKey: String get() = sp.getString("key", "") ?: ""
     fun isBlocked(pk: String) = pk in _state.value.blocked
+    fun verifiedOf(pk: String): Verified? = _state.value.verified[pk]
     val blockedMe: Boolean get() = Graph.identity.keys?.pub?.let { isBlocked(it) } == true
     val updateRequired: Boolean get() = _state.value.min?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
     val updateAvailable: Boolean get() = _state.value.latest?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
@@ -145,6 +150,7 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
         val n = o.optJSONObject("news")
         val l = o.optJSONObject("latest")
         val b = o.optJSONArray("blocked")
+        val v = o.optJSONArray("verified")
         return DevState(
             news = n?.let { DevNews(it.optString("id"), it.optString("title"), it.optString("body"), it.optString("link")) }?.takeIf { it.id.isNotBlank() && (it.title.isNotBlank() || it.body.isNotBlank()) },
             latest = l?.optString("version")?.ifBlank { null },
@@ -152,6 +158,11 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
             latestNotes = l?.optString("notes").orEmpty(),
             min = o.optString("min").ifBlank { null },
             blocked = (0 until (b?.length() ?: 0)).mapNotNull { b?.optString(it)?.lowercase()?.takeIf { s -> s.length == 64 } }.toSet(),
+            verified = (0 until (v?.length() ?: 0)).mapNotNull { i ->
+                val e = v?.optJSONObject(i) ?: return@mapNotNull null
+                val pk = e.optString("pk").lowercase().takeIf { it.length == 64 } ?: return@mapNotNull null
+                pk to Verified(e.optString("t").take(40), e.optString("s").ifBlank { "seal" }, e.optString("c").ifBlank { "blue" })
+            }.toMap(),
         )
     }
 
@@ -160,6 +171,7 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
         val o = JSONObject().put("active", s.active)
             .put("min", s.min ?: "").put("latest", s.latest ?: "").put("url", s.latestUrl).put("notes", s.latestNotes)
             .put("blocked", JSONArray(s.blocked.toList()))
+            .put("verified", JSONArray(s.verified.map { (pk, v) -> JSONObject().put("pk", pk).put("t", v.title).put("s", v.shape).put("c", v.color) }))
         s.news?.let { o.put("news", JSONObject().put("id", it.id).put("title", it.title).put("body", it.body).put("link", it.link)) }
         sp.edit().putString("state", o.toString()).apply()
     }
@@ -167,7 +179,7 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     private fun load(): DevState = runCatching {
         val o = JSONObject(sp.getString("state", null) ?: return DevState())
         parse(JSONObject().put("news", o.optJSONObject("news")).put("latest", JSONObject().put("version", o.optString("latest")).put("url", o.optString("url")).put("notes", o.optString("notes")))
-            .put("min", o.optString("min")).put("blocked", o.optJSONArray("blocked"))).copy(active = o.optBoolean("active"))
+            .put("min", o.optString("min")).put("blocked", o.optJSONArray("blocked")).put("verified", o.optJSONArray("verified"))).copy(active = o.optBoolean("active"))
     }.getOrDefault(DevState())
 
     // ================================================================== to the developer
@@ -183,4 +195,15 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
         sendToDev(JSONObject().put("k", "report").put("about", about).put("name", name).put("why", reason).put("text", text))
 
     suspend fun feedback(text: String): Boolean = sendToDev(JSONObject().put("k", "feedback").put("text", text))
+
+    /** when I asked to be verified (ms), 0 if never */
+    val verifyAskedAt: Long get() = sp.getLong("verify_at", 0)
+
+    /** asks the developer to verify this account; [text] says who I am */
+    suspend fun requestVerification(text: String): Boolean {
+        val p = Graph.identity.profile.value
+        val ok = sendToDev(JSONObject().put("k", "verify").put("u", p?.username ?: "").put("n", p?.displayName ?: "").put("text", text))
+        if (ok) sp.edit().putLong("verify_at", System.currentTimeMillis()).apply()
+        return ok
+    }
 }

@@ -35,8 +35,10 @@ class DevShots {
         val reporter = users[2].pk
         Dev.preview(
             key(), users,
-            Doc(newsId = "n1", newsTitle = "Benvenuti nella 2.4", newsBody = "Temi di colore e chiamate nuove.", latest = "2.4.0", latestUrl = "https://github.com/x/y", blocked = setOf(users[7].pk), at = now - 3600),
+            Doc(newsId = "n1", newsTitle = "Benvenuti nella 2.4", newsBody = "Temi di colore e chiamate nuove.", latest = "2.4.0", latestUrl = "https://github.com/x/y", blocked = setOf(users[7].pk),
+                verified = mapOf(users[0].pk to Ver("Sviluppatore", "mono", "ink"), users[1].pk to Ver("Creator", "seal", "blue")), at = now - 3600),
             listOf(
+                Msg("m0", users[5].pk, now - 300, "verify", users[5].pk, "Giulia (@giulia)", "", "Sono Giulia, la sorella di Christian. Mi trovi anche su Instagram come @giulia.", "2.4.0", false),
                 Msg("m1", reporter, now - 600, "report", users[7].pk, "Marco", "Spam", "Manda link strani nei gruppi", "2.4.0", false),
                 Msg("m2", users[1].pk, now - 7200, "feedback", "", "", "", "Le cuffie funzionano benissimo! Si potrebbe avere un tema viola scuro?", "2.4.0", false),
             ),
@@ -56,5 +58,6 @@ class DevShots {
     @Test fun users() = shot("d4_users") { seed(); MainScreen(1) }
     @Test fun inbox() = shot("d5_inbox") { seed(); MainScreen(2) }
     @Config(qualifiers = "+h1700dp") @Test fun publish() = shot("d6_publish") { seed(); MainScreen(3) }
+    @Test fun verifyDialog() = shot("d8_verify") { seed(); VerifyDialog(Dev.users.value[5].pk, "Giulia") {} }
     @Test fun userDialog() = shot("d7_user", act = { compose.onAllNodesWithText("Ada Rossi").onFirst().performClick() }) { seed(); MainScreen(1) }
 }

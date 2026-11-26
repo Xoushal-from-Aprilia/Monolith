@@ -12,6 +12,7 @@ import androidx.activity.enableEdgeToEdge
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.horizontalScroll
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
@@ -47,6 +48,7 @@ import androidx.compose.material.icons.rounded.People
 import androidx.compose.material.icons.rounded.Refresh
 import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Share
+import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Badge
 import androidx.compose.material3.BadgedBox
@@ -91,6 +93,8 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import com.monolith.app.ui.components.VerifiedStyles
+import com.monolith.app.ui.components.verifiedMark
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -173,6 +177,86 @@ private fun Title(text: String, sub: String? = null, actions: @Composable () -> 
         }
         actions()
     }
+}
+
+// ====================================================================== verified
+
+@Composable
+internal fun VerSymbol(v: Ver, size: androidx.compose.ui.unit.Dp) {
+    val c = VerifiedStyles.color(v.color)
+    val fill = if (c == 0L) Color(0xFFF2F2F2) else Color(c)
+    val mark = if (c == 0L) Color(0xFF0A0A0A) else Color.White
+    Canvas(Modifier.size(size)) { verifiedMark(v.shape, fill, mark) }
+}
+
+/** gives an account the verified symbol, or changes its title and look */
+@Composable
+internal fun VerifyDialog(pk: String, name: String, onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val doc by Dev.doc.collectAsState()
+    val scope = rememberCoroutineScope()
+    val cur = doc.verified[pk]
+    var title by remember { mutableStateOf(cur?.title ?: "Verificato") }
+    var shape by remember { mutableStateOf(cur?.shape ?: "seal") }
+    var color by remember { mutableStateOf(cur?.color ?: "blue") }
+    var busy by remember { mutableStateOf(false) }
+    fun save(v: Ver?) {
+        busy = true
+        scope.launch { val n = Dev.setVerified(pk, v); busy = false; published(ctx, n); if (n > 0) onDismiss() }
+    }
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(if (cur == null) "Verifica $name" else "Verifica di $name") },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                    Spacer(Modifier.width(6.dp))
+                    VerSymbol(Ver(title, shape, color), 20.dp)
+                    Spacer(Modifier.width(10.dp))
+                    Text(title.ifBlank { "Account verificato" }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
+                }
+                Spacer(Modifier.height(12.dp))
+                OutlinedTextField(title, { if (it.length <= 40) title = it }, label = { Text("Titolo (es. Sviluppatore, Creator)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+                Spacer(Modifier.height(12.dp))
+                Label("Simbolo")
+                Spacer(Modifier.height(6.dp))
+                VerifiedStyles.SHAPES.chunked(3).forEach { row ->
+                    Row(horizontalArrangement = Arrangement.spacedBy(8.dp), modifier = Modifier.padding(vertical = 4.dp)) {
+                        row.forEach { (key, label) ->
+                            Column(
+                                Modifier.weight(1f).clip(RoundedCornerShape(14.dp))
+                                    .background(if (shape == key) MaterialTheme.colorScheme.surfaceContainerHighest else MaterialTheme.colorScheme.surfaceContainer)
+                                    .clickable { shape = key }.padding(vertical = 10.dp),
+                                horizontalAlignment = Alignment.CenterHorizontally,
+                            ) {
+                                VerSymbol(Ver(title, key, color), 28.dp)
+                                Spacer(Modifier.height(4.dp))
+                                Text(label, style = MaterialTheme.typography.labelSmall)
+                            }
+                        }
+                    }
+                }
+                Spacer(Modifier.height(10.dp))
+                Label("Colore")
+                Spacer(Modifier.height(8.dp))
+                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    VerifiedStyles.COLORS.forEach { (key, v) ->
+                        Box(
+                            Modifier.size(30.dp).clip(CircleShape).background(if (v == 0L) Color(0xFFF2F2F2) else Color(v)).clickable { color = key },
+                            contentAlignment = Alignment.Center,
+                        ) { if (color == key) Box(Modifier.size(10.dp).clip(CircleShape).background(if (v == 0L) Color.Black else Color.White)) }
+                    }
+                }
+                if (cur != null) {
+                    Spacer(Modifier.height(14.dp))
+                    TextButton(enabled = !busy, onClick = { save(null) }) { Text("Togli la verifica", color = Danger) }
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = !busy, onClick = { save(Ver(title.trim(), shape, color)) }) { Text(if (cur == null) "Verifica" else "Salva") } },
+        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } },
+    )
 }
 
 // ====================================================================== root
@@ -364,6 +448,7 @@ internal fun OverviewTab() {
                     StatusLine("Ultima versione", doc.latest.ifBlank { "non indicata" })
                     StatusLine("Versione minima", doc.min.ifBlank { "nessuna" })
                     StatusLine("Account bloccati", doc.blocked.size.toString())
+                    StatusLine("Account verificati", doc.verified.size.toString())
                     StatusLine("Messaggi da leggere", inbox.count { !it.read }.toString())
                     StatusLine("Pubblicato", if (doc.at > 0) date(doc.at) else "mai")
                 }
@@ -445,6 +530,7 @@ internal fun UsersTab() {
                     Column(Modifier.weight(1f)) {
                         Row(verticalAlignment = Alignment.CenterVertically) {
                             Text(u.name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            doc.verified[u.pk]?.let { Spacer(Modifier.width(5.dp)); VerSymbol(it, 16.dp) }
                             if (blocked) { Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.Block, "Bloccato", tint = Danger, modifier = Modifier.size(16.dp)) }
                         }
                         Text("@${u.username} · #${u.tag}" + if (u.version.isNotBlank()) " · ${u.version}" else "", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1)
@@ -469,6 +555,8 @@ private fun UserDialog(u: User, onDismiss: () -> Unit) {
     val blocked = u.pk in doc.blocked
     var confirm by remember { mutableStateOf(false) }
     var busy by remember { mutableStateOf(false) }
+    var verify by remember { mutableStateOf(false) }
+    val ver = doc.verified[u.pk]
     val reports = inbox.filter { it.kind == "report" && it.about == u.pk }
     AlertDialog(
         onDismissRequest = onDismiss,
@@ -480,6 +568,12 @@ private fun UserDialog(u: User, onDismiss: () -> Unit) {
                 StatusLine("Ultima apertura", date(u.lastSeen))
                 StatusLine("Iscritto", if (u.joined > 0) date(u.joined) else "non noto")
                 StatusLine("Segnalazioni", reports.size.toString())
+                StatusLine("Verifica", ver?.title?.ifBlank { "Verificato" } ?: "no")
+                Spacer(Modifier.height(6.dp))
+                OutlinedButton(onClick = { verify = true }, shape = CircleShape) {
+                    if (ver != null) { VerSymbol(ver, 16.dp); Spacer(Modifier.width(6.dp)) }
+                    Text(if (ver == null) "Verifica l'account" else "Modifica la verifica")
+                }
                 if (u.bio.isNotBlank()) { Spacer(Modifier.height(6.dp)); Text(u.bio, style = MaterialTheme.typography.bodyMedium) }
                 Spacer(Modifier.height(10.dp))
                 Text("Codice account", style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -497,6 +591,7 @@ private fun UserDialog(u: User, onDismiss: () -> Unit) {
         },
         dismissButton = { TextButton(onClick = onDismiss) { Text("Chiudi") } },
     )
+    if (verify) VerifyDialog(u.pk, u.name) { verify = false }
     if (confirm) {
         AlertDialog(
             onDismissRequest = { confirm = false },
@@ -523,37 +618,47 @@ private fun published(ctx: Context, n: Int) {
 internal fun InboxTab() {
     val inbox by Dev.inbox.collectAsState()
     var filter by rememberSaveable { mutableIntStateOf(0) }
-    val shown = inbox.filter { filter == 0 || (filter == 1 && it.kind == "report") || (filter == 2 && it.kind != "report") }
+    val shown = inbox.filter { filter == 0 || (filter == 1 && it.kind == "report") || (filter == 2 && it.kind == "verify") || (filter == 3 && it.kind == "feedback") }
     var open by remember { mutableStateOf<User?>(null) }
+    var verifyFor by remember { mutableStateOf<Msg?>(null) }
     Column(Modifier.fillMaxSize()) {
-        Title("Messaggi", "Segnalazioni e messaggi per te, cifrati")
-        Row(Modifier.padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-            listOf("Tutti", "Segnalazioni", "Messaggi").forEachIndexed { i, l -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(l) }) }
+        Title("Messaggi", "Segnalazioni, verifiche e messaggi per te, cifrati")
+        Row(Modifier.padding(horizontal = 16.dp).horizontalScroll(rememberScrollState()), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+            listOf("Tutti", "Segnalazioni", "Verifiche", "Messaggi").forEachIndexed { i, l -> FilterChip(selected = filter == i, onClick = { filter = i }, label = { Text(l) }) }
         }
         LazyColumn(contentPadding = PaddingValues(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
-            items(shown, key = { it.id }) { m -> MsgCard(m) { pk -> open = Dev.userOf(pk) ?: User(pk, "?", m.aboutName.ifBlank { "Sconosciuto" }, "🙂", "", "", 0, 0) } }
+            items(shown, key = { it.id }) { m -> MsgCard(m, onVerify = { verifyFor = m }) { pk -> open = Dev.userOf(pk) ?: User(pk, "?", m.aboutName.ifBlank { "Sconosciuto" }, "🙂", "", "", 0, 0) } }
             if (shown.isEmpty()) item { Text("Niente per ora", color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(8.dp)) }
         }
     }
     open?.let { u -> UserDialog(u) { open = null } }
+    verifyFor?.let { m -> VerifyDialog(m.from, Dev.userOf(m.from)?.name ?: m.aboutName.ifBlank { m.from.take(8) }) { verifyFor = null } }
 }
 
 @Composable
-private fun MsgCard(m: Msg, onUser: (String) -> Unit) {
+private fun MsgCard(m: Msg, onVerify: () -> Unit, onUser: (String) -> Unit) {
     val from = Dev.userOf(m.from)
     LaunchedEffect(m.id) { if (!m.read) Dev.markRead(m.id) }
     Card {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            Icon(if (m.kind == "report") Icons.Rounded.Flag else Icons.Rounded.Inbox, null, tint = if (m.kind == "report") Danger else Amber, modifier = Modifier.size(18.dp))
+            Icon(when (m.kind) { "report" -> Icons.Rounded.Flag; "verify" -> Icons.Rounded.Verified; else -> Icons.Rounded.Inbox }, null, tint = if (m.kind == "report") Danger else Amber, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
-            Text(if (m.kind == "report") "Segnalazione" else "Messaggio", style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
+            Text(when (m.kind) { "report" -> "Segnalazione"; "verify" -> "Richiesta di verifica"; else -> "Messaggio" }, style = MaterialTheme.typography.labelLarge, modifier = Modifier.weight(1f))
             Text(ago(m.at), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
             IconButton(onClick = { Dev.deleteMsg(m.id) }, modifier = Modifier.size(32.dp)) { Icon(Icons.Rounded.Delete, "Elimina", Modifier.size(18.dp)) }
         }
         Spacer(Modifier.height(6.dp))
         Text("Da " + (from?.let { "${it.name} (@${it.username})" } ?: m.from.take(8) + "…") + if (m.version.isNotBlank()) " · app ${m.version}" else "",
             style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.clickable { onUser(m.from) })
-        if (m.kind == "report") {
+        if (m.kind == "verify") {
+            val doc by Dev.doc.collectAsState()
+            Spacer(Modifier.height(8.dp))
+            if (m.text.isNotBlank()) Text(m.text, style = MaterialTheme.typography.bodyLarge)
+            Spacer(Modifier.height(8.dp))
+            val ver = doc.verified[m.from]
+            if (ver != null) Row(verticalAlignment = Alignment.CenterVertically) { VerSymbol(ver, 18.dp); Spacer(Modifier.width(6.dp)); Text("Già verificato: " + ver.title.ifBlank { "Verificato" }, style = MaterialTheme.typography.labelLarge) }
+            else Button(onClick = onVerify, shape = CircleShape) { Text("Verifica…") }
+        } else if (m.kind == "report") {
             Spacer(Modifier.height(8.dp))
             Text("Su: " + m.aboutName.ifBlank { m.about.take(8) } + "  ·  " + m.why, style = MaterialTheme.typography.titleSmall)
             if (m.text.isNotBlank()) Text(m.text, style = MaterialTheme.typography.bodyMedium)
@@ -582,6 +687,7 @@ internal fun PublishTab() {
     var min by rememberSaveable(doc.at) { mutableStateOf(doc.min) }
     var busy by remember { mutableStateOf(false) }
     var pick by remember { mutableStateOf(false) }
+    var editVer by remember { mutableStateOf<String?>(null) }
     fun draft(clearNews: Boolean = false): Doc {
         val newsChanged = title != doc.newsTitle || body != doc.newsBody || link != doc.newsLink
         return doc.copy(
@@ -629,6 +735,23 @@ internal fun PublishTab() {
                 Button(enabled = !busy, onClick = { send(draft()) }, shape = CircleShape) { Text("Pubblica gli aggiornamenti") }
             }
             Card {
+                Label("Account verificati")
+                Spacer(Modifier.height(6.dp))
+                if (doc.verified.isEmpty()) Text("Nessuno: le richieste arrivano in Messaggi", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                doc.verified.forEach { (pk, v) ->
+                    val u = Dev.userOf(pk)
+                    Row(verticalAlignment = Alignment.CenterVertically, modifier = Modifier.fillMaxWidth().heightIn(min = 44.dp)) {
+                        VerSymbol(v, 18.dp)
+                        Spacer(Modifier.width(8.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text(u?.let { "${it.name} (@${it.username})" } ?: pk.take(12) + "…", maxLines = 1, overflow = TextOverflow.Ellipsis)
+                            Text(v.title.ifBlank { "Verificato" }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        }
+                        TextButton(onClick = { editVer = pk }) { Text("Modifica") }
+                    }
+                }
+            }
+            Card {
                 Label("Account bloccati")
                 Spacer(Modifier.height(6.dp))
                 if (doc.blocked.isEmpty()) Text("Nessuno", color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -647,6 +770,7 @@ internal fun PublishTab() {
             }
         }
     }
+    editVer?.let { pk -> VerifyDialog(pk, Dev.userOf(pk)?.name ?: pk.take(8)) { editVer = null } }
     if (pick) ReleasePicker(onDismiss = { pick = false }) { r ->
         pick = false
         if (r.version.isNotBlank()) latest = r.version

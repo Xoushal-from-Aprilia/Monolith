@@ -51,6 +51,9 @@ data class User(
     val tag get() = pk.take(4)
 }
 
+/** the symbol of a verified account */
+data class Ver(val title: String, val shape: String = "seal", val color: String = "blue")
+
 /** the document every Monolith app reads and follows */
 data class Doc(
     val newsId: String = "",
@@ -62,6 +65,7 @@ data class Doc(
     val latestNotes: String = "",
     val min: String = "",
     val blocked: Set<String> = emptySet(),
+    val verified: Map<String, Ver> = emptyMap(),
     /** when it was published (seconds), 0 = never */
     val at: Long = 0,
 ) {
@@ -73,6 +77,7 @@ data class Doc(
         if (latest.isNotBlank()) o.put("latest", JSONObject().put("version", latest).put("url", latestUrl).put("notes", latestNotes))
         if (min.isNotBlank()) o.put("min", min)
         o.put("blocked", JSONArray(blocked.sorted()))
+        o.put("verified", JSONArray(verified.toSortedMap().map { (pk, v) -> JSONObject().put("pk", pk).put("t", v.title).put("s", v.shape).put("c", v.color) }))
         return o
     }
 
@@ -81,12 +86,18 @@ data class Doc(
             val n = o.optJSONObject("news")
             val l = o.optJSONObject("latest")
             val b = o.optJSONArray("blocked") ?: JSONArray()
+            val vs = o.optJSONArray("verified") ?: JSONArray()
             return Doc(
                 newsId = n?.optString("id").orEmpty(), newsTitle = n?.optString("title").orEmpty(),
                 newsBody = n?.optString("body").orEmpty(), newsLink = n?.optString("link").orEmpty(),
                 latest = l?.optString("version").orEmpty(), latestUrl = l?.optString("url").orEmpty(), latestNotes = l?.optString("notes").orEmpty(),
                 min = o.optString("min"),
                 blocked = (0 until b.length()).map { b.optString(it).lowercase() }.filter { it.length == 64 }.toSet(),
+                verified = (0 until vs.length()).mapNotNull { i ->
+                    val e = vs.optJSONObject(i) ?: return@mapNotNull null
+                    val pk = e.optString("pk").lowercase().takeIf { it.length == 64 } ?: return@mapNotNull null
+                    pk to Ver(e.optString("t"), e.optString("s").ifBlank { "seal" }, e.optString("c").ifBlank { "blue" })
+                }.toMap(),
                 at = at,
             )
         }
@@ -222,8 +233,12 @@ object Dev {
         val p = inner.payload
         if (p.optString("t") != "dev") return
         if (_inbox.value.any { it.id == inner.id }) return
-        val m = Msg(
-            inner.id, inner.from, inner.createdAt, p.optString("k"), p.optString("about"), p.optString("name"),
+        val kind = p.optString("k")
+        val m = if (kind == "verify") Msg(
+            inner.id, inner.from, inner.createdAt, kind, inner.from, p.optString("n") + if (p.optString("u").isNotBlank()) " (@" + p.optString("u") + ")" else "",
+            "", p.optString("text"), p.optString("v"), false,
+        ) else Msg(
+            inner.id, inner.from, inner.createdAt, kind, p.optString("about"), p.optString("name"),
             p.optString("why"), p.optString("text"), p.optString("v"), false,
         )
         _inbox.value = (_inbox.value + m).sortedByDescending { it.at }
@@ -270,6 +285,12 @@ object Dev {
             saveLocal()
         }
         return ok
+    }
+
+    /** gives (or with null takes away) the verified symbol */
+    suspend fun setVerified(pk: String, v: Ver?): Int {
+        val d = _doc.value
+        return publish(d.copy(verified = if (v == null) d.verified - pk else d.verified + (pk to v)))
     }
 
     suspend fun setBlocked(pk: String, blocked: Boolean): Int {

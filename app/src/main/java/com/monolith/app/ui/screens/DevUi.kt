@@ -150,6 +150,42 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
     )
 }
 
+/** asks the developer for the verified symbol */
+@Composable
+fun VerifyRequestDialog(onDismiss: () -> Unit) {
+    val ctx = LocalContext.current
+    val scope = rememberCoroutineScope()
+    var text by remember { mutableStateOf("") }
+    MonoDialog(
+        onDismissRequest = onDismiss,
+        title = { Text(t("Richiedi la verifica")) },
+        text = {
+            Column(Modifier.verticalScroll(rememberScrollState())) {
+                Text(
+                    t("Lo sviluppatore controlla che sei davvero tu. Se va bene, accanto al tuo nome compare il simbolo di verificato con un titolo, visibile a tutti."),
+                    style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                )
+                Spacer(Modifier.height(10.dp))
+                OutlinedTextField(
+                    text, { if (it.length <= 600) text = it }, minLines = 3, maxLines = 6, modifier = Modifier.fillMaxWidth(),
+                    placeholder = { Text(t("Chi sei? Aggiungi un dettaglio o un link che aiuti a riconoscerti")) },
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = text.isNotBlank(), onClick = {
+                val body = text.trim()
+                onDismiss()
+                scope.launch {
+                    val ok = Graph.dev.requestVerification(body)
+                    Toast.makeText(ctx, if (ok) t("Richiesta inviata") else t("Non inviato: riprova più tardi"), Toast.LENGTH_SHORT).show()
+                }
+            }) { Text(t("Invia")) }
+        },
+        dismissButton = { TextButton(onClick = onDismiss) { Text(t("Annulla")) } },
+    )
+}
+
 private val REASONS = listOf("Spam" /*i18n*/, "Molestie o minacce" /*i18n*/, "Contenuti inappropriati" /*i18n*/, "Account falso" /*i18n*/, "Altro" /*i18n*/)
 
 /** reports an account to the developer, who can block it for everyone */

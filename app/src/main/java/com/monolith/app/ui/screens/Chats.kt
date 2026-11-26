@@ -356,6 +356,7 @@ private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, F
                 Text(r.title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                 if (!r.isGroup) {
                     com.monolith.app.ui.components.FavStar(r.conv)
+                    com.monolith.app.ui.components.VerifiedBadge(r.conv, 15.dp)
                     com.monolith.app.ui.components.BondBadge(r.conv)
                 }
             }
@@ -563,6 +564,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                 Column(Modifier.weight(1f).bounceClick(0.99f) { if (!isGroup) nav.navigate(Routes.profile(conv)) }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                        if (!isGroup) com.monolith.app.ui.components.VerifiedBadge(conv, 15.dp)
                         if (!isGroup) com.monolith.app.ui.components.BondBadge(conv)
                         if (friend?.verified == true) {
                             Spacer(Modifier.width(4.dp))

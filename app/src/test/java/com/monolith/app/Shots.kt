@@ -216,6 +216,17 @@ class Shots {
         com.monolith.app.ui.screens.DevOverlays()
     }
 
+    @Test fun verified_profile() = shot("49_verified_profile") { verified(); com.monolith.app.ui.screens.ProfileScreen(it, ada) }
+    @Test fun verified_chats() = shot("50_verified_chats") { verified(); com.monolith.app.ui.HomeScreen(it, 1) {} }
+    @Config(qualifiers = "+h1400dp") @Test fun verify_settings() = shot("51_verify_settings") { Graph.dev.preview(com.monolith.app.net.DevState(active = true)); com.monolith.app.ui.screens.SettingsScreen(it) }
+
+    private fun verified() {
+        Graph.dev.preview(com.monolith.app.net.DevState(active = true, verified = mapOf(
+            ada to com.monolith.app.net.Verified("Creator", "seal", "blue"),
+            leo to com.monolith.app.net.Verified("Sviluppatore", "mono", "ink"),
+        )))
+    }
+
     private fun voiceCall() {
         val bt = com.monolith.app.rtc.AudioRoute("BT:AirPods Pro", com.monolith.app.rtc.RouteKind.BLUETOOTH, "AirPods Pro")
         Graph.calls.routes.preview(

@@ -60,6 +60,7 @@ import androidx.compose.material.icons.rounded.Shield
 import androidx.compose.material.icons.rounded.Palette
 import androidx.compose.material.icons.rounded.SystemUpdate
 import androidx.compose.material.icons.rounded.Mail
+import androidx.compose.material.icons.rounded.Verified
 import androidx.compose.material.icons.rounded.Translate
 import androidx.compose.material.icons.rounded.Map
 import androidx.compose.material.icons.rounded.Cake
@@ -161,6 +162,7 @@ fun SettingsScreen(nav: NavHostController) {
     var iconSheet by remember { mutableStateOf(false) }
     var themeSheet by remember { mutableStateOf(false) }
     var feedbackDialog by remember { mutableStateOf(false) }
+    var verifyDialog by remember { mutableStateOf(false) }
     var medSheet by remember { mutableStateOf(false) }
     var shakeOn by remember { mutableStateOf(com.monolith.app.ui.screens.ChatLooks.shake) }
     var weeklyOn by remember { mutableStateOf(com.monolith.app.net.Weekly.enabled(ctx)) }
@@ -199,7 +201,10 @@ fun SettingsScreen(nav: NavHostController) {
                     Avatar(p.emoji, 60.dp, Modifier.sharedBoundsKey("me-avatar"))
                     Spacer(Modifier.width(16.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(p.displayName, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(p.displayName, style = MaterialTheme.typography.titleLarge, maxLines = 1, overflow = androidx.compose.ui.text.style.TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
+                            com.monolith.app.ui.components.VerifiedBadge(myPub, 20.dp)
+                        }
                         Text("@${p.username}  ·  #${tagOf(myPub)}", style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         Text(t("Vedi il tuo profilo"), style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(top = 4.dp))
                     }
@@ -208,6 +213,21 @@ fun SettingsScreen(nav: NavHostController) {
             }
             SettingRow(Icons.Rounded.Edit, t("Modifica profilo"), t("Immagine, nome, bio, copertina e distintivi")) { nav.navigate("editprofile") }
             SettingRow(Icons.Rounded.QrCode2, t("Il mio codice QR"), t("Fatti aggiungere di persona")) { showQr = true }
+            val devNow by Graph.dev.state.collectAsState()
+            val myVerified = devNow.verified[myPub]
+            if (myVerified != null) {
+                SettingRow(Icons.Rounded.Verified, t("Account verificato"), myVerified.title.ifBlank { t("Verificato dallo sviluppatore") }, trailing = { com.monolith.app.ui.components.VerifiedBadge(myPub, 22.dp) }) {}
+            } else {
+                val asked = Graph.dev.verifyAskedAt
+                SettingRow(
+                    Icons.Rounded.Verified, t("Richiedi la verifica"),
+                    if (asked > 0) t("Richiesta inviata il {0}", java.text.SimpleDateFormat("d MMM", I18n.locale).format(java.util.Date(asked)))
+                    else t("Conferma che sei davvero tu e ottieni il simbolo di verificato"),
+                ) {
+                    if (devNow.active) verifyDialog = true
+                    else Toast.makeText(ctx, t("Le verifiche non sono ancora aperte: riprova tra poco"), Toast.LENGTH_SHORT).show()
+                }
+            }
 
             SectionLabel(t("Aspetto"), Modifier.padding(top = 20.dp))
             SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth().padding(horizontal = 20.dp, vertical = 6.dp)) {
@@ -301,6 +321,7 @@ fun SettingsScreen(nav: NavHostController) {
     if (iconSheet) com.monolith.app.ui.screens.IconSheet { iconSheet = false }
     if (themeSheet) ThemeSheet { themeSheet = false }
     if (feedbackDialog) FeedbackDialog { feedbackDialog = false }
+    if (verifyDialog) VerifyRequestDialog { verifyDialog = false }
     if (medSheet) com.monolith.app.ui.screens.MedicalSheet { medSheet = false }
     if (bdayPicker) BirthdayPickerDialog { bdayPicker = false }
     if (langDialog) LanguageDialog(onDismiss = { langDialog = false }) { I18n.set(ctx, it); langDialog = false }
