@@ -48,7 +48,7 @@ data class User(
     /** last time the app published the profile, i.e. last opening (seconds) */
     val lastSeen: Long,
 ) {
-    val tag get() = pk.take(3)
+    val tag get() = pk.take(4)
 }
 
 /** the document every Monolith app reads and follows */
