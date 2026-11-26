@@ -1,7 +1,8 @@
 # Developer key
 
 `developer.pub` holds the public code of the developer dashboard (Monolith Dev): 64 hex characters on
-one line. Every Monolith app (2.4.0 and later) downloads it from this repository, at most every 12 hours,
+one line. Every Monolith app (2.4.0 and later) downloads it from this repository (every 12 hours; from 2.5.1 every
+15 minutes while there is no key yet, and at once when someone asks for verification),
 and from then on follows the document that key signs: news, newest and minimum version, blocked accounts.
 Reports and messages from the apps are encrypted to the same key.
 

@@ -6,6 +6,8 @@ import com.monolith.app.BuildConfig
 import com.monolith.app.Graph
 import com.monolith.app.crypto.Hex
 import com.monolith.app.nostr.Envelope
+import com.monolith.app.nostr.NostrEvent
+import com.monolith.app.core.nowSec
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -42,12 +44,16 @@ data class DevState(
  * key comes from the app's own repository, the same place the app is built from. Reports and feedback go
  * the other way, encrypted to that key like any message.
  */
+enum class Sent { SENT, QUEUED, FAILED }
+
 class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     companion object {
         const val KEY_URL = "https://raw.githubusercontent.com/Xoushal-from-Aprilia/Monolith/main/dev/developer.pub"
         const val RELEASES = "https://github.com/Xoushal-from-Aprilia/Monolith/releases/latest"
         const val D_TAG = "monolith-dev"
         private const val KEY_TTL = 12 * 3_600_000L
+        /** while there is no key, look again soon: the developer may add it at any moment */
+        private const val NO_KEY_TTL = 15 * 60_000L
         private const val DOC_EVERY = 3 * 3_600_000L
 
         /** -1, 0, 1 comparing dotted versions like 2.4.0 */
@@ -86,6 +92,11 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
         if (started) return
         started = true
         scope.launch {
+            Graph.relays.events.collect { (_, ev) ->
+                if (ev.kind == Envelope.KIND_PROFILE && ev.firstTag("d") == D_TAG) runCatching { onDoc(ev) }
+            }
+        }
+        scope.launch {
             while (true) {
                 refresh()
                 delay(DOC_EVERY)
@@ -104,19 +115,40 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     fun markNewsSeen(id: String) { sp.edit().putString("seen_news", id).apply(); _seenNews.value = id }
     fun markUpdateSeen(v: String) { sp.edit().putString("seen_update", v).apply(); _seenUpdate.value = v }
 
-    private suspend fun refresh() {
-        val key = loadKey()
+    /** looks for the developer key right now, without waiting for the cache; true when the channel is on */
+    suspend fun recheck(): Boolean {
+        refresh(force = true)
+        return _state.value.active
+    }
+
+    private suspend fun refresh(force: Boolean = false) {
+        val key = loadKey(force)
         if (key.isBlank()) {
             if (_state.value.active) save(DevState())
             return
         }
         if (!_state.value.active) _state.value = _state.value.copy(active = true)
+        sendPending()
         lastDoc = System.currentTimeMillis()
         val filter = JSONObject().put("kinds", JSONArray().put(Envelope.KIND_PROFILE))
             .put("authors", JSONArray().put(key)).put("#d", JSONArray().put(D_TAG)).put("limit", 5)
+        // stay subscribed too: a block or a verification published now arrives at once
+        if (liveFor != key) {
+            liveFor = key
+            Graph.relays.subscribe("devdoc") { listOf(JSONObject(filter.toString()).put("since", nowSec() - 60).apply { remove("limit") }) }
+        }
         val ev = runCatching { Graph.relays.query(listOf(filter)) }.getOrDefault(emptyList())
             .filter { it.pubkey == key && it.kind == Envelope.KIND_PROFILE && it.firstTag("d") == D_TAG }
             .maxByOrNull { it.createdAt } ?: return
+        onDoc(ev)
+    }
+
+    private var liveFor = ""
+
+    /** a document of the developer, from a query or from the live subscription */
+    private suspend fun onDoc(ev: NostrEvent) {
+        val key = devKey
+        if (key.isBlank() || ev.pubkey != key || ev.kind != Envelope.KIND_PROFILE || ev.firstTag("d") != D_TAG) return
         if (ev.createdAt <= sp.getLong("doc_at", 0)) return
         if (!withContext(Dispatchers.Default) { ev.verify() }) return
         val doc = runCatching { JSONObject(ev.content) }.getOrNull() ?: return
@@ -125,9 +157,10 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     }
 
     /** the developer key from the repository, cached for 12 hours (and kept when offline) */
-    private suspend fun loadKey(): String {
+    private suspend fun loadKey(force: Boolean = false): String {
         val cached = sp.getString("key", "") ?: ""
-        if (System.currentTimeMillis() - sp.getLong("key_at", 0) < KEY_TTL) return cached
+        val ttl = if (cached.isBlank()) NO_KEY_TTL else KEY_TTL
+        if (!force && System.currentTimeMillis() - sp.getLong("key_at", 0) < ttl) return cached
         val fetched = withContext(Dispatchers.IO) {
             runCatching {
                 val c = URL(KEY_URL).openConnection() as HttpURLConnection
@@ -200,11 +233,28 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     /** when I asked to be verified (ms), 0 if never */
     val verifyAskedAt: Long get() = sp.getLong("verify_at", 0)
 
-    /** asks the developer to verify this account; [text] says who I am */
-    suspend fun requestVerification(text: String): Boolean {
+    /** a request written while verifications were not open yet: it leaves as soon as they open */
+    val verifyPending: Boolean get() = !sp.getString("verify_pending", null).isNullOrBlank()
+
+    private suspend fun sendVerify(text: String): Boolean {
         val p = Graph.identity.profile.value
         val ok = sendToDev(JSONObject().put("k", "verify").put("u", p?.username ?: "").put("n", p?.displayName ?: "").put("text", text))
-        if (ok) sp.edit().putLong("verify_at", System.currentTimeMillis()).apply()
+        if (ok) sp.edit().putLong("verify_at", System.currentTimeMillis()).remove("verify_pending").apply()
         return ok
+    }
+
+    private suspend fun sendPending() {
+        val text = sp.getString("verify_pending", null)
+        if (!text.isNullOrBlank()) sendVerify(text)
+    }
+
+    /** asks the developer to verify this account; [text] says who I am */
+    suspend fun requestVerification(text: String): Sent {
+        if (devKey.isBlank()) recheck()
+        if (devKey.isBlank()) {
+            sp.edit().putString("verify_pending", text).apply()
+            return Sent.QUEUED
+        }
+        return if (sendVerify(text)) Sent.SENT else Sent.FAILED
     }
 }

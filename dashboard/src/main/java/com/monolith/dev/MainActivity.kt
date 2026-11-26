@@ -27,6 +27,9 @@ import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.WindowInsets
+import androidx.compose.foundation.layout.consumeWindowInsets
+import androidx.compose.foundation.layout.statusBars
 import androidx.compose.foundation.layout.width
 import androidx.compose.foundation.lazy.LazyColumn
 import androidx.compose.foundation.lazy.items
@@ -371,12 +374,54 @@ internal fun MainScreen(start: Int = 0) {
             }
         },
     ) { pad ->
-        Box(Modifier.padding(bottom = pad.calculateBottomPadding())) {
-            when (tab) {
-                0 -> OverviewTab()
-                1 -> UsersTab()
-                2 -> InboxTab()
-                else -> PublishTab()
+        val linked by Dev.linked.collectAsState()
+        Column(Modifier.padding(bottom = pad.calculateBottomPadding())) {
+            LinkBanner()
+            // the banner already sits under the status bar
+            Box(Modifier.weight(1f).then(if (linked == false) Modifier.consumeWindowInsets(WindowInsets.statusBars) else Modifier)) {
+                when (tab) {
+                    0 -> OverviewTab()
+                    1 -> UsersTab()
+                    2 -> InboxTab()
+                    else -> PublishTab()
+                }
+            }
+        }
+    }
+}
+
+/**
+ * Blocks, verifications, news and updates reach the apps only when they know this key, that is when its
+ * public code is in dev/developer.pub. Until then the dashboard says so on every screen.
+ */
+@Composable
+internal fun LinkBanner() {
+    val ctx = LocalContext.current
+    val linked by Dev.linked.collectAsState()
+    val keys by Dev.keys.collectAsState()
+    val scope = rememberCoroutineScope()
+    var checking by remember { mutableStateOf(false) }
+    LaunchedEffect(linked) {
+        // while not linked, look again every minute: the file can arrive at any moment
+        while (linked == false && !Dev.previewing) { kotlinx.coroutines.delay(60_000); Dev.checkLinked() }
+    }
+    if (linked != false) return
+    val pub = keys?.pub ?: return
+    Surface(color = Danger.copy(alpha = 0.16f), modifier = Modifier.fillMaxWidth().statusBarsPadding()) {
+        Column(Modifier.padding(horizontal = 18.dp, vertical = 14.dp)) {
+            Text("Le app non riconoscono ancora questa chiave", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+            Spacer(Modifier.height(4.dp))
+            Text(
+                "Blocchi, verifiche, annunci e aggiornamenti arrivano alle app solo quando il codice pubblico è nel file dev/developer.pub del progetto. Copialo e fallo aggiungere: è pubblico, non è il codice segreto.",
+                style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
+            )
+            Spacer(Modifier.height(10.dp))
+            Row(horizontalArrangement = Arrangement.spacedBy(8.dp), verticalAlignment = Alignment.CenterVertically) {
+                Button(onClick = { copy(ctx, "codice pubblico", pub) }, shape = CircleShape) { Text("Copia il codice pubblico") }
+                OutlinedButton(onClick = { share(ctx, "Codice pubblico della dashboard di Monolith:\n$pub") }, shape = CircleShape) { Text("Condividi") }
+            }
+            TextButton(enabled = !checking, onClick = { checking = true; scope.launch { Dev.checkLinked(); checking = false } }) {
+                Text(if (checking) "Controllo…" else "Controlla di nuovo")
             }
         }
     }

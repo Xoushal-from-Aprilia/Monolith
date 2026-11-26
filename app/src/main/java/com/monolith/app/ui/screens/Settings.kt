@@ -233,11 +233,15 @@ fun SettingsScreen(nav: NavHostController) {
                 val asked = Graph.dev.verifyAskedAt
                 SettingRow(
                     Icons.Rounded.Verified, t("Richiedi la verifica"),
-                    if (asked > 0) t("Richiesta inviata il {0}", java.text.SimpleDateFormat("d MMM", I18n.locale).format(java.util.Date(asked)))
-                    else t("Conferma che sei davvero tu e ottieni il simbolo di verificato"),
+                    when {
+                        Graph.dev.verifyPending -> t("Richiesta salvata: parte da sola appena le verifiche si aprono")
+                        asked > 0 -> t("Richiesta inviata il {0}", java.text.SimpleDateFormat("d MMM", I18n.locale).format(java.util.Date(asked)))
+                        else -> t("Conferma che sei davvero tu e ottieni il simbolo di verificato")
+                    },
                 ) {
-                    if (devNow.active) verifyDialog = true
-                    else Toast.makeText(ctx, t("Le verifiche non sono ancora aperte: riprova tra poco"), Toast.LENGTH_SHORT).show()
+                    // the request can always be written; if verifications are not open yet it waits and leaves on its own
+                    verifyDialog = true
+                    if (!devNow.active) Graph.scope.launch { Graph.dev.recheck() }
                 }
             }
 
@@ -453,6 +457,14 @@ internal fun SettingSwitch(icon: ImageVector, title: String, subtitle: String, c
 private class Release(val version: String, val date: String, val notes: List<String>)
 
 private val JOURNAL = listOf(
+    Release(
+        "2.5.1", "2026-11-26",
+        listOf(
+            "Richiedi la verifica ora funziona sempre: se le verifiche non sono ancora aperte, la richiesta resta salvata e parte da sola appena si aprono",
+            "Le richieste di verifica, le segnalazioni e i messaggi allo sviluppatore partono anche se chiudi subito la finestra",
+            "Blocchi, verifiche e annunci dello sviluppatore arrivano entro pochi minuti invece che entro 12 ore",
+        ),
+    ),
     Release(
         "2.5.0", "2026-11-26",
         listOf(

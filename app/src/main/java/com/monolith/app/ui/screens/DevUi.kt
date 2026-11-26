@@ -140,9 +140,9 @@ fun FeedbackDialog(onDismiss: () -> Unit) {
             TextButton(enabled = text.isNotBlank(), onClick = {
                 val body = text.trim()
                 onDismiss()
-                scope.launch {
+                Graph.scope.launch {
                     val ok = Graph.dev.feedback(body)
-                    Toast.makeText(ctx, if (ok) t("Inviato, grazie!") else t("Non inviato: riprova più tardi"), Toast.LENGTH_SHORT).show()
+                    toast(ctx, if (ok) t("Inviato, grazie!") else t("Non inviato: riprova più tardi"))
                 }
             }) { Text(t("Invia")) }
         },
@@ -176,9 +176,12 @@ fun VerifyRequestDialog(onDismiss: () -> Unit) {
             TextButton(enabled = text.isNotBlank(), onClick = {
                 val body = text.trim()
                 onDismiss()
-                scope.launch {
-                    val ok = Graph.dev.requestVerification(body)
-                    Toast.makeText(ctx, if (ok) t("Richiesta inviata") else t("Non inviato: riprova più tardi"), Toast.LENGTH_SHORT).show()
+                Graph.scope.launch {
+                    toast(ctx, when (Graph.dev.requestVerification(body)) {
+                        com.monolith.app.net.Sent.SENT -> t("Richiesta inviata")
+                        com.monolith.app.net.Sent.QUEUED -> t("Richiesta salvata: parte da sola appena le verifiche si aprono")
+                        else -> t("Non inviato: riprova più tardi")
+                    })
                 }
             }) { Text(t("Invia")) }
         },
@@ -214,10 +217,12 @@ fun ReportDialog(pk: String, name: String, onDismiss: () -> Unit) {
         },
         confirmButton = {
             TextButton(onClick = {
+                val why = reason
+                val body = text.trim()
                 onDismiss()
-                scope.launch {
-                    val ok = Graph.dev.report(pk, name, reason, text.trim())
-                    Toast.makeText(ctx, if (ok) t("Segnalazione inviata") else t("Non inviato: riprova più tardi"), Toast.LENGTH_SHORT).show()
+                Graph.scope.launch {
+                    val ok = Graph.dev.report(pk, name, why, body)
+                    toast(ctx, if (ok) t("Segnalazione inviata") else t("Non inviato: riprova più tardi"))
                 }
             }) { Text(t("Segnala")) }
         },
@@ -238,4 +243,8 @@ fun ReportLink(pk: String, name: String) {
     }
     if (open) ReportDialog(pk, name) { open = false }
     Spacer(Modifier.width(0.dp))
+}
+
+private suspend fun toast(ctx: android.content.Context, text: String) = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
+    Toast.makeText(ctx.applicationContext, text, Toast.LENGTH_SHORT).show()
 }

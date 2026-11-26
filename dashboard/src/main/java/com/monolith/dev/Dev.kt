@@ -160,7 +160,14 @@ object Dev {
     private val _inbox = MutableStateFlow<List<Msg>>(emptyList())
     val inbox: StateFlow<List<Msg>> = _inbox.asStateFlow()
 
+    private val _linked = MutableStateFlow<Boolean?>(null)
+    /** whether the apps know this key: its public code is the one in dev/developer.pub (null = not checked) */
+    val linked: StateFlow<Boolean?> = _linked.asStateFlow()
+
     private var started = false
+    /** screenshots: no network checks */
+    @Volatile internal var previewing = false
+    internal fun previewLinked(v: Boolean?) { _linked.value = v }
 
     fun init(a: Application) {
         app = a
@@ -204,6 +211,7 @@ object Dev {
         started = false
         _doc.value = Doc()
         _inbox.value = emptyList()
+        _linked.value = null
         saveLocal()
     }
 
@@ -224,6 +232,28 @@ object Dev {
             loadDoc()
             refreshUsers()
         }
+        scope.launch { checkLinked() }
+    }
+
+    /** reads dev/developer.pub from the repository and compares it with this key */
+    suspend fun checkLinked() {
+        val pub = _keys.value?.pub ?: return
+        val text = withContext(Dispatchers.IO) {
+            runCatching {
+                val c = URL("https://raw.githubusercontent.com/$REPO/main/dev/developer.pub?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
+                c.connectTimeout = 8000; c.readTimeout = 8000
+                c.setRequestProperty("Cache-Control", "no-cache")
+                try {
+                    when (c.responseCode) {
+                        200 -> c.inputStream.bufferedReader().readText()
+                        404 -> ""
+                        else -> null
+                    }
+                } finally { c.disconnect() }
+            }.getOrNull()
+        } ?: return
+        val key = text.lineSequence().map { it.trim().lowercase() }.firstOrNull { it.isNotEmpty() && !it.startsWith("#") } ?: ""
+        _linked.value = key == pub
     }
 
     private fun onWrap(ev: NostrEvent) {
@@ -336,8 +366,9 @@ object Dev {
     }
 
     /** for the screenshots: fill the dashboard without going online */
-    internal fun preview(k: Keys, users: List<User>, doc: Doc, inbox: List<Msg>) {
-        _keys.value = k; _users.value = users; _doc.value = doc; _inbox.value = inbox; _usersAt.value = System.currentTimeMillis()
+    internal fun preview(k: Keys, users: List<User>, doc: Doc, inbox: List<Msg>, linked: Boolean? = true) {
+        previewing = true
+        _keys.value = k; _users.value = users; _doc.value = doc; _inbox.value = inbox; _usersAt.value = System.currentTimeMillis(); _linked.value = linked
     }
 
     fun userOf(pk: String): User? = _users.value.firstOrNull { it.pk == pk }
