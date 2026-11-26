@@ -282,11 +282,15 @@ class IdentityStore(private val ctx: Context) {
     /** when this account was created on this phone (seconds); 0 when unknown (older or restored accounts) */
     val joined: Long get() = sp.getLong("joined", 0)
 
+    /** a restored account keeps the day it was created */
+    fun setJoined(sec: Long) { sp.edit().putLong("joined", sec).commit() }
+
     fun create(profile: Profile, importedSecret: ByteArray? = null): Keys {
         val sk = importedSecret ?: Secp256k1.generatePrivateKey()
         val ed = sp.edit().putString("sk", encrypt(sk)).putString("profile", profile.toJson().toString())
         if (importedSecret == null) ed.putLong("joined", System.currentTimeMillis() / 1000)
-        ed.apply()
+        // written at once: a restore reopens the app right after
+        ed.commit()
         val k = Keys(sk, Hex.encode(Secp256k1.publicKey(sk)))
         keys = k
         _profile.value = profile

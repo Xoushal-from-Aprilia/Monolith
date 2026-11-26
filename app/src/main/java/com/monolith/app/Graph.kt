@@ -175,6 +175,13 @@ object Graph {
         prefs.lastWrapSec = 0
         prefs.permissionsDone = false
         AppLock.setEnabled(false)
+        restart(ctx)
+    }
+
+    /** closes and reopens the app, so that everything is read again from the phone (after a wipe or a restore) */
+    suspend fun restart(ctx: android.content.Context) {
+        // settings saved in the background need a moment to reach the disk
+        kotlinx.coroutines.delay(600)
         kotlinx.coroutines.withContext(Dispatchers.Main) {
             MonolithService.stop(ctx)
             runCatching {

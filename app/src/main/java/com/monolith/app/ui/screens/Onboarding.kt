@@ -383,7 +383,8 @@ private fun Restore(onBack: () -> Unit, onKey: (ByteArray) -> Unit) {
                                     }.getOrDefault(false)
                                 }
                                 busy = false
-                                if (ok) Graph.startEngine() else error = t("Password errata o file non valido")
+                                // everything came back (settings, places, Shards…): reopen the app so it reads it all
+                                if (ok) Graph.restart(ctx) else error = t("Password errata o file non valido")
                             }
                         },
                         enabled = password.isNotEmpty() && !busy,

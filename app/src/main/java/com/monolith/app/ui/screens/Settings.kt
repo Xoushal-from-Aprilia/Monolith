@@ -299,7 +299,7 @@ fun SettingsScreen(nav: NavHostController) {
                 SettingRow(Icons.Rounded.Key, t("Codice di recupero"), t("Serve per ripristinare il profilo su un altro telefono")) {
                     if (Unlock.available(ctx)) Unlock.prompt(ctx, t("Mostra il codice di recupero")) { showCode = true } else showCode = true
                 }
-                SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Salva chat, agenda, liste e amici in un file protetto da password")) { backupDialog = true }
+                SettingRow(Icons.Rounded.Backup, t("Backup cifrato"), t("Tutto Monolith in un file con password: profilo, chat, luoghi comuni, Shard e impostazioni")) { backupDialog = true }
                 AutoBackupRow()
             }
 
@@ -460,6 +460,8 @@ private val JOURNAL = listOf(
     Release(
         "2.5.1", "2026-11-26",
         listOf(
+            "Il backup ora salva proprio tutto: il profilo completo con copertina, distintivi in vetrina, stato e compleanno, i luoghi comuni con gli amici e i loro promemoria, gli Shard, spese, album e abitudini, i salvati, gli sticker, il diario dei luoghi e tutte le impostazioni",
+            "Dopo il ripristino Monolith si riapre da solo con ogni cosa al suo posto; vale anche per il backup automatico",
             "Richiedi la verifica ora funziona sempre: se le verifiche non sono ancora aperte, la richiesta resta salvata e parte da sola appena si aprono",
             "Le richieste di verifica, le segnalazioni e i messaggi allo sviluppatore partono anche se chiudi subito la finestra",
             "Blocchi, verifiche e annunci dello sviluppatore arrivano entro pochi minuti invece che entro 12 ore",

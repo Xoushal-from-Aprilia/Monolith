@@ -148,6 +148,84 @@ object Backup {
     private fun list(l: SharedList) = JSONObject().put("id", l.id).put("t", l.title).put("e", l.emoji).put("m", l.members).put("o", l.owner).put("c", l.createdAt).put("u", l.updatedAt)
     private fun list(o: JSONObject) = SharedList(o.getString("id"), o.optString("t"), o.optString("e"), o.optString("m"), o.optString("o"), o.optLong("c"), o.optLong("u"))
 
+    // ---------------------------------------------------------------- everything else
+    // Since 2.5.1 a backup holds the whole app, not only the database: every setting and store kept in
+    // SharedPreferences (profile extras, birthdays, status, badges, favorites, pins, streaks, sounds, theme…)
+    // and every file of the app (common places with their notes, Shards, bills, albums, habits, saved items,
+    // stickers, place diary…). Left out only what belongs to this phone and cannot move: the secret key wrapped
+    // by this phone's keystore (the key itself travels as "sk"), the automatic backup's folder and password,
+    // the icon in use, the developer channel's cache, the permission screen and map tiles.
+
+    private val SKIP_PREFS = setOf("monolith_identity", "autobackup", "app_icon", "dev_channel")
+    private val SKIP_KEYS = mapOf("monolith_prefs" to setOf("perm_done"))
+    private val SKIP_DIRS = setOf("media", "osmdroid")
+
+    private fun prefsNames(ctx: Context): List<String> =
+        File(ctx.applicationInfo.dataDir, "shared_prefs").listFiles().orEmpty()
+            .map { it.name.removeSuffix(".xml") }
+            // library prefs have dotted names; ours never do
+            .filter { it !in SKIP_PREFS && !it.contains('.') && !it.endsWith(".bak") }
+
+    private fun exportPrefs(ctx: Context): JSONObject {
+        val out = JSONObject()
+        prefsNames(ctx).forEach { name ->
+            val skip = SKIP_KEYS[name].orEmpty()
+            val o = JSONObject()
+            ctx.getSharedPreferences(name, Context.MODE_PRIVATE).all.forEach { (k, v) ->
+                if (k in skip || v == null) return@forEach
+                val e = when (v) {
+                    is String -> JSONObject().put("t", "s").put("v", v)
+                    is Int -> JSONObject().put("t", "i").put("v", v)
+                    is Long -> JSONObject().put("t", "l").put("v", v)
+                    is Float -> JSONObject().put("t", "f").put("v", v.toDouble())
+                    is Boolean -> JSONObject().put("t", "b").put("v", v)
+                    is Set<*> -> JSONObject().put("t", "set").put("v", JSONArray(v.map { it.toString() }))
+                    else -> null
+                }
+                e?.let { o.put(k, it) }
+            }
+            out.put(name, o)
+        }
+        return out
+    }
+
+    private fun importPrefs(ctx: Context, all: JSONObject) {
+        all.keys().forEach { name ->
+            if (name in SKIP_PREFS || name.contains('.')) return@forEach
+            val o = all.optJSONObject(name) ?: return@forEach
+            val skip = SKIP_KEYS[name].orEmpty()
+            val sp = ctx.getSharedPreferences(name, Context.MODE_PRIVATE)
+            val ed = sp.edit()
+            // keep what belongs to this phone, replace the rest
+            sp.all.keys.filter { it !in skip }.forEach { ed.remove(it) }
+            o.keys().forEach { k ->
+                if (k in skip) return@forEach
+                val e = o.optJSONObject(k) ?: return@forEach
+                runCatching {
+                    when (e.optString("t")) {
+                        "s" -> ed.putString(k, e.getString("v"))
+                        "i" -> ed.putInt(k, e.getInt("v"))
+                        "l" -> ed.putLong(k, e.getLong("v"))
+                        "f" -> ed.putFloat(k, e.getDouble("v").toFloat())
+                        "b" -> ed.putBoolean(k, e.getBoolean("v"))
+                        "set" -> e.getJSONArray("v").let { a -> ed.putStringSet(k, (0 until a.length()).map { a.getString(it) }.toSet()) }
+                    }
+                }
+            }
+            ed.commit()
+        }
+    }
+
+    /** every file of the app except media (saved apart) and map tiles, with its path inside the app's folder */
+    private fun appFiles(ctx: Context): List<Pair<String, File>> {
+        val root = ctx.filesDir
+        return root.walkTopDown()
+            .onEnter { it == root || !(it.parentFile == root && it.name in SKIP_DIRS) }
+            .filter { it.isFile && !it.name.endsWith(".tmp") }
+            .map { it.relativeTo(root).path.replace(File.separatorChar, '/') to it }
+            .toList()
+    }
+
     private fun item(i: ListItem) = JSONObject().put("id", i.id).put("l", i.listId).put("x", i.text).put("d", i.done).put("b", i.by).put("u", i.updatedAt).put("del", i.deleted)
     private fun item(o: JSONObject) = ListItem(o.getString("id"), o.optString("l"), o.optString("x"), o.optBoolean("d"), o.optString("b"), o.optLong("u"), o.optBoolean("del"))
 
@@ -158,9 +236,11 @@ object Backup {
         val db = Graph.db
         val keys = Graph.identity.keys ?: throw IllegalStateException("no identity")
         val data = JSONObject()
-            .put("v", 1)
+            .put("v", 2)
             .put("sk", Hex.encode(keys.priv))
             .put("profile", Graph.identity.profile.value?.toJson() ?: JSONObject())
+            .put("joined", Graph.identity.joined)
+            .put("prefs", exportPrefs(ctx))
             .put("friends", JSONArray().also { a -> db.friends().allNow().forEach { a.put(friend(it)) } })
             .put("groups", JSONArray().also { a -> db.groups().allNow().forEach { a.put(group(it)) } })
             .put("messages", JSONArray().also { a -> db.messages().allNow().forEach { a.put(msg(it)) } })
@@ -175,7 +255,7 @@ object Backup {
                 db.social().allVotes().forEach { v -> a.put(JSONObject().put("m", v.msgId).put("s", v.voter).put("c", v.convId).put("o", v.options).put("t", v.ts)) }
             })
             .put("conv", JSONArray().also { a ->
-                db.social().allSettings().forEach { c -> a.put(JSONObject().put("c", c.convId).put("t", c.ttlSec)) }
+                db.social().allSettings().forEach { c -> a.put(JSONObject().put("c", c.convId).put("t", c.ttlSec).put("mu", c.muted)) }
             })
 
         val zipBytes = ByteArrayOutputStream()
@@ -183,10 +263,17 @@ object Backup {
             zip.putNextEntry(ZipEntry("data.json"))
             zip.write(data.toString().toByteArray(Charsets.UTF_8))
             zip.closeEntry()
-            Media.dir(ctx).listFiles()?.forEach { f ->
+            Media.dir(ctx).listFiles()?.filter { it.isFile }?.forEach { f ->
                 zip.putNextEntry(ZipEntry("media/" + f.name))
                 f.inputStream().use { it.copyTo(zip) }
                 zip.closeEntry()
+            }
+            appFiles(ctx).forEach { (path, f) ->
+                runCatching {
+                    zip.putNextEntry(ZipEntry("files/$path"))
+                    f.inputStream().use { it.copyTo(zip) }
+                    zip.closeEntry()
+                }
             }
         }
         val rnd = SecureRandom()
@@ -217,13 +304,19 @@ object Backup {
         }
         val mediaDir = Media.dir(ctx)
         var data: JSONObject? = null
+        // the app's files are written last, after the database: they win over what the import writes on its own
+        val files = ArrayList<Pair<String, ByteArray>>()
         ZipInputStream(ByteArrayInputStream(zipBytes)).use { zip ->
             var e = zip.nextEntry
             while (e != null) {
                 if (e.name == "data.json") {
                     data = JSONObject(zip.readBytes().toString(Charsets.UTF_8))
-                } else if (e.name.startsWith("media/") && !e.name.contains("..")) {
+                } else if (e.name.contains("..")) {
+                    // never outside the app's folder
+                } else if (e.name.startsWith("media/")) {
                     File(mediaDir, e.name.removePrefix("media/")).outputStream().use { zip.copyTo(it) }
+                } else if (e.name.startsWith("files/") && !e.isDirectory) {
+                    files += e.name.removePrefix("files/") to zip.readBytes()
                 }
                 e = zip.nextEntry
             }
@@ -244,7 +337,7 @@ object Backup {
         val items = ArrayList<ListItem>(); arr("items") { items += item(it) }
         val reactions = ArrayList<Reaction>(); arr("reactions") { reactions += Reaction(it.getString("m"), it.getString("s"), it.optString("c"), it.optString("e"), it.optLong("t")) }
         val votes = ArrayList<Vote>(); arr("votes") { votes += Vote(it.getString("m"), it.getString("s"), it.optString("c"), it.optString("o"), it.optLong("t")) }
-        val conv = ArrayList<ConvSetting>(); arr("conv") { conv += ConvSetting(it.getString("c"), it.optLong("t")) }
+        val conv = ArrayList<ConvSetting>(); arr("conv") { conv += ConvSetting(it.getString("c"), it.optLong("t"), it.optBoolean("mu")) }
 
         friends.forEach { db.friends().upsert(it) }
         groups.forEach { db.groups().upsert(it) }
@@ -256,7 +349,17 @@ object Backup {
         reactions.forEach { db.social().react(it) }
         votes.forEach { db.social().vote(it) }
         conv.forEach { db.social().saveSetting(it) }
+        d.optJSONObject("prefs")?.let { runCatching { importPrefs(ctx, it) } }
+        files.forEach { (path, bytes) ->
+            runCatching {
+                val f = File(ctx.filesDir, path)
+                if (!f.canonicalPath.startsWith(ctx.filesDir.canonicalPath + File.separator)) return@runCatching
+                f.parentFile?.mkdirs()
+                f.writeBytes(bytes)
+            }
+        }
         Graph.identity.create(profile, sk)
+        d.optLong("joined").takeIf { it > 0 }?.let { Graph.identity.setJoined(it) }
         events.forEach { ReminderScheduler.schedule(ctx, it) }
         return true
     }

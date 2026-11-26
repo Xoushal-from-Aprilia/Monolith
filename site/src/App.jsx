@@ -31,7 +31,7 @@ const SCENES = [
   { id: "legame", art: "bond", kicker: "Legame", title: "Più vi scrivete, più cresce", lines: ["Da Sasso a Monolite", "Serie di giorni insieme", "Il simbolo accanto al nome dopo 100 giorni"] },
   { id: "shard", art: "shard", kicker: "Shard", title: "Spazi per il tuo gruppo", lines: ["Stanze scritte, vocali e private", "Videocamera anche nelle stanze vocali", "Bacheca, eventi e ruoli", "Benvenuto e titoli per tutti"] },
   { id: "insieme", art: "together", kicker: "Insieme", title: "Spese, album, abitudini", lines: ["Chi deve quanto, in un tocco", "Le foto di tutti in un posto", "Abitudini da tenere insieme"] },
-  { id: "sicurezza", art: "safe", kicker: "Sicurezza", title: "Al sicuro, sempre", lines: ["Tasto SOS con scheda medica", "Blocco e avviso screenshot", "Backup cifrato automatico"] },
+  { id: "sicurezza", art: "safe", kicker: "Sicurezza", title: "Al sicuro, sempre", lines: ["Tasto SOS con scheda medica", "Blocco e avviso screenshot", "Backup cifrato di tutto, anche automatico"] },
   { id: "telefono", art: "phone", kicker: "Il tuo telefono", title: "Si muove con te", lines: ["Batti cinque per aggiungere amici", "Vocali all'orecchio", "Sfondo animato e widget", "Una piccola vibrazione a ogni tocco"] },
   { id: "domenica", art: "wrapped", kicker: "Domenica", title: "La tua settimana in slide", lines: ["Persone, emoji e ritmo", "Un titolo tutto tuo"] },
   { id: "kids", art: "kids", kicker: "Monolith Kids", title: "Anche per i più piccoli", lines: ["Un'app a parte, sul telefono del bambino", "Il genitore vede messaggi, agenda e posizione", "Solo contatti approvati e ora di riposo"], cta: "kids" },
