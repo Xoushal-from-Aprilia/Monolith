@@ -883,8 +883,24 @@ internal fun PublishTab() {
             }
             Card {
                 Label("Aggiornamenti")
-                Text("Chi ha una versione più vecchia dell'ultima vede l'avviso con il link. Sotto la versione minima l'app si ferma finché non aggiorni.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Dalla 2.7.0 le app si fermano da sole se non sono la versione ufficiale del sito. Per fermare anche le 2.4–2.6 serve la versione minima: il tasto qui sotto la mette uguale all'ultima, con il link a monolith.support.", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 Spacer(Modifier.height(10.dp))
+                Button(enabled = !busy, onClick = {
+                    busy = true
+                    scope.launch {
+                        val v = Dev.officialVersion()
+                        if (v == null) {
+                            busy = false
+                            Toast.makeText(ctx, "Non riesco a leggere la versione ufficiale: controlla la connessione", Toast.LENGTH_SHORT).show()
+                        } else {
+                            latest = v; url = Dev.SITE; min = v
+                            val n = Dev.publish(draft())
+                            busy = false
+                            published(ctx, n)
+                        }
+                    }
+                }, shape = CircleShape, modifier = Modifier.fillMaxWidth()) { Text("Solo la versione ufficiale funziona") }
+                Spacer(Modifier.height(8.dp))
                 OutlinedButton(onClick = { pick = true }, shape = CircleShape) { Text("Scegli una build da GitHub") }
                 Spacer(Modifier.height(8.dp))
                 OutlinedTextField(latest, { latest = it }, label = { Text("Ultima versione (es. 2.4.0)") }, singleLine = true, modifier = Modifier.fillMaxWidth())
@@ -972,7 +988,8 @@ internal fun PublishTab() {
     if (pick) ReleasePicker(onDismiss = { pick = false }) { r ->
         pick = false
         if (r.version.isNotBlank()) latest = r.version
-        url = r.url
+        // the apps send people to the download site, not to a bare file
+        url = Dev.SITE
     }
 }
 

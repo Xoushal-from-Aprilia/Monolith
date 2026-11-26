@@ -97,7 +97,7 @@ private val FILM = listOf(
     Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
     Scene("Domenica" /*i18n*/, "La tua settimana in slide" /*i18n*/, listOf("Persone, emoji e ritmo" /*i18n*/, "Un titolo tutto tuo" /*i18n*/), "wrapped"),
     Scene("Monolith Kids" /*i18n*/, "Anche per i più piccoli" /*i18n*/, listOf("Un'app a parte, sul telefono del bambino" /*i18n*/, "Il genitore vede messaggi, agenda e posizione" /*i18n*/, "Solo contatti approvati e ora di riposo" /*i18n*/), "kids"),
-    Scene("", "Pronto?" /*i18n*/, listOf("Il resto lo scopri usandola." /*i18n*/), "end"),
+    Scene("", "Pronto?" /*i18n*/, listOf("Il resto lo scopri usandola." /*i18n*/, "Sempre l'ultima versione su monolith.support" /*i18n*/), "end"),
 )
 
 private const val SCENE_MS = 4300

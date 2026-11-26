@@ -462,6 +462,14 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.7.0", "2026-11-26",
+        listOf(
+            "Funziona solo la versione ufficiale: quando ne esce una nuova, quella vecchia si ferma e porta a monolith.support per scaricarla",
+            "I messaggi delle versioni vecchie non vengono più riconosciuti e chi le usa riceve un avviso per aggiornare; quelli mandati prima arrivano comunque",
+            "Gli account rimasti su una versione vecchia non compaiono più nella ricerca finché non aggiornano",
+        ),
+    ),
+    Release(
         "2.6.0", "2026-11-26",
         listOf(
             "I messaggi dello sviluppatore arrivano come notifiche sullo schermo: annunci a tutti, nuove versioni e messaggi solo per te, che restano in Impostazioni",

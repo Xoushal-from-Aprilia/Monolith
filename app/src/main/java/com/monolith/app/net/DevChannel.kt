@@ -23,6 +23,9 @@ import java.net.URL
 
 data class DevNews(val id: String, val title: String, val body: String, val link: String)
 
+/** the official build of an app, as the download site lists it */
+data class Official(val version: String, val build: Int)
+
 /** a message the developer wrote to this account only */
 data class DevMsg(val id: String, val title: String, val body: String, val at: Long)
 
@@ -58,6 +61,11 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
         const val KEY_URL = "https://raw.githubusercontent.com/Xoushal-from-Aprilia/Monolith/main/dev/developer.pub"
         const val RELEASES = "https://github.com/Xoushal-from-Aprilia/Monolith/releases/latest"
         const val D_TAG = "monolith-dev"
+        /** the download site: every update leads there */
+        const val SITE = "https://monolith.support"
+        /** the site's list of official builds, in the repository the apps are built from */
+        private const val OFFICIAL_BASE = "https://raw.githubusercontent.com/Xoushal-from-Aprilia/Monolith/main/site/data/"
+        private const val OFFICIAL_TTL = 30 * 60_000L
         private const val KEY_TTL = 12 * 3_600_000L
         /** while there is no key, look again soon: the developer may add it at any moment */
         private const val NO_KEY_TTL = 15 * 60_000L
@@ -99,6 +107,99 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     val deletedNotice: String? get() = if (notice.getLong("deleted_at", 0) > 0) notice.getString("deleted_why", "") ?: "" else null
     fun clearDeletedNotice() { notice.edit().clear().apply() }
 
+    // ------------------------------------------------ only the official version works
+
+    private val _official = MutableStateFlow(loadOfficial())
+    /** Monolith's and Monolith Kids' official builds (null when not known yet) */
+    val official: StateFlow<Pair<Official?, Official?>> = _official.asStateFlow()
+
+    private fun officialFor(kids: Boolean): Official? = if (kids) _official.value.second else _official.value.first
+
+    /** older than the official build: an older version, or the same version from an older build */
+    private fun older(version: String, build: Int, off: Official?): Boolean {
+        off ?: return false
+        val c = compare(version, off.version)
+        // the build number is the CI run (versionCode); 1 = built elsewhere, unknown
+        return c < 0 || (c == 0 && build in 2 until off.build)
+    }
+
+    /** a version number someone else runs is older than the official one */
+    fun outdatedVersion(version: String, kids: Boolean = false): Boolean {
+        val off = officialFor(kids) ?: return false
+        return version.isBlank() || compare(version, off.version) < 0
+    }
+
+    /**
+     * A payload sent by an app that is not the official version, after this phone learned which one is:
+     * it is not recognised. Messages sent before that moment still arrive.
+     */
+    fun fromOutdated(p: JSONObject, sentAt: Long): Boolean {
+        val kids = p.optString("ae") == "kids"
+        officialFor(kids) ?: return false
+        val since = sp.getLong(if (kids) "off_since_k" else "off_since_m", 0)
+        if (since == 0L || sentAt < since) return false
+        return outdatedVersion(p.optString("av"), kids)
+    }
+
+    /** once in a while, the friend on an old version gets a message (in any version) telling them to update */
+    suspend fun nudgeOutdated(from: String, p: JSONObject) {
+        if (p.optString("t") != "msg") return
+        val key = "nudge_$from"
+        if (System.currentTimeMillis() - sp.getLong(key, 0) < 12 * 3_600_000L) return
+        sp.edit().putLong(key, System.currentTimeMillis()).apply()
+        val text = com.monolith.app.core.t("Messaggio automatico di Monolith: la tua versione è vecchia e i tuoi messaggi non arrivano più. Scarica quella nuova da {0}", SITE)
+        runCatching {
+            Graph.messenger.sendStored(
+                from,
+                JSONObject().put("t", "msg").put("id", com.monolith.app.core.newId()).put("k", "text").put("x", text).put("ts", System.currentTimeMillis()),
+            )
+        }
+    }
+
+    /** reads the official builds from the repository (cached for half an hour, kept when offline) */
+    suspend fun refreshOfficial(force: Boolean = false) {
+        if (!force && System.currentTimeMillis() - sp.getLong("off_at", 0) < OFFICIAL_TTL) return
+        val builds = fetchText(OFFICIAL_BASE + "builds.json") ?: return
+        val kidsList = fetchText(OFFICIAL_BASE + "kids.json")
+        val mono = runCatching {
+            val o = JSONObject(builds)
+            o.keys().asSequence().map { Official(it, o.optInt(it)) }.filter { it.build > 0 }
+                .maxWithOrNull { a, b -> compare(a.version, b.version) }
+        }.getOrNull()
+        val kids = kidsList?.let { txt ->
+            runCatching {
+                val a = JSONArray(txt)
+                (0 until a.length()).map { a.getJSONObject(it) }.filter { it.optInt("build") > 0 }
+                    .map { Official(it.optString("version"), it.optInt("build")) }
+                    .maxWithOrNull { x, y -> compare(x.version, y.version) }
+            }.getOrNull()
+        } ?: _official.value.second
+        val old = _official.value
+        val ed = sp.edit().putLong("off_at", System.currentTimeMillis())
+        // the moment a new official version is learned: from now on, older apps are not recognised
+        if (mono != null && mono != old.first) ed.putLong("off_since_m", System.currentTimeMillis())
+        if (kids != null && kids != old.second) ed.putLong("off_since_k", System.currentTimeMillis())
+        mono?.let { ed.putString("off_m", it.version).putInt("off_mb", it.build) }
+        kids?.let { ed.putString("off_k", it.version).putInt("off_kb", it.build) }
+        ed.apply()
+        _official.value = (mono ?: old.first) to kids
+    }
+
+    private fun loadOfficial(): Pair<Official?, Official?> {
+        val m = sp.getString("off_m", null)?.let { Official(it, sp.getInt("off_mb", 0)) }
+        val k = sp.getString("off_k", null)?.let { Official(it, sp.getInt("off_kb", 0)) }
+        return m to k
+    }
+
+    private suspend fun fetchText(url: String): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val c = URL(url).openConnection() as HttpURLConnection
+            c.connectTimeout = 8000; c.readTimeout = 8000
+            c.setRequestProperty("User-Agent", "Monolith/${BuildConfig.VERSION_NAME}")
+            try { if (c.responseCode == 200) c.inputStream.bufferedReader().readText() else null } finally { c.disconnect() }
+        }.getOrNull()
+    }
+
     private val _inbox = MutableStateFlow(loadInbox())
     /** the developer's messages to me, newest first */
     val inbox: StateFlow<List<DevMsg>> = _inbox.asStateFlow()
@@ -107,10 +208,17 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
     fun markMsgSeen(id: String) { sp.edit().putString("seen_msg", id).apply(); _seenMsg.value = id }
     fun verifiedOf(pk: String): Verified? = _state.value.verified[pk]
     val blockedMe: Boolean get() = Graph.identity.keys?.pub?.let { isBlocked(it) } == true
-    // the version numbers are Monolith's: Monolith Kids has its own and is updated from the site
-    val updateRequired: Boolean get() = !BuildConfig.KIDS && _state.value.min?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
+    /**
+     * Only the official version works: older ones (and older builds of the same version) stop and ask for the
+     * update. The official build comes from the download site's list; the developer's minimum counts too.
+     * Monolith Kids has its own version numbers and its own official build.
+     */
+    val updateRequired: Boolean get() =
+        older(BuildConfig.VERSION_NAME, BuildConfig.VERSION_CODE, officialFor(BuildConfig.KIDS)) ||
+            (!BuildConfig.KIDS && _state.value.min?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true)
     val updateAvailable: Boolean get() = !BuildConfig.KIDS && _state.value.latest?.let { compare(BuildConfig.VERSION_NAME, it) < 0 } == true
-    val updateUrl: String get() = _state.value.latestUrl.ifBlank { RELEASES }
+    /** the download site, on the right app */
+    val updateUrl: String get() = if (BuildConfig.KIDS) "$SITE/#versioni" else SITE
 
     fun start() {
         if (started) return
@@ -126,11 +234,18 @@ class DevChannel(private val ctx: Context, private val scope: CoroutineScope) {
                 delay(DOC_EVERY)
             }
         }
+        scope.launch {
+            while (true) {
+                refreshOfficial()
+                delay(OFFICIAL_TTL)
+            }
+        }
     }
 
     /** when the app comes back to the screen, at most once an hour */
     fun onForeground() {
         if (started && System.currentTimeMillis() - lastDoc > 3_600_000L) scope.launch { refresh() }
+        if (started) scope.launch { refreshOfficial() }
     }
 
     /** for the screenshots */

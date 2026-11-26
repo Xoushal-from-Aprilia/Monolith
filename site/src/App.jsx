@@ -35,7 +35,7 @@ const SCENES = [
   { id: "telefono", art: "phone", kicker: "Il tuo telefono", title: "Si muove con te", lines: ["Batti cinque per aggiungere amici", "Vocali all'orecchio", "Sfondo animato e widget", "Una piccola vibrazione a ogni tocco"] },
   { id: "domenica", art: "wrapped", kicker: "Domenica", title: "La tua settimana in slide", lines: ["Persone, emoji e ritmo", "Un titolo tutto tuo"] },
   { id: "kids", art: "kids", kicker: "Monolith Kids", title: "Anche per i più piccoli", lines: ["Un'app a parte, sul telefono del bambino", "Il genitore vede messaggi, agenda e posizione", "Solo contatti approvati e ora di riposo"], cta: "kids" },
-  { id: "scarica", art: "end", kicker: "", title: "Pronto?", lines: ["Il resto lo scopri usandola."], cta: "end" },
+  { id: "scarica", art: "end", kicker: "", title: "Pronto?", lines: ["Il resto lo scopri usandola.", "Sempre l'ultima versione su monolith.support"], cta: "end" },
   {
     id: "installa", art: "install", kicker: "Installazione", title: "Quattro passi", steps: [
       "Scarica l'APK dal telefono",
@@ -61,7 +61,7 @@ const SCENES = [
       "Installa quella nuova",
       "Apri e scegli «Ho già un profilo Monolith»",
     ],
-    note: "Per ora serve a ogni aggiornamento: ogni versione ha una firma diversa. Con Monolith Kids, dopo l'aggiornamento il bambino va collegato di nuovo.",
+    note: "Funziona solo la versione ufficiale: quando ne esce una nuova, quella vecchia si ferma e ti porta qui. Per ora serve disinstallare a ogni aggiornamento, perché ogni versione ha una firma diversa; con Monolith Kids il bambino va collegato di nuovo.",
   },
 ];
 const N = SCENES.length;
@@ -313,6 +313,7 @@ function VersionRow({ v, app = "monolith" }) {
 
 const FAQ = [
   ["Su quali telefoni funziona?", "Android 8.0 o più recente. Su iPhone non c'è."],
+  ["Perché la mia app dice «Aggiorna Monolith»?", "Funziona solo l'ultima versione ufficiale, quella di questa pagina. Le versioni vecchie si fermano e i loro messaggi non arrivano più: scarica la nuova, fai un backup e installala."],
   ["Che differenza c'è tra Monolith e Monolith Kids?", "Sono due app diverse. Monolith è per tutti. Monolith Kids è per i bambini: si installa sul telefono del bambino e su quello del genitore, che segue l'account e decide cosa può fare."],
   ["Con chi può parlare un bambino su Monolith Kids?", "Solo con le persone che il genitore approva: amici con Monolith o altri bambini con Monolith Kids. Il suo account non compare nelle ricerche."],
   ["Perché non è sul Play Store?", "Si scarica solo da qui. Per questo Android chiede il permesso di installarla."],

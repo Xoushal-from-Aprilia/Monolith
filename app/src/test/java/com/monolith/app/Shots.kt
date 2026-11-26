@@ -237,6 +237,7 @@ class Shots {
     @Test fun dev_message() = shot("64_dev_message") {
         com.monolith.app.ui.screens.DevMessageDialog(com.monolith.app.net.DevMsg("1", "Grazie!", "Il tema viola arriva nella prossima versione. Intanto prova Lavanda in Impostazioni → Colori.", System.currentTimeMillis())) {}
     }
+    @Test fun dev_update_wall() = shot("69_update_wall") { com.monolith.app.ui.screens.UpdateWallContent(onBackup = {}) {} }
     @Test fun dev_device_wall() = shot("65_device_wall") { com.monolith.app.ui.screens.DeviceWallContent("Account multipli per spam", true) {} }
     @Test fun dev_deleted() = shot("66_dev_deleted") { com.monolith.app.ui.screens.DeletedNoticeDialog("Spam ripetuto nei gruppi") {} }
     @Test fun kids_pair_confirm() = shot("67_kids_pair_confirm") {

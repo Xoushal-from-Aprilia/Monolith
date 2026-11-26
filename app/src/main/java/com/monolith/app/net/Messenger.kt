@@ -60,7 +60,7 @@ import kotlin.math.ceil
 import kotlin.math.max
 import kotlin.math.roundToInt
 
-data class UserResult(val pubkey: String, val profile: Profile, val createdAt: Long)
+data class UserResult(val pubkey: String, val profile: Profile, val createdAt: Long, val version: String = "")
 
 /** Reply reference stored inside a message's extra json */
 data class ReplyRef(val id: String, val sender: String, val preview: String)
@@ -180,6 +180,9 @@ class Messenger(
     private fun publishWrapped(to: String, payload: JSONObject, ephemeral: Boolean, ttl: Long?, msgId: String? = null): NostrEvent? {
         val k = me() ?: return null
         if (!Hex.isHex64(to)) return null
+        // which app and version sent it: only the official version is recognised
+        payload.put("av", com.monolith.app.BuildConfig.VERSION_NAME)
+        if (com.monolith.app.BuildConfig.KIDS) payload.put("ae", "kids")
         val ev = Envelope.wrap(k, to, payload, ephemeral, ttl)
         if (msgId != null) wrapToMsg[ev.id] = msgId
         relays.publish(ev)
@@ -228,6 +231,11 @@ class Messenger(
         if (Graph.dev.onDirect(from, p, sentAt)) return
         // accounts blocked by the developer reach nobody
         if (Graph.dev.isBlocked(from)) return
+        // apps older than the official version are not recognised (what they sent before still arrives)
+        if (!viaRtc && Graph.dev.fromOutdated(p, sentAt)) {
+            Graph.dev.nudgeOutdated(from, p)
+            return
+        }
         // Monolith Kids: on a child's phone only the parent and the approved contacts get through
         if (com.monolith.app.kids.Kids.intercept(from, p)) return
         val friend = db.friends().get(from)
@@ -924,10 +932,13 @@ class Messenger(
                 .groupBy { it.pubkey }
                 .mapNotNull { (pk, evs) ->
                     val latest = evs.maxByOrNull { it.createdAt } ?: return@mapNotNull null
-                    val prof = runCatching { Profile.fromJson(JSONObject(latest.content)) }.getOrNull() ?: return@mapNotNull null
-                    UserResult(pk, prof, latest.createdAt)
+                    val o = runCatching { JSONObject(latest.content) }.getOrNull() ?: return@mapNotNull null
+                    val prof = runCatching { Profile.fromJson(o) }.getOrNull() ?: return@mapNotNull null
+                    UserResult(pk, prof, latest.createdAt, o.optString("v"))
                 }
                 .filter { it.pubkey != myPub && !Graph.dev.isBlocked(it.pubkey) }
+                // accounts on an old version are not found until they update
+                .filter { !Graph.dev.outdatedVersion(it.version) }
                 .filter { tagFilter.isEmpty() || it.pubkey.startsWith(tagFilter) }
                 .sortedBy { it.createdAt }
         }

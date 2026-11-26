@@ -58,9 +58,11 @@ private fun open(ctx: android.content.Context, url: String) {
 fun DevOverlays() {
     val ctx = LocalContext.current
     val s by Graph.dev.state.collectAsState()
+    val official by Graph.dev.official.collectAsState()
     val seenNews by Graph.dev.seenNews.collectAsState()
     val seenUpdate by Graph.dev.seenUpdate.collectAsState()
     val me = Graph.identity.keys?.pub
+    val needUpdate = remember(s, official) { Graph.dev.updateRequired }
     when {
         me != null && me in s.blocked -> {
             var feedback by remember { mutableStateOf(false) }
@@ -68,12 +70,15 @@ fun DevOverlays() {
             if (feedback) FeedbackDialog { feedback = false }
             return
         }
-        Graph.dev.updateRequired -> {
-            DevWall(
-                Icons.Rounded.SystemUpdate, t("Aggiorna Monolith"),
-                t("Questa versione ({0}) non funziona più. Scarica la nuova versione per continuare.", BuildConfig.VERSION_NAME),
-                t("Scarica l'aggiornamento"),
-            ) { open(ctx, Graph.dev.updateUrl) }
+        needUpdate && !UpdateGrace.active -> {
+            // ten minutes to save a backup before uninstalling (a child's phone has no backup)
+            val backup: (() -> Unit)? = if (com.monolith.app.kids.Kids.isKid) null else {
+                {
+                    UpdateGrace.start()
+                    com.monolith.app.ui.NavBus.requests.value = com.monolith.app.ui.NavRequest(route = "settings")
+                }
+            }
+            UpdateWallContent(onBackup = backup) { open(ctx, Graph.dev.updateUrl) }
             return
         }
     }
@@ -106,6 +111,46 @@ fun DevOverlays() {
             dismissButton = { TextButton(onClick = { Graph.dev.markUpdateSeen(latest) }) { Text(t("Più tardi")) } },
         )
     }
+}
+
+/** a few minutes without the update wall, to save a backup first */
+object UpdateGrace {
+    private var until by mutableStateOf(0L)
+    val active: Boolean get() = System.currentTimeMillis() < until
+    fun start() { until = System.currentTimeMillis() + 10 * 60_000L }
+    @Composable
+    fun Watch() {
+        val u = until
+        androidx.compose.runtime.LaunchedEffect(u) {
+            val left = u - System.currentTimeMillis()
+            if (left > 0) { kotlinx.coroutines.delay(left + 500); until = 0L }
+        }
+    }
+}
+
+/** this version is not the official one any more: nothing works until the update */
+@Composable
+fun UpdateWall() {
+    val ctx = LocalContext.current
+    val s by Graph.dev.state.collectAsState()
+    val official by Graph.dev.official.collectAsState()
+    val needed = remember(s, official) { Graph.dev.updateRequired }
+    if (needed) UpdateWallContent { open(ctx, Graph.dev.updateUrl) }
+}
+
+@Composable
+internal fun UpdateWallContent(onBackup: (() -> Unit)? = null, onUpdate: () -> Unit) {
+    val name = if (BuildConfig.KIDS) "Monolith Kids" else "Monolith"
+    val off = Graph.dev.official.collectAsState().value.let { if (BuildConfig.KIDS) it.second else it.first }
+    UpdateGrace.Watch()
+    DevWall(
+        Icons.Rounded.SystemUpdate, t("Aggiorna {0}", name),
+        t("Funziona solo la versione ufficiale{0}. Questa ({1}) non funziona più: scarica quella nuova da monolith.support. Prima salva un backup, perché per installarla dovrai disinstallare questa.",
+            off?.let { " (" + it.version + ")" } ?: "", BuildConfig.VERSION_NAME),
+        t("Vai a monolith.support"),
+        onUpdate,
+        secondary = onBackup?.let { t("Prima salva un backup") to it },
+    )
 }
 
 /** a message from the developer, as a dialog (it also arrived as a pop-up notification) */
@@ -193,7 +238,10 @@ internal fun DeletedNoticeDialog(why: String, onOk: () -> Unit) {
 }
 
 @Composable
-private fun DevWall(icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String?, onAction: () -> Unit) {
+private fun DevWall(
+    icon: androidx.compose.ui.graphics.vector.ImageVector, title: String, body: String, action: String?, onAction: () -> Unit,
+    secondary: Pair<String, () -> Unit>? = null,
+) {
     Box(
         Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).bounceClick(1f) {},
         contentAlignment = Alignment.Center,
@@ -208,6 +256,10 @@ private fun DevWall(icon: androidx.compose.ui.graphics.vector.ImageVector, title
             Text(body, style = MaterialTheme.typography.bodyLarge, color = MaterialTheme.colorScheme.onSurfaceVariant, textAlign = TextAlign.Center)
             Spacer(Modifier.height(28.dp))
             if (action != null) Button(onClick = onAction, shape = CircleShape, modifier = Modifier.fillMaxWidth().height(52.dp)) { Text(action) }
+            secondary?.let { (label, go) ->
+                Spacer(Modifier.height(8.dp))
+                TextButton(onClick = go) { Text(label) }
+            }
         }
     }
 }

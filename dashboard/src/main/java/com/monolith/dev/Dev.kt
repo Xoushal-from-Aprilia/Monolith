@@ -163,6 +163,8 @@ data class Release(val tag: String, val version: String, val build: Int, val url
 object Dev {
     const val REPO = "Xoushal-from-Aprilia/Monolith"
     const val D_TAG = "monolith-dev"
+    /** the download site: every update in the apps leads there */
+    const val SITE = "https://monolith.support"
     private const val KIND_DOC = 30078
     val RELAYS = listOf("wss://relay.damus.io", "wss://nos.lol", "wss://relay.primal.net", "wss://nostr.mom", "wss://offchain.pub")
 
@@ -466,6 +468,19 @@ object Dev {
     }
 
     fun userOf(pk: String): User? = _users.value.firstOrNull { it.pk == pk }
+
+    /** the official version of Monolith, as the download site lists it (site/data/builds.json) */
+    suspend fun officialVersion(): String? = withContext(Dispatchers.IO) {
+        runCatching {
+            val c = URL("https://raw.githubusercontent.com/$REPO/main/site/data/builds.json?t=" + System.currentTimeMillis()).openConnection() as HttpURLConnection
+            c.connectTimeout = 10000; c.readTimeout = 10000
+            val o = JSONObject(c.inputStream.bufferedReader().readText())
+            o.keys().asSequence().toList().maxWithOrNull { a, b ->
+                val x = a.split('.').map { it.toIntOrNull() ?: 0 }; val y = b.split('.').map { it.toIntOrNull() ?: 0 }
+                (0 until maxOf(x.size, y.size)).map { (x.getOrElse(it) { 0 }).compareTo(y.getOrElse(it) { 0 }) }.firstOrNull { it != 0 } ?: 0
+            }
+        }.onFailure { Log.w(tag, "official", it) }.getOrNull()
+    }
 
     /** the builds of the app on GitHub, newest first */
     suspend fun releases(): List<Release> = withContext(Dispatchers.IO) {
