@@ -1,5 +1,19 @@
 [
  {
+  "version": "1.1.0",
+  "date": "2026-11-26",
+  "build": 55,
+  "notes": [
+   "Il codice QR ora si legge anche nel tema scuro",
+   "Se la fotocamera non legge il QR, il genitore può scrivere le 6 cifre del codice di controllo",
+   "Il telefono del bambino chiede conferma prima di collegarsi a un genitore",
+   "Le regole arrivano anche se il bambino conferma più tardi, e un collegamento mai confermato si può annullare",
+   "I messaggi dello sviluppatore arrivano come notifiche sullo schermo"
+  ],
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-55/Monolith-Kids-55.apk",
+  "size": 23885773
+ },
+ {
   "version": "1.0.0",
   "date": "2026-11-26",
   "build": 51,

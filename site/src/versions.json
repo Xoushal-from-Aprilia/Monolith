@@ -1,5 +1,17 @@
 [
  {
+  "version": "2.6.0",
+  "date": "2026-11-26",
+  "notes": [
+   "I messaggi dello sviluppatore arrivano come notifiche sullo schermo: annunci a tutti, nuove versioni e messaggi solo per te, che restano in Impostazioni",
+   "Lo sviluppatore può eliminare un account spiegando il motivo e bloccare un telefono; per riconoscere il telefono l'app gli manda un codice anonimo, cifrato",
+   "I codici QR si leggono sempre, anche nel tema scuro: prima comparivano in negativo e molte fotocamere non li riconoscevano"
+  ],
+  "build": 55,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-55/Monolith-55.apk",
+  "size": 23885621
+ },
+ {
   "version": "2.5.1",
   "date": "2026-11-26",
   "notes": [
