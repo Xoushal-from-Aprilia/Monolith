@@ -58,6 +58,6 @@ class DevShots {
     @Test fun users() = shot("d4_users") { seed(); MainScreen(1) }
     @Test fun inbox() = shot("d5_inbox") { seed(); MainScreen(2) }
     @Config(qualifiers = "+h1700dp") @Test fun publish() = shot("d6_publish") { seed(); MainScreen(3) }
-    @Test fun verifyDialog() = shot("d8_verify") { androidx.compose.runtime.remember { seed() }; VerifyDialog(Dev.users.value[5].pk, "Giulia") {} }
+    @Test fun verifyDialog() = shot("d8_verify") { androidx.compose.runtime.remember { seed() }; VerifyDialog(Dev.users.value[5].pk, "Giulia", inline = true) {} }
     @Test fun userDialog() = shot("d7_user", act = { compose.onAllNodesWithText("Ada Rossi").onFirst().performClick() }) { seed(); MainScreen(1) }
 }

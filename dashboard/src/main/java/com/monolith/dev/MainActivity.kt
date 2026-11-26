@@ -66,6 +66,7 @@ import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Scaffold
 import androidx.compose.material3.Surface
+import androidx.compose.material3.ProvideTextStyle
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.material3.darkColorScheme
@@ -191,7 +192,7 @@ internal fun VerSymbol(v: Ver, size: androidx.compose.ui.unit.Dp) {
 
 /** gives an account the verified symbol, or changes its title and look */
 @Composable
-internal fun VerifyDialog(pk: String, name: String, onDismiss: () -> Unit) {
+internal fun VerifyDialog(pk: String, name: String, inline: Boolean = false, onDismiss: () -> Unit) {
     val ctx = LocalContext.current
     val doc by Dev.doc.collectAsState()
     val scope = rememberCoroutineScope()
@@ -204,10 +205,8 @@ internal fun VerifyDialog(pk: String, name: String, onDismiss: () -> Unit) {
         busy = true
         scope.launch { val n = Dev.setVerified(pk, v); busy = false; published(ctx, n); if (n > 0) onDismiss() }
     }
-    AlertDialog(
-        onDismissRequest = onDismiss,
-        title = { Text(if (cur == null) "Verifica $name" else "Verifica di $name") },
-        text = {
+    val head: @Composable () -> Unit = { Text(if (cur == null) "Verifica $name" else "Verifica di $name") }
+    val body: @Composable () -> Unit = {
             Column(Modifier.verticalScroll(rememberScrollState())) {
                 Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(MaterialTheme.colorScheme.surfaceContainerHighest).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
                     Text(name, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
@@ -253,10 +252,20 @@ internal fun VerifyDialog(pk: String, name: String, onDismiss: () -> Unit) {
                     TextButton(enabled = !busy, onClick = { save(null) }) { Text("Togli la verifica", color = Danger) }
                 }
             }
-        },
-        confirmButton = { TextButton(enabled = !busy, onClick = { save(Ver(title.trim(), shape, color)) }) { Text(if (cur == null) "Verifica" else "Salva") } },
-        dismissButton = { TextButton(onClick = onDismiss) { Text("Annulla") } },
-    )
+        }
+    val ok: @Composable () -> Unit = { TextButton(enabled = !busy, onClick = { save(Ver(title.trim(), shape, color)) }) { Text(if (cur == null) "Verifica" else "Salva") } }
+    val no: @Composable () -> Unit = { TextButton(onClick = onDismiss) { Text("Annulla") } }
+    if (inline) {
+        // the same content drawn in the page, for the screenshots
+        Surface(shape = RoundedCornerShape(28.dp), color = MaterialTheme.colorScheme.surfaceContainerHigh, modifier = Modifier.padding(20.dp)) {
+            Column(Modifier.padding(24.dp)) {
+                ProvideTextStyle(MaterialTheme.typography.headlineSmall) { head() }
+                Spacer(Modifier.height(16.dp))
+                body()
+                Row(Modifier.fillMaxWidth().padding(top = 16.dp), horizontalArrangement = Arrangement.End) { no(); ok() }
+            }
+        }
+    } else AlertDialog(onDismissRequest = onDismiss, title = head, text = body, confirmButton = ok, dismissButton = no)
 }
 
 // ====================================================================== root
