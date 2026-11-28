@@ -462,6 +462,16 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.8.0", "2026-11-28",
+        listOf(
+            "Gli account verificati come Sviluppatore possono creare uno Shard per tutti: dentro ci sono tutti gli utenti di Monolith, anche chi si iscrive dopo, con le stanze per gli annunci",
+            "Nei gruppi puoi aggiungere persone quando vuoi e c'è la pagina Info gruppo con descrizione, membri, amministratori e titoli",
+            "Gruppi e Shard hanno un link d'invito, anche come codice QR, da cambiare o spegnere quando vuoi; puoi scegliere di approvare chi entra",
+            "Impostazioni del gruppo: chi modifica le info, chi aggiunge persone, chi scrive; e poi un colore, una copertina e le reazioni rapide tutte vostre",
+            "I tag si vedono subito: @nomi e #stanze sono evidenziati e i messaggi che ti taggano hanno il bordo e la @ accanto alla chat",
+        ),
+    ),
+    Release(
         "2.7.0", "2026-11-26",
         listOf(
             "Funziona solo la versione ufficiale: quando ne esce una nuova, quella vecchia si ferma e porta a monolith.support per scaricarla",

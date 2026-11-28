@@ -91,7 +91,8 @@ private val FILM = listOf(
     Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Account verificati, con il simbolo accanto al nome" /*i18n*/), "profile"),
     Scene("Colori" /*i18n*/, "Del colore che vuoi" /*i18n*/, listOf("Dodici temi da scegliere" /*i18n*/, "Chiaro, scuro o dal tuo sfondo" /*i18n*/, "E l'icona che preferisci" /*i18n*/), "colors"),
     Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
-    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Videocamera anche nelle stanze vocali" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Benvenuto e titoli per tutti" /*i18n*/), "shard"),
+    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Stanze per gli annunci e link d'invito" /*i18n*/, "Lo Shard per tutti gli utenti di Monolith" /*i18n*/), "shard"),
+    Scene("Gruppi" /*i18n*/, "Il gruppo è vostro" /*i18n*/, listOf("Aggiungi persone quando vuoi" /*i18n*/, "Un link per entrare, anche con il codice" /*i18n*/, "Descrizione, colori e copertina" /*i18n*/, "I tag si vedono subito" /*i18n*/), "groups"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Screenshot bloccati, account molesti fermati" /*i18n*/, "Backup cifrato di tutto, anche automatico" /*i18n*/), "safe"),
     Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
@@ -255,6 +256,29 @@ private fun SceneArt(art: String, ink: Color, bg: Color, p: Float, clock: Float)
                 }
                 drawRect(ink.copy(alpha = 0.3f), Offset(w * 0.12f, h * 0.78f), Size(w * 0.76f, 2.5f))
                 monolith(c.x, h * 0.78f, w * 0.2f, h * 0.55f, ink, stage(p, 0f, 0.35f))
+            }
+            "groups" -> {
+                // three monoliths together, the link that joins them, tags that light up
+                val base = h * 0.8f
+                drawRect(ink.copy(alpha = 0.3f), Offset(w * 0.12f, base), Size(w * 0.76f, 2.5f))
+                monolith(w * 0.3f, base, w * 0.12f, h * 0.34f, ink.copy(alpha = 0.75f), stage(p, 0f, 0.3f))
+                monolith(w * 0.5f, base, w * 0.15f, h * 0.46f, ink, stage(p, 0.1f, 0.4f))
+                monolith(w * 0.7f, base, w * 0.12f, h * 0.3f, ink.copy(alpha = 0.75f), stage(p, 0.2f, 0.5f))
+                val s = stage(p, 0.42f, 0.78f)
+                val lw = w * 0.17f
+                val lh = w * 0.085f
+                val cy = h * 0.14f
+                rotate(-28f, Offset(c.x, cy)) {
+                    drawRoundRect(ink.copy(alpha = s), Offset(c.x - lw * 0.85f, cy - lh / 2), Size(lw, lh), CornerRadius(lh / 2), style = Stroke(w * 0.018f))
+                    drawRoundRect(ink.copy(alpha = s), Offset(c.x - lw * 0.15f, cy - lh / 2), Size(lw, lh), CornerRadius(lh / 2), style = Stroke(w * 0.018f))
+                }
+                listOf(Offset(w * 0.2f, h * 0.36f), Offset(w * 0.8f, h * 0.44f)).forEachIndexed { k, o ->
+                    val a = stage(p, 0.6f + k * 0.1f, 0.9f + k * 0.05f)
+                    val glow = 0.6f + 0.4f * sin(clock * tau * 2 + k * 2f)
+                    drawRoundRect(ink.copy(alpha = 0.22f * a * glow), Offset(o.x - w * 0.08f, o.y - h * 0.028f), Size(w * 0.16f, h * 0.056f), CornerRadius(h * 0.028f))
+                    drawCircle(ink.copy(alpha = a), h * 0.012f, Offset(o.x - w * 0.045f, o.y))
+                    drawRect(ink.copy(alpha = 0.8f * a), Offset(o.x - w * 0.02f, o.y - h * 0.005f), Size(w * 0.07f, h * 0.01f))
+                }
             }
             "kids" -> {
                 // the parent's monolith and the child's, joined by a line of dots

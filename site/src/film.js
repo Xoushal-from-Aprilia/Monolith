@@ -137,6 +137,30 @@ export function drawArt(ctx, art, w, h, ink, bg, p, clock) {
       monolith(ctx, c.x, h * 0.78, w * 0.2, h * 0.55, ink, 1, stage(p, 0, 0.35));
       break;
     }
+    case "groups": {
+      // three monoliths together, the link that joins them, tags that light up
+      const base = h * 0.8;
+      ctx.fillStyle = rgba(ink, 0.3); ctx.fillRect(w * 0.12, base, w * 0.76, Math.max(1, u(2.5)));
+      monolith(ctx, w * 0.3, base, w * 0.12, h * 0.34, ink, 0.75, stage(p, 0, 0.3));
+      monolith(ctx, w * 0.5, base, w * 0.15, h * 0.46, ink, 1, stage(p, 0.1, 0.4));
+      monolith(ctx, w * 0.7, base, w * 0.12, h * 0.3, ink, 0.75, stage(p, 0.2, 0.5));
+      const s = stage(p, 0.42, 0.78);
+      const lw = w * 0.17, lh = w * 0.085, cy = h * 0.14;
+      ctx.save();
+      ctx.translate(c.x, cy); ctx.rotate(-28 * Math.PI / 180); ctx.translate(-c.x, -cy);
+      ctx.strokeStyle = rgba(ink, s); ctx.lineWidth = w * 0.018;
+      rrect(ctx, c.x - lw * 0.85, cy - lh / 2, lw, lh, lh / 2); ctx.stroke();
+      rrect(ctx, c.x - lw * 0.15, cy - lh / 2, lw, lh, lh / 2); ctx.stroke();
+      ctx.restore();
+      [[w * 0.2, h * 0.36], [w * 0.8, h * 0.44]].forEach(([ox, oy], k) => {
+        const a = stage(p, 0.6 + k * 0.1, 0.9 + k * 0.05);
+        const glow = 0.6 + 0.4 * Math.sin(clock * TAU * 2 + k * 2);
+        rrect(ctx, ox - w * 0.08, oy - h * 0.028, w * 0.16, h * 0.056, h * 0.028); ctx.fillStyle = rgba(ink, 0.22 * a * glow); ctx.fill();
+        circle(ctx, ox - w * 0.045, oy, h * 0.012); ctx.fillStyle = rgba(ink, a); ctx.fill();
+        ctx.fillStyle = rgba(ink, 0.8 * a); ctx.fillRect(ox - w * 0.02, oy - h * 0.005, w * 0.07, h * 0.01);
+      });
+      break;
+    }
     case "kids": {
       // the parent's monolith and the child's (in coral, like the Kids icon), joined by a line of dots
       const base = h * 0.8;

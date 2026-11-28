@@ -122,6 +122,41 @@ class Shots {
         listOf(ada to "Chi viene sabato?", leo to "Io ci sono!", me to "Porto il thermos ☕", mia to "Ci sono anche io, ma arrivo alle 8").forEachIndexed { i, (who, tx) ->
             db.messages().upsert(Message("g$i", "g:$gid", who, who == me, now - (4 - i) * 300_000L, "text", tx, status = MsgStatus.READ))
         }
+        // a shard for everyone, made by Ada (verified developer): I'm a member like everyone else
+        val hub = JSONObject().put("id", "hub1").put("n", "Monolith").put("e", "🗿").put("o", ada).put("u", now)
+            .put("m", org.json.JSONArray().put(ada)).put("op", true).put("k", "ab".repeat(32))
+            .put("ds", "Lo Shard di tutta la community: annunci, idee e chiacchiere.")
+            .put("r", org.json.JSONArray()
+                .put(JSONObject().put("id", "ann").put("n", "annunci").put("v", false).put("ro", true))
+                .put(JSONObject().put("id", "gen").put("n", "generale").put("v", false))
+                .put(JSONObject().put("id", "idee").put("n", "idee").put("v", false)))
+            .put("wl", "Benvenuti! Leggete #annunci per le novità.")
+            .put("nb", org.json.JSONArray().put(JSONObject().put("id", "n1").put("x", "Regole: gentilezza prima di tutto, niente spam").put("by", ada).put("at", now)))
+        java.io.File(ctx.filesDir, "shards.json").writeText(org.json.JSONArray().put(sh).put(hub).toString())
+        Graph.shards = com.monolith.app.net.ShardManager(ctx, Graph.scope)
+        ctx.getSharedPreferences("shard_tab", Context.MODE_PRIVATE).edit().putString("last", "s1").commit()
+        listOf("ann" to "annunci", "gen" to "generale", "idee" to "idee").forEach { (rid, rn) ->
+            db.groups().upsert(com.monolith.app.data.Group("shard.hub1.$rid", "Monolith · #$rn", "🗿", ada, ada, now))
+        }
+        db.messages().upsert(Message("h1", "g:shard.hub1.ann", ada, false, now - 7_200_000L, "text", "Benvenuti nello Shard di Monolith! Qui trovate le novità di ogni versione.", status = MsgStatus.READ))
+        db.messages().upsert(Message("h2", "g:shard.hub1.ann", ada, false, now - 600_000L, "text", "@tutti è uscita la 2.8.0: gruppi con link, colori e i tag evidenziati. Raccontatemi cosa ne pensate in #generale", extra = JSONObject().put("all", true).toString(), status = MsgStatus.DELIVERED))
+        db.messages().upsert(Message("h3", "g:shard.hub1.gen", mia, false, now - 300_000L, "text", "Il colore del gruppo è bellissimo 😍", status = MsgStatus.DELIVERED))
+        // a group with description, administrators, a link and its own colours
+        db.groups().upsert(com.monolith.app.data.Group("g1", "Calcetto del giovedì", "⚽", listOf(me, ada, leo, mia).joinToString(","), me, now - 30 * day))
+        Graph.groupMeta.put(com.monolith.app.data.GroupMeta(
+            "g1", desc = "Ogni giovedì alle 21 al campo comunale. Chi non può lo scrive entro mercoledì!",
+            admins = listOf(ada), addAll = true, link = "Qx7Lm2Pa9Rt4Kw8N", approve = true, color = "ocean", cover = "grid",
+            titles = mapOf(leo to "Portiere"), reactions = listOf("⚽", "🔥", "👍", "😂", "🙌", "😢", "🍕"), updatedAt = now,
+        ))
+        listOf(
+            Triple(ada, "@Christian porti tu il pallone?", JSONObject().put("mn", org.json.JSONArray().put(me))),
+            Triple(leo, "Ci sono! Il campo 2 è libero, ho prenotato", null),
+            Triple(me, "Perfetto, porto anche le pettorine", null),
+            Triple(mia, "@tutti stasera si gioca alle 21 in punto", JSONObject().put("all", true)),
+        ).forEachIndexed { i, (who, tx, ex) ->
+            db.messages().upsert(Message("c$i", "g:g1", who, who == me, now - (4 - i) * 400_000L, "text", tx, extra = ex?.toString(), status = if (who == me) MsgStatus.READ else MsgStatus.DELIVERED))
+        }
+        Graph.joinAsks.add("g:g1", tom, "Tommaso", "🚲", "⚽ Calcetto del giovedì")
         Thread.sleep(300)
     }
 
@@ -237,6 +272,30 @@ class Shots {
     @Test fun dev_message() = shot("64_dev_message") {
         com.monolith.app.ui.screens.DevMessageDialog(com.monolith.app.net.DevMsg("1", "Grazie!", "Il tema viola arriva nella prossima versione. Intanto prova Lavanda in Impostazioni → Colori.", System.currentTimeMillis())) {}
     }
+    @Config(qualifiers = "+h2400dp") @Test fun group_info() = shot("70_group_info") { com.monolith.app.ui.screens.GroupInfoScreen(it, "g1") }
+    @Test fun group_tags() = shot("71_group_tags") { com.monolith.app.ui.screens.ChatScreen(it, "g:g1") }
+    @Test fun open_shard() = shot("72_open_shard") {
+        ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("shard_tab", Context.MODE_PRIVATE).edit().putString("last", "hub1").commit()
+        com.monolith.app.ui.HomeScreen(it, 4) {}
+    }
+    @Test fun open_room() = shot("73_open_room") { com.monolith.app.ui.screens.ChatScreen(it, "g:shard.hub1.ann") }
+    @Test fun join_card() = shot("74_join_card") {
+        androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().padding(24.dp)) {
+            androidx.compose.material3.Surface(shape = androidx.compose.foundation.shape.RoundedCornerShape(28.dp), color = androidx.compose.material3.MaterialTheme.colorScheme.surfaceContainerHigh) {
+                androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.padding(24.dp)) {
+                    com.monolith.app.ui.screens.JoinCardContent(
+                        com.monolith.app.net.InviteCard("g", "g9", "Fotografi di Roma", "📷", "Uscite fotografiche ogni domenica mattina, per tutti i livelli.", 23, listOf(ada), true, "city", "sunset"),
+                        inside = false, sent = false,
+                    )
+                }
+            }
+        }
+    }
+    @Test fun new_shard_dev() = shot("75_new_shard_dev") {
+        Graph.dev.preview(com.monolith.app.net.DevState(active = true, verified = mapOf(me to com.monolith.app.net.Verified("Sviluppatore", "seal", "blue"))))
+        com.monolith.app.ui.screens.ShardEditSheet(null, onClose = {})
+    }
+    @Config(qualifiers = "+h2400dp") @Test fun group_info_dark() = shot("76_group_info_dark", dark = true) { com.monolith.app.ui.screens.GroupInfoScreen(it, "g1") }
     @Test fun dev_update_wall() = shot("69_update_wall") { com.monolith.app.ui.screens.UpdateWallContent(onBackup = {}) {} }
     @Test fun dev_device_wall() = shot("65_device_wall") { com.monolith.app.ui.screens.DeviceWallContent("Account multipli per spam", true) {} }
     @Test fun dev_deleted() = shot("66_dev_deleted") { com.monolith.app.ui.screens.DeletedNoticeDialog("Spam ripetuto nei gruppi") {} }

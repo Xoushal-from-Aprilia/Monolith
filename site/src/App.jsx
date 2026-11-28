@@ -29,7 +29,8 @@ const SCENES = [
   { id: "profilo", art: "profile", kicker: "Profilo", title: "Il tuo spazio", lines: ["Copertine da scegliere", "Distintivi disegnati, tre in vetrina", "Account verificati, con il simbolo accanto al nome"] },
   { id: "colori", art: "colors", kicker: "Colori", title: "Del colore che vuoi", lines: ["Dodici temi da scegliere", "Chiaro, scuro o dal tuo sfondo", "E l'icona che preferisci"] },
   { id: "legame", art: "bond", kicker: "Legame", title: "Più vi scrivete, più cresce", lines: ["Da Sasso a Monolite", "Serie di giorni insieme", "Il simbolo accanto al nome dopo 100 giorni"] },
-  { id: "shard", art: "shard", kicker: "Shard", title: "Spazi per il tuo gruppo", lines: ["Stanze scritte, vocali e private", "Videocamera anche nelle stanze vocali", "Bacheca, eventi e ruoli", "Benvenuto e titoli per tutti"] },
+  { id: "shard", art: "shard", kicker: "Shard", title: "Spazi per il tuo gruppo", lines: ["Stanze scritte, vocali e private", "Bacheca, eventi e ruoli", "Stanze per gli annunci e link d'invito", "Lo Shard per tutti gli utenti di Monolith"] },
+  { id: "gruppi", art: "groups", kicker: "Gruppi", title: "Il gruppo è vostro", lines: ["Aggiungi persone quando vuoi", "Un link per entrare, anche con il codice", "Descrizione, colori e copertina", "I tag si vedono subito"] },
   { id: "insieme", art: "together", kicker: "Insieme", title: "Spese, album, abitudini", lines: ["Chi deve quanto, in un tocco", "Le foto di tutti in un posto", "Abitudini da tenere insieme"] },
   { id: "sicurezza", art: "safe", kicker: "Sicurezza", title: "Al sicuro, sempre", lines: ["Tasto SOS con scheda medica", "Screenshot bloccati, account molesti fermati", "Backup cifrato di tutto, anche automatico"] },
   { id: "telefono", art: "phone", kicker: "Il tuo telefono", title: "Si muove con te", lines: ["Batti cinque per aggiungere amici", "Vocali all'orecchio", "Sfondo animato e widget", "Una piccola vibrazione a ogni tocco"] },
@@ -313,6 +314,7 @@ function VersionRow({ v, app = "monolith" }) {
 
 const FAQ = [
   ["Su quali telefoni funziona?", "Android 8.0 o più recente. Su iPhone non c'è."],
+  ["Come entro in un gruppo con un link?", "Tocca il link che ti hanno mandato e scegli «Apri in Monolith»: vedi il nome del gruppo e chi lo gestisce, poi entri o chiedi di entrare. Funziona anche incollando il link in Chat → Nuova chat → Entra con un link."],
   ["Perché la mia app dice «Aggiorna Monolith»?", "Funziona solo l'ultima versione ufficiale, quella di questa pagina. Le versioni vecchie si fermano e i loro messaggi non arrivano più: scarica la nuova, fai un backup e installala."],
   ["Che differenza c'è tra Monolith e Monolith Kids?", "Sono due app diverse. Monolith è per tutti. Monolith Kids è per i bambini: si installa sul telefono del bambino e su quello del genitore, che segue l'account e decide cosa può fare."],
   ["Con chi può parlare un bambino su Monolith Kids?", "Solo con le persone che il genitore approva: amici con Monolith o altri bambini con Monolith Kids. Il suo account non compare nelle ricerche."],
@@ -323,7 +325,27 @@ const FAQ = [
   ["In che lingue è?", "Italiano, inglese, francese, tedesco, russo, polacco e ceco."],
 ];
 
+/** an invite link (https://monolith.support/#entra/<code>): open it in the app, or get the app first */
+function Invite({ code, onClose }) {
+  const app = `intent://entra/${code}#Intent;scheme=monolith;package=com.monolith.app;S.browser_fallback_url=${encodeURIComponent(location.origin + location.pathname + "#scarica")};end`;
+  return (
+    <div className="invite" role="dialog" aria-modal="true" aria-labelledby="invite-title">
+      <div className="invite-card">
+        <span className="kicker">Invito</span>
+        <h2 id="invite-title" className="sub">Ti hanno invitato in un gruppo di Monolith</h2>
+        <p className="lead">Se hai già Monolith, aprilo da qui: vedi il gruppo e scegli se entrare. Se non ce l'hai, scaricala, installala e poi tocca di nuovo il link.</p>
+        <div className="invite-btns">
+          <a className="btn" href={app}>Apri in Monolith</a>
+          <a className="btn btn-ghost" href={latest.url} rel="noopener">Scarica Monolith</a>
+        </div>
+        <button type="button" className="more" onClick={onClose}>Chiudi</button>
+      </div>
+    </div>
+  );
+}
+
 export default function App() {
+  const [invite, setInvite] = useState(() => (location.hash.match(/^#entra\/([A-Za-z0-9]{12,32})$/) || [])[1] || null);
   const groups = useMemo(() => {
     const g = [
       { id: "2", name: "Monolith 2", list: [] },
@@ -335,12 +357,13 @@ export default function App() {
   }, []);
   useEffect(() => {
     const h = location.hash.slice(1);
-    if (h) setTimeout(() => document.getElementById(h)?.scrollIntoView(), 200);
+    if (h && !h.startsWith("entra/")) setTimeout(() => document.getElementById(h)?.scrollIntoView(), 200);
   }, []);
   const vt = themeOf(N), kt = themeOf(N + 1), ft = themeOf(N + 2);
   return (
     <>
       <Bar />
+      {invite && <Invite code={invite} onClose={() => { setInvite(null); history.replaceState(null, "", location.pathname); }} />}
       <main>
         {SCENES.map((s, i) => <Scene key={s.id} s={s} index={i} />)}
 
