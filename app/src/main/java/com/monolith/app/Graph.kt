@@ -73,6 +73,10 @@ object Graph {
     lateinit var statuses: StatusStore
     lateinit var placeWatch: PlaceWatcher
     lateinit var dev: com.monolith.app.net.DevChannel
+    lateinit var hubs: com.monolith.app.net.Hubs
+    lateinit var groupMeta: com.monolith.app.data.GroupMetaStore
+    lateinit var joinAsks: com.monolith.app.data.JoinAsks
+    lateinit var mentions: com.monolith.app.data.Mentions
 
     @Volatile
     var foreground = false
@@ -111,6 +115,10 @@ object Graph {
         calls = CallManager(application, scope)
         Sounds.watchCalls()
         shards = com.monolith.app.net.ShardManager(application, scope)
+        hubs = com.monolith.app.net.Hubs(application, scope)
+        groupMeta = com.monolith.app.data.GroupMetaStore(application)
+        joinAsks = com.monolith.app.data.JoinAsks(application)
+        mentions = com.monolith.app.data.Mentions(application)
         dev = com.monolith.app.net.DevChannel(application, scope)
         com.monolith.app.kids.Kids.init(application)
         together = com.monolith.app.net.Together(application)
@@ -174,6 +182,7 @@ object Graph {
         places.clear()
         scheduled.clear(); pins.clear(); statuses.clear(); together.clear(); bondDays.clear(); favorites.clear(); saved.clear(); guard.clear(); medical.clear(); diary.setEnabled(false); diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx); nearby.clear(); com.monolith.app.core.AutoBackup.clear(ctx)
         com.monolith.app.kids.Kids.clear()
+        hubs.clear(); groupMeta.clear(); joinAsks.clear(); mentions.clearAll(); com.monolith.app.net.Invites.clear()
         identity.reset()
         prefs.lastWrapSec = 0
         prefs.permissionsDone = false
@@ -222,6 +231,7 @@ object Graph {
             messenger.start()
             placeWatch.start()
             shards.start()
+            hubs.start()
             watchFriendsWidget()
             scope.launch { runCatching { bondDays.backfill(db) } }
             scope.launch {

@@ -348,6 +348,9 @@ interface MessageDao {
 
     @Query("DELETE FROM messages WHERE convId = :conv")
     suspend fun clear(conv: String)
+
+    @Query("DELETE FROM messages WHERE convId = :conv AND sender = :sender")
+    suspend fun deleteFrom(conv: String, sender: String)
 }
 
 @Dao

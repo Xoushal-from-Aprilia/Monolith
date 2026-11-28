@@ -368,6 +368,15 @@ class Notifier(private val ctx: Context) {
     fun togetherShared(from: String, what: String, kind: Int) =
         simple(("tog$kind$what").hashCode(), if (kind == 0) t("{0} ti ha aggiunto a delle spese condivise", from) else t("{0} ti ha invitato a un'abitudine", from), what, if (kind == 0) "💶" else "✅", openApp(19) { putExtra(EXTRA_TAB, 0) })
 
+    /** I'm inside a shard for everyone (once) */
+    fun hubJoined(shard: String) =
+        simple(("hub$shard").hashCode(), t("Sei dentro {0}", shard), t("Lo Shard di tutti gli utenti di Monolith: annunci e chiacchiere con tutta la community"), "🌐", openApp(23) { putExtra(EXTRA_TAB, 4) })
+
+    /** someone used the invite link and waits for a yes */
+    fun joinAsk(target: String, who: String, emoji: String, where: String) =
+        simple(("ja$target$who").hashCode(), t("{0} vuole entrare in {1}", who, where), t("Apri Monolith per accettare o rifiutare"), emoji,
+            openApp(("ja$target").hashCode()) { if (target.startsWith("g:")) putExtra(EXTRA_ROUTE, "groupinfo/" + android.net.Uri.encode(target.removePrefix("g:"))) else putExtra(EXTRA_TAB, 4) })
+
     fun shardInvite(from: String, shard: String) =
         simple(("shard$shard").hashCode(), t("{0} ti ha invitato in uno shard", from), shard, "🪨", openApp(18) { putExtra(EXTRA_TAB, 4) })
 

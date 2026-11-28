@@ -26,6 +26,7 @@ import com.monolith.app.data.ConvSetting
 import com.monolith.app.data.Friend
 import com.monolith.app.data.FriendStatus
 import com.monolith.app.data.Group
+import com.monolith.app.data.GroupMeta
 import com.monolith.app.data.InviteState
 import com.monolith.app.data.ListItem
 import com.monolith.app.data.Message
@@ -275,6 +276,8 @@ class Messenger(
             "ttl" -> onTtl(from, p, friend)
             "grp" -> onGroup(from, p, isFriend)
             "gleave" -> onGroupLeave(from, p)
+            "gjoin" -> onGroupJoinAsk(from, p)
+            "sjoin" -> Graph.shards.onJoinAsk(from, p)
             "evinv" -> if (isFriend) onEventInvite(from, p)
             "evrsvp" -> onRsvp(from, p)
             "evdel" -> onEventDelete(from, p)
@@ -294,6 +297,43 @@ class Messenger(
             "rtc" -> if (isFriend) Graph.rtc.onSignal(from, p)
             "call" -> if (isFriend || isKnownContact(from)) Graph.calls.onSignal(from, p)
         }
+    }
+
+    /** a message in a shard for everyone: one event for the whole room, never an envelope */
+    suspend fun handleHubPayload(from: String, p: JSONObject, sentAt: Long) {
+        if (Graph.dev.isBlocked(from)) return
+        if (Graph.dev.fromOutdated(p, sentAt)) {
+            Graph.dev.nudgeOutdated(from, p)
+            return
+        }
+        val friend = db.friends().get(from)
+        when (p.optString("t")) {
+            "msg" -> onMessage(from, p, sentAt, friend)
+            "chunk" -> onChunk(from, p)
+            "react" -> onReact(from, p, friend)
+            "edit" -> onEdit(from, p)
+            "del" -> onDelete(from, p)
+            "vote" -> onVote(from, p, friend)
+            "pin" -> onPin(from, p, friend)
+            "gmove" -> onGameMove(from, p, friend)
+            "shardev" -> Graph.shards.onEvent(from, p)
+        }
+    }
+
+    /** send once to a room of a shard for everyone (it reaches every Monolith user) */
+    suspend fun publishHub(s: Shard, room: String, payload: JSONObject, msgId: String?) {
+        val ev = Graph.hubs.seal(s, room, payload) ?: return
+        if (msgId != null) wrapToMsg[ev.id] = msgId
+        relays.publish(ev)
+    }
+
+    /** true when [conv] is a room of a shard for everyone: then the payload went to the room, once */
+    private suspend fun toHub(conv: String, payload: JSONObject, msgId: String? = null): Boolean {
+        val (sid, rid) = Shard.parseConv(conv) ?: return false
+        val s = Graph.shards.get(sid)?.takeIf { it.open } ?: return false
+        payload.put("g", Shard.groupId(sid, rid))
+        publishHub(s, rid, payload, msgId)
+        return true
     }
 
     private fun markOnline(pk: String) {
@@ -367,17 +407,25 @@ class Messenger(
 
     private suspend fun convFor(from: String, p: JSONObject, friend: Friend?): String? {
         val g = p.optString("g")
-        if (g.isNotBlank()) {
-            val group = db.groups().get(g) ?: return null
-            return if (from in group.memberList()) "g:$g" else null
-        }
+        if (g.isNotBlank()) return if (inGroup(g, from)) "g:$g" else null
         return if (friend?.status == FriendStatus.FRIEND) from else null
+    }
+
+    /** a member of the group (in a shard for everyone: anyone who is not kept out) */
+    private suspend fun inGroup(gid: String, pk: String): Boolean {
+        val group = db.groups().get(gid) ?: return false
+        if (pk in group.memberList()) return true
+        return Graph.shards.ofGroup(gid)?.first?.let { it.open && it.has(pk) } == true
     }
 
     private suspend fun onMessage(from: String, p: JSONObject, sentAt: Long, friend: Friend?) {
         val conv = convFor(from, p, friend) ?: return
         val id = p.optString("id").ifBlank { return }
         val kind = p.optString("k", "text")
+        // rooms where only the founder and the moderators write, groups where only the administrators do
+        Graph.shards.ofConv(conv)?.let { (s, r) -> if (!s.canWrite(r, from)) return }
+        if (conv.startsWith("g:") && !Shard.isRoomConv(conv) && !Graph.groupMeta.canWrite(conv.removePrefix("g:"), from)) return
+        val hub = Graph.shards.isOpenConv(conv)
         val isActive = activeConv.value == conv && Graph.foreground
         val extra = p.optJSONObject("ex")
         val ts = minOf(p.optLong("ts", sentAt), now())
@@ -399,11 +447,15 @@ class Messenger(
         if (!conv.startsWith("g:") && kind != "call") Graph.bondDays.touch(conv, ts)
         _typing.update { it - conv }
         if (kind == "photo" || kind == "voice") tryAssemble(id)
-        sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
+        // in a shard for everyone nobody answers with receipts: thousands of them would come back
+        if (!hub) sendStored(from, JSONObject().put("t", "ack").put("ids", JSONArray().put(id)).put("s", if (isActive) MsgStatus.READ else MsgStatus.DELIVERED), 7L * 86400)
         // an arrival that reaches me hours later is history, not news: keep it in the chat, silently
-        val stale = (kind == "place" && now() - ts > 2 * 3_600_000L) || Shard.isQuietConv(conv)
+        val stale = (kind == "place" && now() - ts > 2 * 3_600_000L) || Shard.isQuietConv(conv) || (hub && now() - ts > 6 * 3_600_000L)
         val myPub = me()?.pub ?: ""
-        val mentioned = extra != null && (extra.optBoolean("all") || (extra.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true))
+        // @tutti in a shard for everyone: only from the founder and the moderators
+        val allOk = !hub || Graph.shards.canModerate(conv, from)
+        val mentioned = extra != null && ((allOk && extra.optBoolean("all")) || (extra.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true))
+        if (mentioned && !isActive) Graph.mentions.mark(conv)
         val muted = db.social().settingNow(conv)?.muted == true && !mentioned && kind != "sos"
         if (!isActive && !stale && !muted) {
             val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
@@ -454,8 +506,7 @@ class Messenger(
         val id = p.optString("id").ifBlank { return }
         val g = p.optString("g")
         if (g.isNotBlank()) {
-            val group = db.groups().get(g) ?: return
-            if (from !in group.memberList()) return
+            if (!inGroup(g, from)) return
         } else {
             if (db.friends().get(from)?.status != FriendStatus.FRIEND) return
         }
@@ -559,7 +610,8 @@ class Messenger(
 
     private suspend fun onDelete(from: String, p: JSONObject) {
         val m = db.messages().get(p.optString("id")) ?: return
-        if (m.sender != from) return
+        // the author, or a moderator of the shard / an administrator of the group
+        if (m.sender != from && !canModerate(m.convId, from)) return
         m.mediaPath?.let { runCatching { File(it).delete() } }
         db.messages().markDeleted(m.id)
     }
@@ -595,34 +647,99 @@ class Messenger(
 
     private suspend fun onGroup(from: String, p: JSONObject, isFriend: Boolean) {
         val gid = p.optString("g").ifBlank { return }
-        val existing = db.groups().get(gid)
-        if (existing != null && existing.admin != from) return
-        if (existing == null && !isFriend) return
         val k = me() ?: return
-        val members = (p.optJSONArray("m") ?: JSONArray()).strings().filter { Hex.isHex64(it) }
-        if (k.pub !in members) {
-            if (existing != null) db.groups().delete(gid)
+        val existing = db.groups().get(gid)
+        val asked = Invites.isPending(gid)
+        if (existing == null && !isFriend && !asked) return
+        val meta = Graph.groupMeta.get(gid)
+        val members = (p.optJSONArray("m") ?: JSONArray()).strings().filter { Hex.isHex64(it) }.distinct()
+        val incomingMeta = p.optJSONObject("meta")?.let { GroupMeta.fromJson(gid, it) }
+        val fromAdmin = existing == null || Graph.groupMeta.isAdmin(existing, from)
+        if (existing != null && from !in existing.memberList() && !fromAdmin) return
+        learnPeople(members, p.optJSONObject("mp"))
+        val who = db.friends().get(from)?.displayName ?: t("Qualcuno")
+
+        if (existing != null && !fromAdmin) {
+            // a member: only what the group lets everyone do (add people, change the look)
+            val old = existing.memberList()
+            val added = if (meta.addAll) members.filter { it !in old } else emptyList()
+            val info = meta.editAll
+            val g2 = existing.copy(
+                members = (old + added).joinToString(","),
+                name = if (info) p.optString("name", existing.name).take(60) else existing.name,
+                emoji = if (info) p.optString("e", existing.emoji).take(8) else existing.emoji,
+            )
+            db.groups().upsert(g2)
+            if (info && incomingMeta != null && incomingMeta.updatedAt > meta.updatedAt) {
+                Graph.groupMeta.put(meta.copy(desc = incomingMeta.desc, cover = incomingMeta.cover, color = incomingMeta.color, updatedAt = incomingMeta.updatedAt))
+            }
+            changeNotes(existing, g2, from, who, meta, if (info) incomingMeta else null, p.optString("jl"))
             return
         }
-        p.optJSONObject("mp")?.let { mp ->
-            members.filter { it != k.pub }.forEach { pk ->
-                val known = db.friends().get(pk)
+
+        // the creator or an administrator: the whole group
+        if (k.pub !in members) {
+            if (existing != null) {
+                db.groups().delete(gid)
+                Graph.groupMeta.remove(gid)
+                if (p.optBoolean("del")) db.messages().clear("g:$gid")
+            }
+            return
+        }
+        val creator = p.optString("cr").takeIf { Hex.isHex64(it) && it in members } ?: existing?.admin ?: from
+        val group = Group(gid, p.optString("name", t("Gruppo")).take(60), p.optString("e", "💬").take(8), members.joinToString(","), existing?.admin ?: creator, existing?.createdAt ?: now())
+        db.groups().upsert(group)
+        if (incomingMeta != null && incomingMeta.updatedAt >= meta.updatedAt) Graph.groupMeta.put(incomingMeta)
+        members.forEach { Graph.joinAsks.remove("g:$gid", it) }
+        if (existing == null && !gid.startsWith(Shard.STORY)) {
+            if (asked) Invites.done(gid)
+            val creatorF = db.friends().get(from)
+            val name = creatorF?.displayName ?: t("Qualcuno")
+            val album = gid.startsWith(Shard.ALBUM)
+            val text = when {
+                album -> t("{0} ti ha invitato nell'album", name)
+                asked -> t("Sei entrato con il link")
+                else -> t("{0} ti ha aggiunto al gruppo", name)
+            }
+            db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = text, status = MsgStatus.READ))
+            Graph.notifier.message("g:$gid", group.name, name, creatorF?.emoji ?: "🙂", if (album) t("Ti ha invitato in un album condiviso") else if (asked) t("Sei entrato con il link") else t("Ti ha aggiunto al gruppo"), true, group.emoji, false)
+        } else if (existing != null) {
+            changeNotes(existing, group, from, who, meta, incomingMeta, p.optString("jl"))
+        }
+    }
+
+    /** the names of the people in a group I don't know yet */
+    private suspend fun learnPeople(members: List<String>, mp: JSONObject?) {
+        mp ?: return
+        val k = me() ?: return
+        members.filter { it != k.pub }.forEach { pk ->
+            if (db.friends().get(pk) == null) {
                 val o = mp.optJSONObject(pk) ?: return@forEach
-                if (known == null) {
-                    val prof = Profile.fromJson(o)
-                    db.friends().upsert(Friend(pk, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.KNOWN, now()))
-                }
+                val prof = Profile.fromJson(o)
+                db.friends().upsert(Friend(pk, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.KNOWN, now()))
             }
         }
-        val group = Group(gid, p.optString("name", t("Gruppo")), p.optString("e", "💬"), members.joinToString(","), from, existing?.createdAt ?: now())
-        db.groups().upsert(group)
-        if (existing == null && !gid.startsWith(Shard.STORY)) {
-            val creator = db.friends().get(from)
-            val name = creator?.displayName ?: t("Qualcuno")
-            val album = gid.startsWith(Shard.ALBUM)
-            db.messages().insert(Message(newId(), "g:$gid", from, false, now(), "system", text = if (album) t("{0} ti ha invitato nell'album", name) else t("{0} ti ha aggiunto al gruppo", name), status = MsgStatus.READ))
-            Graph.notifier.message("g:$gid", group.name, name, creator?.emoji ?: "🙂", if (album) t("Ti ha invitato in un album condiviso") else t("Ti ha aggiunto al gruppo"), true, group.emoji, false)
+    }
+
+    /** what changed in a group, written in the chat for everyone */
+    private suspend fun changeNotes(old: Group, new: Group, from: String, who: String, meta: GroupMeta, newMeta: GroupMeta?, joinedLink: String) {
+        val conv = "g:${old.id}"
+        val k = me()?.pub ?: return
+        fun nameOf(pk: String, f: Friend?) = if (pk == k) t("te") else f?.displayName ?: t("Qualcuno")
+        val added = new.memberList() - old.memberList().toSet()
+        val removed = old.memberList() - new.memberList().toSet()
+        val notes = ArrayList<String>()
+        if (added.isNotEmpty()) {
+            if (joinedLink.isNotBlank() && added == listOf(joinedLink)) notes.add(t("{0} è entrato con il link", nameOf(joinedLink, db.friends().get(joinedLink))))
+            else notes.add(t("{0} ha aggiunto {1}", who, added.map { nameOf(it, db.friends().get(it)) }.joinToString(", ")))
         }
+        if (removed.isNotEmpty()) notes.add(t("{0} ha rimosso {1}", who, removed.map { nameOf(it, db.friends().get(it)) }.joinToString(", ")))
+        if (new.name != old.name) notes.add(t("{0} ha cambiato il nome del gruppo in {1}", who, new.name))
+        if (newMeta != null && newMeta.desc != meta.desc) notes.add(t("{0} ha cambiato la descrizione", who))
+        if (newMeta != null) {
+            (newMeta.admins - meta.admins.toSet()).forEach { notes.add(t("{0} ha reso {1} amministratore", who, nameOf(it, db.friends().get(it)))) }
+        }
+        notes.forEach { db.messages().insert(Message(newId(), conv, from, false, now(), "system", text = it, status = MsgStatus.READ)) }
     }
 
     private suspend fun onGroupLeave(from: String, p: JSONObject) {
@@ -1118,6 +1235,7 @@ class Messenger(
         m.extra?.let { payload.put("ex", JSONObject(it)) }
         gid?.let { payload.put("g", it) }
         if (m.expiresAt > 0) payload.put("exp", ((m.expiresAt - m.ts) / 1000).coerceAtLeast(1))
+        if (toHub(m.convId, payload, m.id)) return
         targets.forEach { to -> sendStored(to, payload, TTL_MESSAGE, m.id) }
     }
 
@@ -1154,8 +1272,11 @@ class Messenger(
         val k = me() ?: return null
         val g = db.groups().get(conv.removePrefix("g:")) ?: return null
         val low = tx.lowercase()
-        val all = Regex("@(tutti|all|everyone|tous|alle|все|wszyscy|všichni)\\b").containsMatchIn(low)
-        val pks = g.memberList().filter { it != k.pub }.filter { pk ->
+        val hub = Graph.shards.isOpenConv(conv)
+        // in a shard for everyone @tutti is for the founder and the moderators
+        val all = (!hub || Graph.shards.canModerate(conv, k.pub)) && Regex("@(tutti|all|everyone|tous|alle|все|wszyscy|všichni)\\b").containsMatchIn(low)
+        val candidates = if (hub) db.friends().allNow().map { it.pubkey } else g.memberList()
+        val pks = candidates.filter { it != k.pub }.filter { pk ->
             val name = db.friends().get(pk)?.displayName ?: return@filter false
             val first = name.substringBefore(' ')
             low.contains("@" + name.lowercase()) || Regex("@" + Regex.escape(first.lowercase()) + "\\b").containsMatchIn(low)
@@ -1301,6 +1422,7 @@ class Messenger(
 
     /** a live update to everybody in the chat (or only to one of them) */
     suspend fun fastToConv(conv: String, payload: JSONObject, only: String? = null) {
+        if (Graph.shards.isOpenConv(conv)) return
         val (targets, gid) = recipients(conv)
         gid?.let { payload.put("g", it) }
         targets.filter { only == null || it == only }.forEach { sendFast(it, payload) }
@@ -1362,9 +1484,18 @@ class Messenger(
     }
 
     private suspend fun sendChunks(m: Message, bytes: ByteArray) {
-        val (targets, gid) = recipients(m.convId)
         val n = ceil(bytes.size / CHUNK_BYTES.toDouble()).toInt().coerceAtLeast(1)
         val enc = Base64.getEncoder()
+        if (Graph.shards.isOpenConv(m.convId)) {
+            for (i in 0 until n) {
+                val part = bytes.copyOfRange(i * CHUNK_BYTES, minOf(bytes.size, (i + 1) * CHUNK_BYTES))
+                toHub(m.convId, JSONObject().put("t", "chunk").put("id", m.id).put("i", i).put("n", n).put("d", enc.encodeToString(part)))
+                db.messages().progress(m.id, (i + 1f) / n, null)
+                delay(120)
+            }
+            return
+        }
+        val (targets, gid) = recipients(m.convId)
         targets.forEach { to -> if (!Graph.rtc.isConnected(to)) Graph.rtc.ensureConnected(to) }
         if (targets.any { !Graph.rtc.isConnected(it) } && targets.any { isOnline(it) }) delay(2500)
         for (i in 0 until n) {
@@ -1392,6 +1523,7 @@ class Messenger(
     }
 
     private suspend fun toConv(conv: String, payload: JSONObject, ttl: Long = TTL_MESSAGE) {
+        if (toHub(conv, payload)) return
         val (targets, gid) = recipients(conv)
         gid?.let { payload.put("g", it) }
         targets.forEach { sendStored(it, payload, ttl) }
@@ -1399,6 +1531,7 @@ class Messenger(
 
     private suspend fun onPin(from: String, p: JSONObject, friend: Friend?) {
         val conv = convFor(from, p, friend) ?: return
+        if (Graph.shards.isOpenConv(conv) && !Graph.shards.canModerate(conv, from)) return
         val id = p.optString("id")
         if (id.isNotBlank()) {
             val m = db.messages().get(id) ?: return
@@ -1469,10 +1602,12 @@ class Messenger(
     }
 
     suspend fun markRead(conv: String) {
+        Graph.mentions.clear(conv)
         val unread = db.messages().unreadList(conv)
         if (unread.isEmpty()) return
         db.messages().markRead(conv)
         Graph.notifier.cancelConversation(conv)
+        if (Graph.shards.isOpenConv(conv)) return
         unread.groupBy { it.sender }.forEach { (sender, list) ->
             sendStored(sender, JSONObject().put("t", "ack").put("ids", list.map { it.id }.toJsonArray()).put("s", MsgStatus.READ), 7L * 86400)
         }
@@ -1481,6 +1616,7 @@ class Messenger(
     suspend fun typing(conv: String) {
         val last = lastTypingSent[conv] ?: 0L
         if (now() - last < 3000) return
+        if (Graph.shards.isOpenConv(conv)) return
         lastTypingSent[conv] = now()
         val (targets, gid) = recipients(conv)
         val payload = JSONObject().put("t", "typing")
@@ -1490,27 +1626,34 @@ class Messenger(
 
     // ================================================================== groups
 
-    suspend fun createGroup(name: String, emoji: String, members: List<String>, idPrefix: String = ""): String? {
+    suspend fun createGroup(name: String, emoji: String, members: List<String>, idPrefix: String = "", desc: String = ""): String? {
         val k = me() ?: return null
         val gid = idPrefix + newId()
         val all = (members + k.pub).distinct()
         val g = Group(gid, name.trim().ifBlank { t("Gruppo") }, emoji, all.joinToString(","), k.pub, now())
         db.groups().upsert(g)
+        if (desc.isNotBlank()) Graph.groupMeta.put(GroupMeta(gid, desc = desc.trim().take(500), updatedAt = now()))
         db.messages().insert(Message(newId(), "g:$gid", k.pub, true, now(), "system", text = t("Hai creato il gruppo"), status = MsgStatus.READ))
         broadcastGroup(g)
         return gid
     }
 
-    suspend fun broadcastGroup(g: Group) {
+    /** the group as it is now, to every member ([extra]: also to people who just left it) */
+    suspend fun broadcastGroup(g: Group, extra: List<String> = emptyList(), joinedLink: String? = null, deleted: Boolean = false) {
         val k = me() ?: return
         val mp = JSONObject()
         mp.put(k.pub, identity.profile.value?.toJson() ?: JSONObject())
         g.memberList().forEach { pk ->
             db.friends().get(pk)?.let { f -> mp.put(pk, Profile(f.username, f.displayName, f.emoji, f.bio).toJson()) }
         }
+        val meta = Graph.groupMeta.get(g.id)
         val payload = JSONObject().put("t", "grp").put("g", g.id).put("name", g.name).put("e", g.emoji)
-            .put("m", g.memberList().toJsonArray()).put("mp", mp)
-        g.memberList().filter { it != k.pub }.forEach { sendStored(it, payload) }
+            .put("m", g.memberList().toJsonArray()).put("mp", mp).put("cr", g.admin).put("meta", meta.toJson())
+        if (joinedLink != null) payload.put("jl", joinedLink)
+        if (deleted) payload.put("del", true)
+        (g.memberList() + extra).distinct().filter { it != k.pub }.forEach { sendStored(it, JSONObject(payload.toString())) }
+        // the card behind the invite link follows the group
+        if (meta.link.isNotBlank() && Graph.groupMeta.isAdmin(g, k.pub)) Invites.publishGroup(g)
     }
 
     suspend fun leaveGroup(gid: String) {
@@ -1518,7 +1661,125 @@ class Messenger(
         val g = db.groups().get(gid) ?: return
         g.memberList().filter { it != k.pub }.forEach { sendStored(it, JSONObject().put("t", "gleave").put("g", gid)) }
         db.groups().delete(gid)
+        Graph.groupMeta.remove(gid)
         db.messages().clear("g:$gid")
+    }
+
+    // ------------------------------------------------------------------ group info and settings
+
+    private suspend fun canModerate(conv: String, pk: String): Boolean =
+        Graph.shards.canModerate(conv, pk) || (conv.startsWith("g:") && !Shard.isRoomConv(conv) && Graph.groupMeta.isAdmin(conv.removePrefix("g:"), pk))
+
+    /** a moderator or an administrator deletes someone else's message, for everyone */
+    suspend fun moderatorDelete(m: Message) {
+        val k = me() ?: return
+        if (!canModerate(m.convId, k.pub)) return
+        m.mediaPath?.let { runCatching { File(it).delete() } }
+        db.messages().markDeleted(m.id)
+        toConv(m.convId, JSONObject().put("t", "del").put("id", m.id))
+    }
+
+    private suspend fun mine(conv: String, text: String) {
+        val k = me() ?: return
+        db.messages().insert(Message(newId(), conv, k.pub, true, now(), "system", text = text, status = MsgStatus.READ))
+    }
+
+    /** add people to a group that already exists (administrators, or everyone if the group allows it) */
+    suspend fun addToGroup(gid: String, pks: List<String>) {
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        val meta = Graph.groupMeta.get(gid)
+        if (!Graph.groupMeta.isAdmin(g, k.pub) && !meta.addAll) return
+        val add = pks.filter { Hex.isHex64(it) && it !in g.memberList() }.distinct()
+        if (add.isEmpty()) return
+        val n = g.copy(members = (g.memberList() + add).joinToString(","))
+        db.groups().upsert(n)
+        mine("g:$gid", t("Hai aggiunto {0}", add.map { db.friends().get(it)?.displayName ?: t("Qualcuno") }.joinToString(", ")))
+        broadcastGroup(n)
+    }
+
+    /** administrators: take someone out of the group (the creator stays) */
+    suspend fun removeFromGroup(gid: String, pk: String) {
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        if (!Graph.groupMeta.isAdmin(g, k.pub) || pk == g.admin || pk == k.pub) return
+        val meta = Graph.groupMeta.get(gid)
+        val n = g.copy(members = (g.memberList() - pk).joinToString(","))
+        db.groups().upsert(n)
+        Graph.groupMeta.put(meta.copy(admins = meta.admins - pk, titles = meta.titles - pk, updatedAt = now()))
+        mine("g:$gid", t("Hai rimosso {0}", db.friends().get(pk)?.displayName ?: t("Qualcuno")))
+        broadcastGroup(n, extra = listOf(pk))
+    }
+
+    /** name, picture, description and look (administrators, or everyone if the group allows it) */
+    suspend fun editGroup(gid: String, name: String, emoji: String, desc: String, color: String, cover: String) {
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        val meta = Graph.groupMeta.get(gid)
+        if (!Graph.groupMeta.isAdmin(g, k.pub) && !meta.editAll) return
+        val n = g.copy(name = name.trim().ifBlank { g.name }.take(60), emoji = emoji.ifBlank { g.emoji })
+        db.groups().upsert(n)
+        Graph.groupMeta.put(meta.copy(desc = desc.trim().take(500), color = color, cover = cover, updatedAt = now()))
+        if (n.name != g.name) mine("g:$gid", t("Hai cambiato il nome del gruppo in {0}", n.name))
+        broadcastGroup(n)
+    }
+
+    /** administrators: the settings of the group (who writes, who adds people, the link, quick reactions, titles) */
+    suspend fun setGroupMeta(gid: String, change: (GroupMeta) -> GroupMeta) {
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        if (!Graph.groupMeta.isAdmin(g, k.pub)) return
+        val old = Graph.groupMeta.get(gid)
+        val n = change(old).copy(id = gid, updatedAt = now())
+        // the creator is always an administrator; administrators are members
+        Graph.groupMeta.put(n.copy(admins = n.admins.filter { it != g.admin && it in g.memberList() }.distinct()))
+        if (old.link.isNotBlank() && old.link != n.link) Invites.revoke(old.link)
+        (n.admins - old.admins.toSet()).forEach { mine("g:$gid", t("Hai reso {0} amministratore", db.friends().get(it)?.displayName ?: t("Qualcuno"))) }
+        broadcastGroup(g)
+    }
+
+    /** the creator deletes the group for everyone */
+    suspend fun deleteGroup(gid: String) {
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        if (g.admin != k.pub) return
+        val everyone = g.memberList()
+        val meta = Graph.groupMeta.get(gid)
+        Graph.groupMeta.remove(gid)
+        if (meta.link.isNotBlank()) Invites.revoke(meta.link)
+        broadcastGroup(g.copy(members = ""), extra = everyone, deleted = true)
+        db.groups().delete(gid)
+        db.messages().clear("g:$gid")
+    }
+
+    /** someone used the link of a group: in at once, or a request for the administrators */
+    private suspend fun onGroupJoinAsk(from: String, p: JSONObject) {
+        val gid = p.optString("g")
+        val k = me() ?: return
+        val g = db.groups().get(gid) ?: return
+        val meta = Graph.groupMeta.get(gid)
+        if (!Graph.groupMeta.isAdmin(g, k.pub) || meta.link.isBlank() || p.optString("s") != meta.link || from in g.memberList()) return
+        if (com.monolith.app.kids.Kids.edition) return
+        val prof = p.optJSONObject("pf")?.let { Profile.fromJson(it) }
+        if (prof != null && db.friends().get(from) == null) db.friends().upsert(Friend(from, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.KNOWN, now()))
+        val name = db.friends().get(from)?.displayName ?: prof?.displayName ?: t("Qualcuno")
+        if (meta.approve) {
+            Graph.joinAsks.add("g:$gid", from, name, prof?.emoji ?: "🙂", g.emoji + " " + g.name)
+            return
+        }
+        admitToGroup(gid, from, viaLink = true)
+    }
+
+    /** let in someone who asked with the link */
+    suspend fun admitToGroup(gid: String, pk: String, viaLink: Boolean = true) {
+        val k = me() ?: return
+        Graph.joinAsks.remove("g:$gid", pk)
+        val g = db.groups().get(gid) ?: return
+        if (!Graph.groupMeta.isAdmin(g, k.pub) || pk in g.memberList()) return
+        val n = g.copy(members = (g.memberList() + pk).joinToString(","))
+        db.groups().upsert(n)
+        mine("g:$gid", if (viaLink) t("{0} è entrato con il link", db.friends().get(pk)?.displayName ?: t("Qualcuno")) else t("Hai aggiunto {0}", db.friends().get(pk)?.displayName ?: t("Qualcuno")))
+        broadcastGroup(n, joinedLink = pk)
     }
 }
 

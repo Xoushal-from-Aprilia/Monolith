@@ -26,8 +26,11 @@ import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 
-/** [only]: a private room, visible to these members only (plus owner and moderators); null = everyone */
-data class ShardRoom(val id: String, val name: String, val voice: Boolean, val only: List<String>? = null)
+/**
+ * [only]: a private room, visible to these members only (plus owner and moderators); null = everyone.
+ * [ro]: only the founder and the moderators write in it (announcements).
+ */
+data class ShardRoom(val id: String, val name: String, val voice: Boolean, val only: List<String>? = null, val ro: Boolean = false)
 
 /** a note pinned on the shard board */
 data class ShardNote(val id: String, val text: String, val by: String, val at: Long)
@@ -62,12 +65,30 @@ data class Shard(
     val welcome: String = "",
     /** custom titles next to names: pk -> title */
     val titles: Map<String, String> = emptyMap(),
+    /** a few words on what the shard is about */
+    val desc: String = "",
+    /**
+     * a shard for everyone: made by a verified developer, every Monolith user is inside without being invited
+     * (also whoever signs up later). [members] then holds only the founder and the moderators.
+     */
+    val open: Boolean = false,
+    /** the key that seals the messages of a shard for everyone (it is open to every Monolith user) */
+    val key: String = "",
+    /** people kept out of a shard for everyone */
+    val ban: List<String> = emptyList(),
+    /** the secret of the invite link ("" = no link) and whether whoever uses it waits for a yes */
+    val link: String = "",
+    val approve: Boolean = false,
 ) {
     fun conv(room: ShardRoom) = "g:" + groupId(id, room.id)
     fun canManage(pk: String?) = pk != null && (pk == owner || pk in mods)
     /** who is inside a room: everyone, or for a private room the chosen ones with owner and moderators */
     fun roomMembers(r: ShardRoom): List<String> = r.only?.let { o -> members.filter { it in o || it == owner || it in mods } } ?: members
-    fun canSee(r: ShardRoom, pk: String?) = pk != null && pk in roomMembers(r)
+    fun canSee(r: ShardRoom, pk: String?) = pk != null && (if (open) r.only == null && pk !in ban else pk in roomMembers(r))
+    /** may this person write in the room? */
+    fun canWrite(r: ShardRoom, pk: String?) = canSee(r, pk) && (!r.ro || canManage(pk))
+    /** is this person part of the shard (for a shard for everyone: anyone who is not kept out) */
+    fun has(pk: String?) = pk != null && (if (open) pk !in ban else pk in members)
 
     companion object {
         const val PREFIX = "shard."
@@ -81,6 +102,15 @@ data class Shard(
         fun isHiddenGroup(groupId: String) = groupId.startsWith(PREFIX) || groupId.startsWith(ALBUM) || groupId.startsWith(STORY)
         /** conversations that add up silently, without notifications */
         fun isQuietConv(conv: String) = conv.startsWith("g:$ALBUM") || conv.startsWith("g:$STORY")
+        /** "g:shard.<shard>.<room>" -> (shard, room) */
+        fun parseConv(conv: String): Pair<String, String>? {
+            if (!isRoomConv(conv)) return null
+            val p = conv.removePrefix("g:$PREFIX").split(".")
+            return if (p.size == 2) p[0] to p[1] else null
+        }
+        fun parseGroup(groupId: String) = parseConv("g:$groupId")
+        /** accounts with this title, given by the developer, may make shards for everyone */
+        fun isDeveloperTitle(title: String?) = title?.trim()?.lowercase() in setOf("sviluppatore", "sviluppatrice", "developer", "sviluppatori")
     }
 }
 
@@ -141,6 +171,22 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         }
     }
 
+    // ------------------------------------------------------------------ lookups
+
+    /** the shard behind a room conversation ("g:shard.<id>.<room>") */
+    fun ofConv(conv: String): Pair<Shard, ShardRoom>? {
+        val (sid, rid) = Shard.parseConv(conv) ?: return null
+        val s = get(sid) ?: return null
+        val r = s.rooms.firstOrNull { it.id == rid } ?: return null
+        return s to r
+    }
+    fun ofGroup(groupId: String) = ofConv("g:$groupId")
+    /** the shard for everyone behind a room conversation, if it is one */
+    fun openFor(conv: String): Shard? = ofConv(conv)?.first?.takeIf { it.open }
+    fun isOpenConv(conv: String) = openFor(conv) != null
+    /** founder or moderator of the shard of this room */
+    fun canModerate(conv: String, pk: String?) = ofConv(conv)?.first?.canManage(pk) == true
+
     private fun evJson(e: ShardEvent): JSONObject = JSONObject().put("id", e.id).put("x", e.title).put("e", e.emoji).put("s", e.start)
         .put("ad", e.allDay).put("by", e.by).put("u", e.updatedAt).put("go", e.going.toJsonArray()).put("del", e.deleted)
 
@@ -151,16 +197,17 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         )
     }.getOrNull()
 
-    private fun toJson(s: Shard): JSONObject = JSONObject()
+    internal fun toJson(s: Shard): JSONObject = JSONObject()
         .put("id", s.id).put("n", s.name).put("e", s.emoji).put("o", s.owner)
         .put("m", s.members.toJsonArray()).put("u", s.updatedAt).put("md", s.mods.toJsonArray())
-        .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice).also { j -> r.only?.let { j.put("pm", it.toJsonArray()) } }) } })
+        .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice).put("ro", r.ro).also { j -> r.only?.let { j.put("pm", it.toJsonArray()) } }) } })
+        .put("ds", s.desc).put("op", s.open).put("k", s.key).put("bn", s.ban.toJsonArray()).put("lk", s.link).put("ap", s.approve)
         .put("wl", s.welcome)
         .put("tt", JSONObject().also { o -> s.titles.forEach { (k, v) -> o.put(k, v) } })
         .put("nb", JSONArray().also { a -> s.notes.forEach { n -> a.put(JSONObject().put("id", n.id).put("x", n.text).put("by", n.by).put("at", n.at)) } })
         .put("ev", JSONArray().also { a -> s.events.filter { now() - it.start < 30L * 86_400_000L }.forEach { a.put(evJson(it)) } })
 
-    private fun fromJson(o: JSONObject): Shard? = runCatching {
+    internal fun fromJson(o: JSONObject): Shard? = runCatching {
         val rooms = o.optJSONArray("r") ?: JSONArray()
         Shard(
             id = o.getString("id"), name = o.optString("n"), emoji = o.optString("e", "🪨"), owner = o.optString("o"),
@@ -169,7 +216,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                 rooms.optJSONObject(i)?.let { r ->
                     ShardRoom(
                         r.optString("id").filter { c -> c.isLetterOrDigit() }.take(24), r.optString("n").take(40), r.optBoolean("v"),
-                        r.optJSONArray("pm")?.strings()?.filter { Hex.isHex64(it) },
+                        r.optJSONArray("pm")?.strings()?.filter { Hex.isHex64(it) }, r.optBoolean("ro"),
                     )
                 }
             }.filter { it.id.isNotBlank() }.take(30),
@@ -181,8 +228,14 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             events = (o.optJSONArray("ev") ?: JSONArray()).let { a -> (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let(::evFrom) } }.take(60),
             welcome = o.optString("wl").take(400),
             titles = o.optJSONObject("tt")?.let { t -> t.keys().asSequence().filter { Hex.isHex64(it) }.associateWith { t.optString(it).take(24) } } ?: emptyMap(),
+            desc = o.optString("ds").take(500),
+            open = o.optBoolean("op"),
+            key = o.optString("k").takeIf { Hex.isHex64(it) } ?: "",
+            ban = (o.optJSONArray("bn") ?: JSONArray()).strings().filter { Hex.isHex64(it) },
+            link = o.optString("lk").filter { it.isLetterOrDigit() }.take(32),
+            approve = o.optBoolean("ap"),
         )
-    }.getOrNull()
+    }.getOrNull()?.let { if (it.open && it.key.isBlank()) null else it }
 
     /** events from two copies of the shard: the newest version of each one wins */
     private fun mergeEvents(a: List<ShardEvent>, b: List<ShardEvent>): List<ShardEvent> =
@@ -223,8 +276,12 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     private suspend fun broadcast(s: Shard, extra: List<String> = emptyList()) {
         val k = me() ?: return
+        // a shard for everyone is described in public by its founder and moderators
+        if (s.open) { if (s.canManage(k)) Graph.hubs.publishDef(s); return }
         val p = payload(s)
         (s.members + extra).distinct().filter { it != k }.forEach { Graph.messenger.sendStored(it, p) }
+        // the card behind the invite link follows the shard
+        if (s.link.isNotBlank() && s.canManage(k)) Invites.publishShard(s)
     }
 
     // ------------------------------------------------------------------ incoming
@@ -232,8 +289,13 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     suspend fun onShard(from: String, p: JSONObject, isFriend: Boolean) {
         val k = me() ?: return
         val incoming = fromJson(p) ?: return
+        // a shard for everyone never travels in envelopes
+        if (incoming.open) return
         val old = get(incoming.id)
-        if (old == null && (!isFriend || from !in incoming.members)) return
+        if (old?.open == true) return
+        // from a friend, or the answer to my request with the invite link
+        val asked = Invites.isPending(incoming.id)
+        if (old == null && (!(isFriend || asked) || from !in incoming.members)) return
         if (old != null && from !in old.members) return
         if (old != null && old.updatedAt >= incoming.updatedAt) return
         if (k !in incoming.members) { removeLocal(incoming.id); return }
@@ -263,6 +325,9 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             else -> old.copy(members = (old.members + incoming.members).distinct(), events = mergeEvents(old.events, incoming.events), updatedAt = incoming.updatedAt)
         }
         store(merged, old)
+        if (old == null && asked) Invites.done(incoming.id)
+        // whoever was waiting with the link and is now inside
+        merged.members.forEach { Graph.joinAsks.remove("s:" + merged.id, it) }
         if (old == null) {
             val who = db.friends().get(from)?.displayName ?: t("Qualcuno")
             merged.rooms.firstOrNull { !it.voice && merged.canSee(it, k) }?.let { r ->
@@ -275,7 +340,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     suspend fun onLeave(from: String, p: JSONObject) {
         val s = get(p.optString("id")) ?: return
-        if (from !in s.members) return
+        if (s.open || from !in s.members) return
         val members = s.members - from
         val owner = if (s.owner == from) members.minOrNull() ?: s.owner else s.owner
         store(s.copy(members = members, owner = owner, updatedAt = maxOf(now(), s.updatedAt + 1)), s)
@@ -303,12 +368,12 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     // ------------------------------------------------------------------ actions
 
-    suspend fun create(name: String, emoji: String, friends: List<String>): String? {
+    suspend fun create(name: String, emoji: String, friends: List<String>, desc: String = ""): String? {
         val k = me() ?: return null
         val s = Shard(
             newId(), name.trim().ifBlank { t("Il mio shard") }, emoji, k, (friends + k).distinct(),
             listOf(ShardRoom(newId().take(8), t("generale"), false), ShardRoom(newId().take(8), t("Vocale"), true)),
-            now(),
+            now(), desc = desc.trim().take(500),
         )
         store(s, null)
         val first = s.rooms.first()
@@ -317,8 +382,90 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         return s.id
     }
 
+    /** am I allowed to make shards for everyone? (verified by the developer with the title "Sviluppatore") */
+    fun canMakeOpen(): Boolean = !com.monolith.app.kids.Kids.edition && Shard.isDeveloperTitle(me()?.let { Graph.dev.verifiedOf(it)?.title })
+
+    /**
+     * A shard for everyone: every Monolith user is inside, also whoever signs up later.
+     * It starts with #annunci (only founder and moderators write) and #generale.
+     */
+    suspend fun createOpen(name: String, emoji: String, desc: String): String? {
+        val k = me() ?: return null
+        if (!canMakeOpen()) return null
+        val key = Hex.encode(ByteArray(32).also { java.security.SecureRandom().nextBytes(it) })
+        val s = Shard(
+            newId(), name.trim().ifBlank { "Monolith" }, emoji, k, listOf(k),
+            listOf(ShardRoom(newId().take(8), t("annunci"), false, ro = true), ShardRoom(newId().take(8), t("generale"), false)),
+            now(), desc = desc.trim().take(500), open = true, key = key,
+        )
+        store(s, null)
+        db.messages().insert(Message(newId(), s.conv(s.rooms.first()), k, true, now(), "system", text = t("Hai creato {0}: tutti gli utenti di Monolith sono dentro, anche chi arriva dopo", s.name), status = MsgStatus.READ))
+        Graph.hubs.publishDef(s)
+        Graph.hubs.refresh()
+        return s.id
+    }
+
+    /** a shard for everyone described in public by [author] (founder or moderator); false = try again later */
+    suspend fun onHubDef(author: String, o: JSONObject): Boolean {
+        val k = me() ?: return true
+        if (com.monolith.app.kids.Kids.edition) return true
+        val incoming = fromJson(o) ?: return true
+        if (!incoming.open) return true
+        val old = get(incoming.id)
+        if (old != null && !old.open) return true
+        if (old == null) {
+            // a moderator's copy waits for the founder's; the developer's list of verified accounts may come later
+            if (author != incoming.owner || !Shard.isDeveloperTitle(Graph.dev.verifiedOf(author)?.title)) return false
+            if (Graph.hubs.hasLeft(incoming.id)) { Graph.hubs.rememberLeft(incoming); return true }
+            if (k in incoming.ban) return true
+            val s = incoming.copy(members = (listOf(incoming.owner) + incoming.mods).distinct())
+            store(s, null)
+            joinedOpen(s)
+            return true
+        }
+        if (old.updatedAt >= incoming.updatedAt) return true
+        val merged = when (author) {
+            old.owner -> incoming.copy(members = (listOf(incoming.owner) + incoming.mods).distinct(), events = mergeEvents(old.events, incoming.events))
+            in old.mods -> old.copy(
+                rooms = incoming.rooms, notes = incoming.notes, welcome = incoming.welcome, titles = incoming.titles, desc = incoming.desc,
+                ban = incoming.ban.filter { it != old.owner && it !in old.mods }, updatedAt = incoming.updatedAt,
+            )
+            else -> return true
+        }
+        // kept out of it
+        if (k in merged.ban) { removeLocal(merged.id); return true }
+        store(merged, old)
+        // what the people kept out wrote disappears
+        val newly = merged.ban - old.ban.toSet()
+        if (newly.isNotEmpty()) merged.rooms.forEach { r -> newly.forEach { pk -> db.messages().deleteFrom(merged.conv(r), pk) } }
+        merged.rooms.filter { r -> old.rooms.none { it.id == r.id } && !r.ro && !r.voice }.forEach { Graph.messenger.setMuted(merged.conv(it), true) }
+        if (merged.rooms.map { it.id } != old.rooms.map { it.id }) Graph.hubs.refresh()
+        return true
+    }
+
+    /** I'm in a shard for everyone: say so once, quietly */
+    private suspend fun joinedOpen(s: Shard) {
+        val k = me() ?: return
+        // a big room: no notification for every message; announcements and @mentions still arrive
+        s.rooms.filter { !it.voice && !it.ro }.forEach { Graph.messenger.setMuted(s.conv(it), true) }
+        s.rooms.firstOrNull { !it.voice && s.canSee(it, k) }?.let { r ->
+            if (s.welcome.isNotBlank()) db.messages().insert(Message(newId(), s.conv(r), s.owner, false, now() + 1, "system", text = "👋  " + s.welcome, status = MsgStatus.READ))
+            db.messages().insert(Message(newId(), s.conv(r), s.owner, false, now(), "system", text = t("Sei dentro {0}: lo Shard di tutti gli utenti di Monolith", s.name), status = MsgStatus.READ))
+        }
+        Graph.notifier.hubJoined(s.emoji + " " + s.name)
+        Graph.hubs.refresh()
+        Graph.hubs.backfill(s)
+    }
+
+    /** a shard for everyone I had left: back inside */
+    suspend fun rejoin(id: String) {
+        Graph.hubs.forgetLeft(id)
+        Graph.hubs.reapply()
+    }
+
     suspend fun invite(id: String, friends: List<String>) {
         val s = get(id) ?: return
+        if (s.open) return
         val n = s.copy(members = (s.members + friends).distinct(), updatedAt = now())
         store(n, s)
         broadcast(n)
@@ -327,22 +474,34 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     suspend fun removeMember(id: String, pk: String) {
         val s = get(id) ?: return
         if (!s.canManage(me()) || pk == s.owner || (pk in s.mods && s.owner != me())) return
+        if (s.open) { setBanned(id, pk, true); return }
         val n = s.copy(members = s.members - pk, mods = s.mods - pk, updatedAt = now())
         store(n, s)
         broadcast(n, extra = listOf(pk))  // they get the list without themselves and drop it
     }
 
-    suspend fun edit(id: String, name: String, emoji: String) {
+    /** founder and moderators of a shard for everyone: keep someone out (or let them back) */
+    suspend fun setBanned(id: String, pk: String, on: Boolean) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        if (!s.open || !s.canManage(k) || pk == s.owner || (pk in s.mods && s.owner != k)) return
+        val n = s.copy(ban = if (on) (s.ban + pk).distinct() else s.ban - pk, mods = s.mods - pk, members = if (on) s.members - pk else s.members, updatedAt = now())
+        store(n, s)
+        if (on) s.rooms.forEach { r -> db.messages().deleteFrom(s.conv(r), pk) }
+        broadcast(n)
+    }
+
+    suspend fun edit(id: String, name: String, emoji: String, desc: String? = null) {
         val s = get(id) ?: return
         if (s.owner != me()) return
-        val n = s.copy(name = name.trim().ifBlank { s.name }, emoji = emoji, updatedAt = now())
+        val n = s.copy(name = name.trim().ifBlank { s.name }, emoji = emoji, desc = desc?.trim()?.take(500) ?: s.desc, updatedAt = now())
         store(n, s)
         broadcast(n)
     }
 
     suspend fun addRoom(id: String, name: String, voice: Boolean) {
         val s = get(id) ?: return
-        if (!s.canManage(me())) return
+        if (!s.canManage(me()) || (s.open && voice)) return
         val clean = name.trim().ifBlank { if (voice) t("Vocale") else t("stanza") }.take(40)
         val n = s.copy(rooms = s.rooms + ShardRoom(newId().take(8), if (voice) clean else clean.lowercase().replace(' ', '-'), voice), updatedAt = now())
         store(n, s)
@@ -364,6 +523,15 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         if (!s.canManage(k)) return
         val room = ShardRoom(newId().filter { it.isLetterOrDigit() }.take(12), name.trim().take(40).ifBlank { t("Stanza privata") }, voice, (only + k).distinct())
         val n = s.copy(rooms = s.rooms + room, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** founder and moderators: a room where only they write, or a room for everyone again */
+    suspend fun setRoomReadOnly(id: String, roomId: String, ro: Boolean) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(rooms = s.rooms.map { if (it.id == roomId) it.copy(ro = ro) else it }, updatedAt = now())
         store(n, s)
         broadcast(n)
     }
@@ -402,11 +570,15 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         }
     }
 
-    /** only the owner names moderators */
+    /** only the owner names moderators (in a shard for everyone, anyone who is not kept out) */
     suspend fun setMod(id: String, pk: String, on: Boolean) {
         val s = get(id) ?: return
-        if (s.owner != me() || pk == s.owner || pk !in s.members) return
-        val n = s.copy(mods = if (on) (s.mods + pk).distinct() else s.mods - pk, updatedAt = now())
+        if (s.owner != me() || pk == s.owner || (if (s.open) pk in s.ban else pk !in s.members)) return
+        val n = s.copy(
+            mods = if (on) (s.mods + pk).distinct() else s.mods - pk,
+            members = if (s.open) (if (on) (s.members + pk).distinct() else s.members - pk) else s.members,
+            updatedAt = now(),
+        )
         store(n, s)
         broadcast(n)
     }
@@ -433,6 +605,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     private suspend fun sendEvent(s: Shard, e: ShardEvent) {
         val k = me() ?: return
         val p = JSONObject().put("t", "shardev").put("s", s.id).put("ev", evJson(e))
+        if (s.open) { Graph.messenger.publishHub(s, "*", p, null); return }
         s.members.filter { it != k }.forEach { Graph.messenger.sendStored(it, p) }
     }
 
@@ -477,7 +650,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     suspend fun onEvent(from: String, p: JSONObject) {
         val s = get(p.optString("s")) ?: return
-        if (from !in s.members) return
+        if (!s.has(from)) return
         val e = p.optJSONObject("ev")?.let(::evFrom) ?: return
         val old = s.events.firstOrNull { it.id == e.id }
         if (old != null && old.updatedAt >= e.updatedAt) return
@@ -516,8 +689,66 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val k = me() ?: return
         val s = get(id) ?: return
         if (currentRoom()?.first == id) Graph.calls.hangup()
+        if (s.open) {
+            Graph.hubs.rememberLeft(s)
+            removeLocal(id)
+            Graph.hubs.refresh()
+            return
+        }
         s.members.filter { it != k }.forEach { Graph.messenger.sendStored(it, JSONObject().put("t", "shardleave").put("id", id)) }
         removeLocal(id)
+    }
+
+    // ------------------------------------------------------------------ invite link
+
+    /** founder and moderators: make a new link (the old one stops working) or turn it off */
+    suspend fun setLink(id: String, on: Boolean) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        if (s.open || !s.canManage(k)) return
+        if (s.link.isNotBlank()) Invites.revoke(s.link)
+        val n = s.copy(link = if (on) Invites.newSecret() else "", updatedAt = now())
+        store(n, s)
+        broadcast(n)
+        if (on) Invites.publishShard(n)
+    }
+
+    suspend fun setApprove(id: String, on: Boolean) {
+        val s = get(id) ?: return
+        if (s.open || !s.canManage(me())) return
+        val n = s.copy(approve = on, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** someone used the link: in at once, or a request for the founder and the moderators */
+    suspend fun onJoinAsk(from: String, p: JSONObject) {
+        val s = get(p.optString("id")) ?: return
+        val k = me() ?: return
+        if (s.open || !s.canManage(k) || s.link.isBlank() || p.optString("s") != s.link || from in s.members) return
+        val prof = p.optJSONObject("pf")?.let { Profile.fromJson(it) }
+        if (prof != null && db.friends().get(from) == null) db.friends().upsert(Friend(from, prof.username, prof.displayName, prof.emoji, prof.bio, FriendStatus.KNOWN, now()))
+        val name = db.friends().get(from)?.displayName ?: prof?.displayName ?: t("Qualcuno")
+        if (s.approve) {
+            Graph.joinAsks.add("s:" + s.id, from, name, prof?.emoji ?: "🙂", s.emoji + " " + s.name)
+            return
+        }
+        admit(s.id, from, viaLink = true)
+    }
+
+    /** let in someone who asked with the link */
+    suspend fun admit(id: String, pk: String, viaLink: Boolean = false) {
+        val s = get(id) ?: return
+        val k = me() ?: return
+        Graph.joinAsks.remove("s:$id", pk)
+        if (!s.canManage(k) || pk in s.members) return
+        val n = s.copy(members = s.members + pk, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+        val name = db.friends().get(pk)?.displayName ?: t("Qualcuno")
+        n.rooms.firstOrNull { !it.voice }?.let { r ->
+            db.messages().insert(Message(newId(), n.conv(r), pk, false, now(), "system", text = if (viaLink) t("{0} è entrato con il link", name) else t("{0} è entrato", name), status = MsgStatus.READ))
+        }
     }
 
     // ------------------------------------------------------------------ voice rooms
@@ -545,7 +776,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     }
 
     private fun announce(shard: String, room: String, inside: Boolean) {
-        val s = get(shard) ?: return
+        val s = get(shard)?.takeIf { !it.open } ?: return
         val k = me() ?: return
         onVoice(k, JSONObject().put("s", shard).put("r", room).put("in", inside))
         val p = JSONObject().put("t", "vroom").put("s", shard).put("r", room).put("in", inside)
@@ -554,7 +785,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
 
     /** ask who is in the voice rooms right now */
     fun ask(shard: String) {
-        val s = get(shard) ?: return
+        val s = get(shard)?.takeIf { !it.open } ?: return
         val k = me() ?: return
         val p = JSONObject().put("t", "vwho").put("s", shard)
         scope.launch { s.members.filter { it != k }.forEach { Graph.messenger.sendLive(it, p) } }

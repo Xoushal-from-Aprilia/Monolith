@@ -98,6 +98,10 @@ import androidx.compose.material.icons.rounded.Screenshot
 import androidx.compose.material.icons.rounded.EmojiEmotions
 import androidx.compose.material.icons.automirrored.rounded.Forward
 import androidx.compose.material.icons.rounded.Verified
+import androidx.compose.material.icons.rounded.Info
+import androidx.compose.material.icons.rounded.Block
+import androidx.compose.material.icons.rounded.PersonRemove
+import androidx.compose.material.icons.rounded.Link
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.AlertDialog
@@ -241,6 +245,8 @@ fun ChatListScreen(nav: NavHostController) {
     var statusOf by remember { mutableStateOf<Pair<Friend, com.monolith.app.data.Status?>?>(null) }
 
     val favs by Graph.favorites.all.collectAsState()
+    val mentions by Graph.mentions.convs.collectAsState()
+    var pasteLink by remember { mutableStateOf(false) }
     val byPk = friends.associateBy { it.pubkey }
     val lastBy = last.associateBy { it.convId }
     val unreadBy = unread.associate { it.convId to it.n }
@@ -289,7 +295,7 @@ fun ChatListScreen(nav: NavHostController) {
                 }
             }
             items(rows, key = { it.conv }) { r ->
-                ConversationRow(r, typing[r.conv]?.takeIf { it.second > now() }?.first, byPk, Modifier.animateItem()) { nav.navigate(Routes.chat(r.conv)) }
+                ConversationRow(r, typing[r.conv]?.takeIf { it.second > now() }?.first, byPk, Modifier.animateItem(), mention = r.conv in mentions && r.unread > 0) { nav.navigate(Routes.chat(r.conv)) }
             }
         }
         ExtendedFloatingActionButton(
@@ -304,6 +310,7 @@ fun ChatListScreen(nav: NavHostController) {
     }
 
     if (statusSheet) StatusSheet { statusSheet = false }
+    if (pasteLink) PasteLinkDialog { pasteLink = false }
     statusOf?.let { (f, st) ->
         StatusDialog(f, st, onClose = { statusOf = null }, onWrite = { nav.navigate(Routes.chat(f.pubkey)) })
     }
@@ -323,6 +330,16 @@ fun ChatListScreen(nav: NavHostController) {
                     }
                     Spacer(Modifier.width(16.dp))
                     Text(t("Nuovo gruppo"), style = MaterialTheme.typography.titleMedium)
+                }
+                if (!com.monolith.app.kids.Kids.edition) Row(
+                    Modifier.fillMaxWidth().bounceClick(0.98f) { newChat = false; pasteLink = true }.padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) {
+                        Icon(Icons.Rounded.Link, null)
+                    }
+                    Spacer(Modifier.width(16.dp))
+                    Text(t("Entra con un link"), style = MaterialTheme.typography.titleMedium)
                 }
                 SectionLabel(t("Amici"))
                 val list = friends.filter { it.status == FriendStatus.FRIEND }
@@ -348,7 +365,7 @@ fun ChatListScreen(nav: NavHostController) {
 }
 
 @Composable
-private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, Friend>, modifier: Modifier, onClick: () -> Unit) {
+private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, Friend>, modifier: Modifier, mention: Boolean = false, onClick: () -> Unit) {
     Row(modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Avatar(r.emoji, 54.dp, Modifier.sharedElementKey("avatar-" + r.conv), online = r.online)
         Spacer(Modifier.width(14.dp))
@@ -392,16 +409,35 @@ private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, F
             Text(r.last?.let { Fmt.chatStamp(it.ts) } ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             Spacer(Modifier.height(6.dp))
             AnimatedVisibility(r.unread > 0, enter = scaleIn(Motion.bouncy()), exit = scaleOut()) {
-                Box(
-                    Modifier.heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 6.dp),
-                    contentAlignment = Alignment.Center,
-                ) { Text(r.unread.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall) }
+                Row(verticalAlignment = Alignment.CenterVertically) {
+                    // someone tagged me in there
+                    if (mention) {
+                        Box(
+                            Modifier.size(22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primaryContainer),
+                            contentAlignment = Alignment.Center,
+                        ) { Text("@", color = MaterialTheme.colorScheme.onPrimaryContainer, style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold) }
+                        Spacer(Modifier.width(4.dp))
+                    }
+                    Box(
+                        Modifier.heightIn(min = 22.dp).widthIn(min = 22.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).padding(horizontal = 6.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text(r.unread.toString(), color = MaterialTheme.colorScheme.onPrimary, style = MaterialTheme.typography.labelSmall) }
+                }
             }
         }
     }
 }
 
 // ====================================================================== chat
+
+/** what a group or shard room needs to highlight tags: names to look for, mine, the rooms, the titles next to names */
+internal class TagCtx(
+    val names: List<String>,
+    val mine: List<String>,
+    val rooms: Map<String, String>,
+    val onRoom: (String) -> Unit,
+    val titleOf: (String) -> String?,
+)
 
 private sealed class ChatItem(val key: String) {
     class Msg(val m: Message, val showName: Boolean) : ChatItem(m.id)
@@ -435,6 +471,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val kidParent by com.monolith.app.kids.Kids.parent.collectAsState()
     val kidLimit = com.monolith.app.kids.Kids.isKid && conv != kidParent?.pk
     val voiceOff by rememberUpdatedState(kidLimit && !kidRules.voice)
+    // groups and shard rooms: who writes, who moderates, the look chosen by the administrators
+    val shardsAll by Graph.shards.all.collectAsState()
+    val metaAll by Graph.groupMeta.all.collectAsState()
+    val roomOf = remember(conv, shardsAll) { Graph.shards.ofConv(conv) }
+    val isHub = roomOf?.first?.open == true
+    val gMeta = if (isGroup && !isRoom) metaAll[conv.removePrefix("g:")] else null
 
     var text by rememberSaveable(conv) { mutableStateOf("") }
     var menu by remember { mutableStateOf(false) }
@@ -480,6 +522,24 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     LaunchedEffect(messages.firstOrNull()?.id) { Graph.scope.launch { Graph.messenger.markRead(conv) } }
 
     val names = people.associateBy { it.pubkey }
+    val iAdmin = isGroup && !isRoom && Graph.groupMeta.isAdmin(group, myPub)
+    val canModerate = roomOf?.first?.canManage(myPub) == true || iAdmin
+    val canWrite = when {
+        roomOf != null -> roomOf.first.canWrite(roomOf.second, myPub)
+        gMeta?.sendAdmins == true -> iAdmin
+        else -> true
+    }
+    val tagCtx = if (!isGroup) null else {
+        val pool = if (isHub) people.filter { it.pubkey != myPub } else group?.memberList()?.mapNotNull { names[it] }.orEmpty()
+        val mine = listOfNotNull(Graph.identity.profile.value?.displayName, Graph.identity.profile.value?.displayName?.substringBefore(' '))
+        TagCtx(
+            names = pool.flatMap { listOf(it.displayName, it.displayName.substringBefore(' ')) }.distinct(),
+            mine = mine,
+            rooms = roomOf?.first?.let { s -> s.rooms.filter { !it.voice && s.canSee(it, myPub) }.associate { it.name to s.conv(it) } } ?: emptyMap(),
+            onRoom = { c -> if (c != conv) nav.navigate(Routes.chat(c)) },
+            titleOf = { pk -> if (isRoom) Graph.shards.titleFor(conv, pk) else Graph.groupMeta.titleFor(group, pk) },
+        )
+    }
     val title = if (isGroup) group?.name ?: t("Gruppo") else friend?.displayName ?: t("Chat")
     val emoji = if (isGroup) group?.emoji ?: "💬" else friend?.emoji ?: "🙂"
     val typing = typingMap[conv]?.takeIf { it.second > now() && tick >= 0 }
@@ -487,6 +547,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val ttl = setting?.ttlSec ?: 0L
     val subtitle = when {
         typing != null -> (if (isGroup) (names[typing.first]?.displayName ?: "") + " " else "") + t("sta scrivendo…")
+        isHub -> t("Per tutti gli utenti di Monolith")
         isGroup -> group?.memberList()?.let { t("{0} membri", it.size) } ?: ""
         isOn -> t("online")
         (friend?.lastSeen ?: 0L) > 0L -> t("ultimo accesso {0}", Fmt.ago(friend?.lastSeen ?: 0L))
@@ -560,18 +621,26 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         }
     }
 
+    GroupTheme(gMeta?.color.orEmpty()) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
         // ---- top bar
         Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
+                fun openInfo() {
+                    when {
+                        !isGroup -> nav.navigate(Routes.profile(conv))
+                        roomOf != null -> nav.navigate(Routes.shard(roomOf.first.id))
+                        !com.monolith.app.net.Shard.isHiddenGroup(conv.removePrefix("g:")) -> nav.navigate("groupinfo/" + Uri.encode(conv.removePrefix("g:")))
+                    }
+                }
                 Avatar(
                     emoji, 42.dp,
-                    Modifier.sharedElementKey("avatar-$conv").bounceClick(0.9f) { if (!isGroup) nav.navigate(Routes.profile(conv)) },
+                    Modifier.sharedElementKey("avatar-$conv").bounceClick(0.9f) { openInfo() },
                     online = isOn,
                 )
                 Spacer(Modifier.width(12.dp))
-                Column(Modifier.weight(1f).bounceClick(0.99f) { if (!isGroup) nav.navigate(Routes.profile(conv)) }) {
+                Column(Modifier.weight(1f).bounceClick(0.99f) { openInfo() }) {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Text(title, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis, modifier = Modifier.weight(1f, fill = false))
                         if (!isGroup) com.monolith.app.ui.components.VerifiedBadge(conv, 15.dp)
@@ -598,6 +667,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                 Box {
                     IconButton(onClick = { menu = true }) { Icon(Icons.Rounded.MoreVert, t("Altro")) }
                     DropdownMenu(expanded = menu, onDismissRequest = { menu = false }) {
+                        if (isGroup && !isRoom && !com.monolith.app.net.Shard.isHiddenGroup(conv.removePrefix("g:"))) {
+                            DropdownMenuItem(text = { Text(t("Info gruppo")) }, leadingIcon = { Icon(Icons.Rounded.Info, null) }, onClick = { menu = false; nav.navigate("groupinfo/" + Uri.encode(conv.removePrefix("g:"))) })
+                        }
                         DropdownMenuItem(text = { Text(t("Trillo")) }, leadingIcon = { Icon(Icons.Rounded.Vibration, null) }, onClick = {
                             menu = false
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
@@ -666,6 +738,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     }
                     is ChatItem.Msg -> MessageRow(
                         item.m, item.showName, names, myPub,
+                        tags = tagCtx,
                         reactBy[item.m.id].orEmpty(), votesBy[item.m.id].orEmpty(),
                         isNew = item.m.ts > openedAt,
                         modifier = Modifier.animateItem(),
@@ -706,13 +779,14 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             }
         }
 
-        if (isGroup) {
-            val members = group?.memberList()?.filter { it != myPub }?.mapNotNull { names[it] }.orEmpty()
+        if (isGroup && canWrite) {
+            val members = if (isHub) people.filter { it.pubkey != myPub && it.displayName.isNotBlank() } else group?.memberList()?.filter { it != myPub }?.mapNotNull { names[it] }.orEmpty()
             MentionBar(text, members) { text = it }
         }
 
         // ---- composer
         if (kidLimit && !kidRules.chat) com.monolith.app.kids.KidPausedBar(t("Le chat sono in pausa. La chat con il tuo genitore resta sempre aperta."))
+        else if (!canWrite) ReadOnlyBar(if (roomOf != null) t("Qui scrivono solo il fondatore e i moderatori") else t("In questo gruppo scrivono solo gli amministratori"))
         else Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
                 AnimatedContent(recording, label = "composer", modifier = Modifier.weight(1f)) { rec ->
@@ -767,6 +841,10 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                     },
                                     textStyle = MaterialTheme.typography.bodyLarge.copy(color = MaterialTheme.colorScheme.onSurface),
                                     cursorBrush = SolidColor(MaterialTheme.colorScheme.primary),
+                                    visualTransformation = if (tagCtx != null) {
+                                        val accent = MaterialTheme.colorScheme.primary
+                                        remember(accent, tagCtx.names) { com.monolith.app.ui.components.TagHighlight(accent, tagCtx.names) }
+                                    } else androidx.compose.ui.text.input.VisualTransformation.None,
                                     maxLines = 6,
                                     keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Sentences),
                                     modifier = Modifier.fillMaxWidth(),
@@ -852,6 +930,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             }
         }
     }
+    }
 
     // ---- message actions
     actionsFor?.let { m ->
@@ -861,7 +940,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             Column(Modifier.padding(bottom = 24.dp)) {
                 if (m.kind != "system" && m.kind != "call" && m.kind != "deleted") {
                     Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp), horizontalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Messenger.QUICK_REACTIONS.forEachIndexed { i, e ->
+                        (gMeta?.reactions?.takeIf { it.isNotEmpty() } ?: Messenger.QUICK_REACTIONS).forEachIndexed { i, e ->
                             com.monolith.app.ui.components.PopIn(i * 35) {
                                 Box(
                                     Modifier.size(50.dp).clip(CircleShape)
@@ -882,7 +961,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     Spacer(Modifier.height(12.dp))
                     ActionRow(Icons.AutoMirrored.Rounded.Reply, t("Rispondi")) { replyTo = m; editing = null; actionsFor = null }
                 }
-                if (m.kind != "system" && m.kind != "call" && m.kind != "deleted") {
+                if (m.kind != "system" && m.kind != "call" && m.kind != "deleted" && (!isHub || canModerate)) {
                     val isPinned = pins[conv] == m.id
                     ActionRow(Icons.Rounded.PushPin, if (isPinned) t("Togli dalla cima") else t("Fissa in alto")) {
                         actionsFor = null
@@ -922,6 +1001,27 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     ActionRow(Icons.Rounded.DeleteOutline, t("Elimina per tutti")) {
                         actionsFor = null
                         Graph.scope.launch { Graph.messenger.deleteForEveryone(m) }
+                    }
+                }
+                // founder and moderators of a shard, administrators of a group
+                if (!m.outgoing && canModerate && m.kind != "deleted" && m.kind != "system" && m.kind != "call") {
+                    ActionRow(Icons.Rounded.DeleteOutline, t("Elimina per tutti")) {
+                        actionsFor = null
+                        Graph.scope.launch { Graph.messenger.moderatorDelete(m) }
+                    }
+                    val who = names[m.sender]?.displayName ?: t("Qualcuno")
+                    val shardOf = roomOf?.first
+                    if (shardOf?.open == true && m.sender != shardOf.owner && m.sender !in shardOf.mods) {
+                        ActionRow(Icons.Rounded.Block, t("Escludi {0} dallo Shard", who)) {
+                            actionsFor = null
+                            Graph.scope.launch { Graph.shards.setBanned(shardOf.id, m.sender, true) }
+                            Toast.makeText(ctx, t("{0} non può più entrare", who), Toast.LENGTH_SHORT).show()
+                        }
+                    } else if (iAdmin && m.sender != group?.admin && m.sender in group?.memberList().orEmpty()) {
+                        ActionRow(Icons.Rounded.PersonRemove, t("Togli {0} dal gruppo", who)) {
+                            actionsFor = null
+                            Graph.scope.launch { Graph.messenger.removeFromGroup(conv.removePrefix("g:"), m.sender) }
+                        }
                     }
                 }
                 ActionRow(Icons.Rounded.DeleteOutline, t("Elimina per me")) {
@@ -1133,6 +1233,7 @@ private fun MessageRow(
     onQuote: (String) -> Unit,
     onReact: (Message, String) -> Unit,
     onRoute: (String) -> Unit = {},
+    tags: TagCtx? = null,
 ) {
     val appear = remember { Animatable(if (isNew) 0f else 1f) }
     LaunchedEffect(Unit) { if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 500f)) }
@@ -1165,15 +1266,25 @@ private fun MessageRow(
     val ex = remember(m.extra) { runCatching { JSONObject(m.extra ?: "{}") }.getOrDefault(JSONObject()) }
     val press = Modifier.combinedClickable(onClick = {}, onLongClick = { onLongPress(m) })
     val sender = names[m.sender]
+    // a message that tags me (or everyone) stands out
+    val tagsMe = tags != null && !out && (ex.optBoolean("all") || ex.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true)
+    val accentIn = if (out) textColor else MaterialTheme.colorScheme.primary
+    fun tagged(text: String): androidx.compose.ui.text.AnnotatedString =
+        if (tags == null) androidx.compose.ui.text.AnnotatedString(text)
+        else com.monolith.app.ui.components.Tags.annotate(text, tags.names, tags.mine, tags.rooms, accentIn, accentIn, tags.onRoom)
 
     Column(modifier.fillMaxWidth().padding(vertical = 2.dp).then(anim), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         if (showName) {
-            val title = if (m.convId.startsWith("g:shard.")) Graph.shards.titleFor(m.convId, m.sender) else null
+            val title = tags?.titleOf?.invoke(m.sender) ?: if (m.convId.startsWith("g:shard.")) Graph.shards.titleFor(m.convId, m.sender) else null
             Text((sender?.emoji ?: "") + " " + (sender?.displayName ?: t("Membro")) + (title?.let { "  ·  $it" } ?: ""), style = MaterialTheme.typography.labelMedium,
                 color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
         }
         if (ex.optBoolean("fw")) {
             Text("↪  " + t("Inoltrato"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp))
+        }
+        if (tagsMe) {
+            Text("@ " + t("Ti hanno taggato"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.primary,
+                modifier = Modifier.padding(start = 12.dp, top = 2.dp, bottom = 2.dp))
         }
         val reply = replyOf(m)
         when (if (m.kind == "photo" && ex.optBoolean("once")) "once" else m.kind) {
@@ -1221,7 +1332,7 @@ private fun MessageRow(
                             if (out) { Spacer(Modifier.width(3.dp)); StatusTicks(m.status, Color.White) }
                         }
                     }
-                    if (m.text.isNotBlank()) Text(m.text, style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
+                    if (m.text.isNotBlank()) Text(tagged(m.text), style = MaterialTheme.typography.bodyMedium, modifier = Modifier.padding(horizontal = 8.dp, vertical = 4.dp))
                 }
             }
             "voice" -> Surface(shape = shape, color = bubbleColor, modifier = Modifier.widthIn(min = 220.dp, max = 280.dp).then(press)) {
@@ -1349,17 +1460,21 @@ private fun MessageRow(
                     }
                 }
             }
-            else -> Surface(shape = shape, color = bubbleColor, modifier = Modifier.widthIn(max = 300.dp).then(press)) {
+            else -> Surface(
+                shape = shape, color = bubbleColor, modifier = Modifier.widthIn(max = 300.dp).then(press),
+                border = if (tagsMe) androidx.compose.foundation.BorderStroke(2.dp, MaterialTheme.colorScheme.primary) else null,
+            ) {
                 Column(Modifier.padding(start = 12.dp, end = 12.dp, top = 8.dp, bottom = 6.dp)) {
                     if (reply != null) QuoteBox(reply, names, myPub, out, Modifier) { onQuote(reply.id) }
                     val story = ex.optJSONObject("story")
                     if (story != null) StoryRefCard(story, out, textColor)
                     val react = story != null && ex.optBoolean("react")
                     Text(
-                        m.text, color = textColor,
+                        tagged(m.text), color = textColor,
                         style = if (react) MaterialTheme.typography.displaySmall else MaterialTheme.typography.bodyLarge,
                         modifier = Modifier.padding(horizontal = 2.dp),
                     )
+                    com.monolith.app.net.Invites.findIn(m.text)?.let { secret -> InviteChip(secret, textColor) }
                     if (!react) DateChip(m.text, textColor, onAddEvent)
                     MetaLine(m, textColor)
                 }
@@ -1511,6 +1626,7 @@ private fun MetaLine(m: Message, color: Color) {
 fun NewGroupScreen(nav: NavHostController) {
     val friends by remember { Graph.db.friends().friends() }.collectAsState(initial = emptyList())
     var name by rememberSaveable { mutableStateOf("") }
+    var desc by rememberSaveable { mutableStateOf("") }
     var emoji by rememberSaveable { mutableStateOf("💬") }
     var selected by remember { mutableStateOf(setOf<String>()) }
     var picker by remember { mutableStateOf(false) }
@@ -1525,7 +1641,7 @@ fun NewGroupScreen(nav: NavHostController) {
                     onClick = {
                         creating = true
                         Graph.scope.launch {
-                            val gid = Graph.messenger.createGroup(name, emoji, selected.toList())
+                            val gid = Graph.messenger.createGroup(name, emoji, selected.toList(), desc = desc)
                             if (gid != null) {
                                 kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Main) {
                                     nav.popBackStack()
@@ -1546,6 +1662,10 @@ fun NewGroupScreen(nav: NavHostController) {
                 OutlinedTextField(value = name, onValueChange = { name = it.take(40) }, label = { Text(t("Nome del gruppo")) },
                     singleLine = true, modifier = Modifier.weight(1f), shape = MaterialTheme.shapes.medium)
             }
+            OutlinedTextField(
+                value = desc, onValueChange = { desc = it.take(500) }, label = { Text(t("Descrizione (facoltativa)")) },
+                maxLines = 3, modifier = Modifier.fillMaxWidth().padding(horizontal = 20.dp).padding(bottom = 8.dp), shape = MaterialTheme.shapes.medium,
+            )
             SectionLabel(t("Membri") + " · ${selected.size}")
             if (friends.isEmpty()) EmptyState(t("Nessun amico"), t("Aggiungi amici per creare un gruppo."))
             LazyColumn(Modifier.weight(1f)) {

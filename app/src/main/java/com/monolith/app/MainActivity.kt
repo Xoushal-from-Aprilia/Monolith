@@ -93,6 +93,11 @@ class MainActivity : FragmentActivity() {
 
     private fun handle(i: Intent?) {
         i ?: return
+        // an invite link to a group or a shard (monolith://entra/<secret>, or the site's link)
+        if (i.action == Intent.ACTION_VIEW) {
+            com.monolith.app.net.Invites.parse(i.dataString)?.let { com.monolith.app.ui.NavBus.joinLink.value = it }
+            i.data = null
+        }
         val conv = i.getStringExtra(Notifier.EXTRA_CONV)
         val tab = if (i.hasExtra(Notifier.EXTRA_TAB)) i.getIntExtra(Notifier.EXTRA_TAB, 0) else null
         val event = i.getStringExtra(Notifier.EXTRA_EVENT)

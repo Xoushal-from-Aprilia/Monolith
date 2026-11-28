@@ -132,6 +132,8 @@ object NavBus {
     /** the screen on top right now, and whether the app is in a small floating window */
     val route = MutableStateFlow<String?>(null)
     val pip = MutableStateFlow(false)
+    /** the secret of an invite link to open (from a chat, the site or another app) */
+    val joinLink = MutableStateFlow<String?>(null)
 }
 
 object Routes {
@@ -327,6 +329,16 @@ private fun MainNav() {
         }
     }
 
+    // an invite link: what it leads to, and the button to go in
+    val joinLink by NavBus.joinLink.collectAsState()
+    joinLink?.let { secret ->
+        com.monolith.app.ui.screens.JoinLinkDialog(secret, onDismiss = { NavBus.joinLink.value = null }) { route ->
+            NavBus.joinLink.value = null
+            nav.popBackStack("home", inclusive = false)
+            nav.navigate(route) { launchSingleTop = true }
+        }
+    }
+
     LaunchedEffect(call.phase) {
         if ((call.phase == CallPhase.INCOMING || call.phase == CallPhase.OUTGOING) && nav.currentDestination?.route != "call") {
             nav.navigate("call") { launchSingleTop = true }
@@ -395,6 +407,7 @@ private fun MainNav() {
                 composable("group/new") {
                     CompositionLocalProvider(LocalNavScope provides this) { NewGroupScreen(nav) }
                 }
+                composable("groupinfo/{gid}") { entry -> com.monolith.app.ui.screens.GroupInfoScreen(nav, Uri.decode(entry.arguments?.getString("gid") ?: "")) }
                 composable("kid/{pk}") { entry -> com.monolith.app.kids.ChildScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("settings") {
                     CompositionLocalProvider(LocalNavScope provides this) { SettingsScreen(nav) }
