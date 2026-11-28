@@ -210,7 +210,7 @@ private fun DrawScope.drawCracks(level: Int, cracks: Int, base: Offset, w: Float
     }
 }
 
-/** the card in the group's info */
+/** the card in the group's info (Info gruppo) */
 @Composable
 fun GroupMonolithCard(conv: String) {
     val list by remember(conv) { Graph.db.messages().conversation(conv, 5000) }.collectAsState(initial = emptyList())
