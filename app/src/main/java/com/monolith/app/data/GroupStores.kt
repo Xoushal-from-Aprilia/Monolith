@@ -104,7 +104,7 @@ class GroupMetaStore(ctx: Context) {
     }
 
     /** the creator and the administrators */
-    fun isAdmin(g: Group?, pk: String?): Boolean = g != null && pk != null && (g.admin == pk || pk in get(g.id).admins)
+    fun isAdmin(g: Group?, pk: String?): Boolean = g != null && pk != null && (g.admin == pk || (pk in get(g.id).admins && pk in g.memberList()))
 
     suspend fun isAdmin(groupId: String, pk: String?) = isAdmin(Graph.db.groups().get(groupId), pk)
 

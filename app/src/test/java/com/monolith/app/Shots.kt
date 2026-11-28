@@ -274,10 +274,7 @@ class Shots {
     }
     @Config(qualifiers = "+h2400dp") @Test fun group_info() = shot("70_group_info") { com.monolith.app.ui.screens.GroupInfoScreen(it, "g1") }
     @Test fun group_tags() = shot("71_group_tags") { com.monolith.app.ui.screens.ChatScreen(it, "g:g1") }
-    @Test fun open_shard() = shot("72_open_shard") {
-        ApplicationProvider.getApplicationContext<Context>().getSharedPreferences("shard_tab", Context.MODE_PRIVATE).edit().putString("last", "hub1").commit()
-        com.monolith.app.ui.HomeScreen(it, 4) {}
-    }
+    @Test fun open_shard() = shot("72_open_shard") { com.monolith.app.ui.screens.ShardScreen(it, "hub1") }
     @Test fun open_room() = shot("73_open_room") { com.monolith.app.ui.screens.ChatScreen(it, "g:shard.hub1.ann") }
     @Test fun join_card() = shot("74_join_card") {
         androidx.compose.foundation.layout.Box(androidx.compose.ui.Modifier.fillMaxSize().padding(24.dp)) {
