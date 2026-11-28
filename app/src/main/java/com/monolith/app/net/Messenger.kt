@@ -86,6 +86,10 @@ class Messenger(
         const val TTL_CHUNK = 14L * 86400
         const val TTL_LIVE = 120L
         const val PRESENCE_WINDOW = 100_000L
+        /** the chat with myself: notes that never leave the phone */
+        const val SELF = "self"
+        /** files and videos up to 8 MB (400 pieces of 20 KB) */
+        const val MAX_FILE = 8_000_000
         val QUICK_REACTIONS = listOf("❤️", "👍", "😂", "😮", "😢", "🔥", "🙏")
     }
 
@@ -249,7 +253,7 @@ class Messenger(
             "prof" -> if (friend != null) onProfile(friend, p)
             "msg" -> onMessage(from, p, sentAt, friend)
             "chunk" -> onChunk(from, p)
-            "ack" -> onAck(p)
+            "ack" -> onAck(from, p)
             "react" -> onReact(from, p, friend)
             "pin" -> onPin(from, p, friend)
             "shard" -> Graph.shards.onShard(from, p, isFriend)
@@ -293,6 +297,8 @@ class Messenger(
             "locstart" -> if (isFriend) onLocStart(friend!!, p)
             "locstop" -> if (isFriend) { db.friends().sharing(from, 0); Graph.notifier.cancelArriving(from) }
             "pres" -> if (isFriend) onPresence(from, p)
+            "duo" -> if (isFriend) Duo.onSignal(from, p)
+            "concert" -> convFor(from, p, friend)?.let { c -> Concert.onSignal(c, from, p) }
             "typing" -> onTyping(from, p, isFriend)
             "rtc" -> if (isFriend) Graph.rtc.onSignal(from, p)
             "call" -> if (isFriend || isKnownContact(from)) Graph.calls.onSignal(from, p)
@@ -423,7 +429,11 @@ class Messenger(
         val id = p.optString("id").ifBlank { return }
         val kind = p.optString("k", "text")
         // rooms where only the founder and the moderators write, groups where only the administrators do
-        Graph.shards.ofConv(conv)?.let { (s, r) -> if (!s.canWrite(r, from)) return }
+        Graph.shards.ofConv(conv)?.let { (s, r) ->
+            if (!s.canWrite(r, from)) return
+            // the shard's rules: slow mode, words that are not allowed, repeated messages
+            if (kind != "system" && !Graph.shards.allowIncoming(s, r, from, p.optString("x"), sentAt)) return
+        }
         if (conv.startsWith("g:") && !Shard.isRoomConv(conv) && !Graph.groupMeta.canWrite(conv.removePrefix("g:"), from)) return
         val hub = Graph.shards.isOpenConv(conv)
         val isActive = activeConv.value == conv && Graph.foreground
@@ -456,7 +466,7 @@ class Messenger(
         val allOk = !hub || Graph.shards.canModerate(conv, from)
         val mentioned = extra != null && ((allOk && extra.optBoolean("all")) || (extra.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true))
         if (mentioned && !isActive) Graph.mentions.mark(conv)
-        val muted = db.social().settingNow(conv)?.muted == true && !mentioned && kind != "sos"
+        val muted = (db.social().settingNow(conv)?.muted == true && !mentioned && kind != "sos") || (Graph.roomNotify.get(conv) == 2 && kind != "sos")
         if (!isActive && !stale && !muted) {
             val group = if (conv.startsWith("g:")) db.groups().get(conv.removePrefix("g:")) else null
             val sender = friend ?: db.friends().get(from)
@@ -483,6 +493,8 @@ class Messenger(
         "photo" -> if (m.extra?.contains("\"once\":true") == true) "📷 " + t("Foto a vista unica")
             else if (m.text.isNotBlank()) "📷 ${m.text}" else "📷 " + t("Foto")
         "voice" -> "🎤 " + t("Messaggio vocale")
+        "file" -> "📎 " + (runCatching { JSONObject(m.extra ?: "{}").optString("name") }.getOrNull()?.ifBlank { null } ?: t("File"))
+        "video" -> "🎬 " + (m.text.ifBlank { t("Video") })
         "event" -> "📅 " + (runCatching { JSONObject(m.extra ?: "{}").optString("title") }.getOrNull() ?: t("Evento"))
         "loc" -> "📍 " + t("Posizione")
         "nudge" -> "📳 " + t("Trillo!")
@@ -499,6 +511,8 @@ class Messenger(
             val name = runCatching { JSONObject(m.extra ?: "{}").optString("n") }.getOrNull().orEmpty().ifBlank { m.text }
             "📍 " + if (m.outgoing) t("Hai raggiunto {0}", name) else t("Ha raggiunto {0}", name)
         }
+        "text" -> runCatching { JSONObject(m.extra ?: "{}").optString("tt") }.getOrNull()?.takeIf { it.isNotBlank() }?.let { "📌 $it" }
+            ?: com.monolith.app.ui.components.Rich.strip(m.text)
         else -> m.text
     }
 
@@ -517,9 +531,12 @@ class Messenger(
         tryAssemble(id)
     }
 
-    private fun extFor(kind: String) = when (kind) {
+    private fun extFor(m: Message): String = when (m.kind) {
         "voice" -> "m4a"
         "sticker" -> "webp"
+        "video" -> "mp4"
+        "file" -> runCatching { JSONObject(m.extra ?: "{}").optString("name") }.getOrDefault("")
+            .substringAfterLast('.', "").lowercase().filter { it.isLetterOrDigit() }.take(8).ifBlank { "bin" }
         else -> "jpg"
     }
 
@@ -536,6 +553,12 @@ class Messenger(
             "sticker" -> m.mediaPath?.let { path ->
                 val bytes = withContext(Dispatchers.IO) { File(path).readBytes() }
                 sendMedia(conv, "sticker", bytes, JSONObject().put("fw", true), "", null)
+            }
+            "file", "video" -> m.mediaPath?.let { path ->
+                val bytes = withContext(Dispatchers.IO) { File(path).readBytes() }
+                val keep = JSONObject().put("fw", true)
+                listOf("name", "size", "mime", "w", "h", "dur", "tb").forEach { k -> if (ex.has(k)) keep.put(k, ex.get(k)) }
+                sendMedia(conv, m.kind, bytes, keep, m.text, null)
             }
         }
     }
@@ -581,16 +604,22 @@ class Messenger(
         val out = ByteArrayOutputStream()
         val dec = Base64.getDecoder()
         chunks.distinctBy { it.idx }.sortedBy { it.idx }.forEach { out.write(dec.decode(it.data)) }
-        val file = File(Media.dir(ctx), "$id.${extFor(msg.kind)}")
+        val file = File(Media.dir(ctx), "$id.${extFor(msg)}")
         file.writeBytes(out.toByteArray())
         db.messages().progress(id, 1f, file.absolutePath)
         db.misc().clearChunks(id)
     }
 
-    private suspend fun onAck(p: JSONObject) {
+    private suspend fun onAck(from: String, p: JSONObject) {
         val ids = p.optJSONArray("ids") ?: return
         val s = p.optInt("s", MsgStatus.DELIVERED).coerceIn(MsgStatus.DELIVERED, MsgStatus.READ)
-        for (i in 0 until ids.length()) db.messages().raiseStatus(ids.getString(i), s)
+        for (i in 0 until ids.length()) {
+            val id = ids.getString(i)
+            db.messages().raiseStatus(id, s)
+            // in a group: who received it and who read it
+            val m = db.messages().get(id) ?: continue
+            if (m.outgoing && m.convId.startsWith("g:")) Graph.receipts.add(id, from, s)
+        }
     }
 
     private suspend fun onReact(from: String, p: JSONObject, friend: Friend?) {
@@ -1220,6 +1249,7 @@ class Messenger(
 
     private suspend fun recipients(conv: String): Pair<List<String>, String?> {
         val myPub = me()?.pub ?: return emptyList<String>() to null
+        if (conv == SELF) return emptyList<String>() to null
         return if (conv.startsWith("g:")) {
             val gid = conv.removePrefix("g:")
             val g = db.groups().get(gid) ?: return emptyList<String>() to gid
@@ -1245,18 +1275,80 @@ class Messenger(
         if (reply != null) ex?.put("re", JSONObject().put("id", reply.id).put("s", reply.sender).put("x", reply.preview.take(140)))
         val ts = now()
         val ttl = ttlFor(conv)
-        val m = Message(newId(), conv, k.pub, true, ts, kind, text = text, mediaPath = mediaPath, extra = ex?.toString(), progress = progress, expiresAt = if (ttl > 0) ts + ttl * 1000 else 0)
+        val m = Message(
+            newId(), conv, k.pub, true, ts, kind, text = text, mediaPath = mediaPath, extra = ex?.toString(), progress = progress,
+            expiresAt = if (ttl > 0) ts + ttl * 1000 else 0, status = if (conv == SELF) MsgStatus.READ else MsgStatus.PENDING,
+        )
         db.messages().insert(m)
-        if (!conv.startsWith("g:")) Graph.bondDays.touch(conv, ts)
+        Graph.drafts.set(conv, "")
+        if (!conv.startsWith("g:") && conv != SELF) Graph.bondDays.touch(conv, ts)
         return m
     }
 
-    suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null, music: JSONObject? = null) {
+    /** [thread]: the message it answers in a thread; [title]: a post of a forum room */
+    suspend fun sendText(conv: String, text: String, reply: ReplyRef? = null, music: JSONObject? = null, thread: String? = null, title: String? = null) {
         val tx = text.trim()
         if (tx.isEmpty()) return
         val mentions = if (conv.startsWith("g:") && music == null) mentionsIn(conv, tx) else null
-        val ex = music?.let { JSONObject().put("mu", it) } ?: mentions
+        var ex = music?.let { JSONObject().put("mu", it) } ?: mentions
+        if (thread != null || title != null) {
+            val e = ex ?: JSONObject()
+            thread?.let { e.put("th", it) }
+            title?.let { e.put("tt", it.trim().take(120)) }
+            ex = e
+        }
         deliver(newOutgoing(conv, "text", tx, extra = ex, reply = reply) ?: return)
+    }
+
+    /** a document of any kind, up to 8 MB; false if too big or unreadable */
+    suspend fun sendFile(conv: String, uri: Uri): Boolean {
+        val cr = ctx.contentResolver
+        var name = "file"
+        var size = -1L
+        runCatching {
+            cr.query(uri, null, null, null, null)?.use { c ->
+                if (c.moveToFirst()) {
+                    c.getColumnIndex(android.provider.OpenableColumns.DISPLAY_NAME).takeIf { it >= 0 }?.let { name = c.getString(it) ?: name }
+                    c.getColumnIndex(android.provider.OpenableColumns.SIZE).takeIf { it >= 0 }?.let { size = c.getLong(it) }
+                }
+            }
+        }
+        if (size > MAX_FILE) return false
+        val bytes = withContext(Dispatchers.IO) { runCatching { cr.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() } ?: return false
+        if (bytes.size > MAX_FILE || bytes.isEmpty()) return false
+        val mime = cr.getType(uri) ?: "application/octet-stream"
+        sendMedia(conv, "file", bytes, JSONObject().put("name", name.take(120)).put("size", bytes.size).put("mime", mime.take(80)), "", null)
+        return true
+    }
+
+    /** a short video, up to 8 MB, with a small picture of its first frame */
+    suspend fun sendVideo(conv: String, uri: Uri, caption: String = ""): Boolean {
+        val cr = ctx.contentResolver
+        val bytes = withContext(Dispatchers.IO) { runCatching { cr.openInputStream(uri)?.use { it.readBytes() } }.getOrNull() } ?: return false
+        if (bytes.size > MAX_FILE || bytes.isEmpty()) return false
+        val extra = JSONObject().put("size", bytes.size)
+        withContext(Dispatchers.IO) {
+            runCatching {
+                val r = android.media.MediaMetadataRetriever()
+                r.setDataSource(ctx, uri)
+                val dur = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_DURATION)?.toLongOrNull() ?: 0L
+                var w = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_WIDTH)?.toIntOrNull() ?: 0
+                var h = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_HEIGHT)?.toIntOrNull() ?: 0
+                val rot = r.extractMetadata(android.media.MediaMetadataRetriever.METADATA_KEY_VIDEO_ROTATION)?.toIntOrNull() ?: 0
+                if (rot == 90 || rot == 270) { val x = w; w = h; h = x }
+                extra.put("dur", dur).put("w", w).put("h", h)
+                r.getFrameAtTime(0)?.let { frame ->
+                    val k = 360f / maxOf(frame.width, frame.height)
+                    val small = if (k < 1f) Bitmap.createScaledBitmap(frame, (frame.width * k).roundToInt(), (frame.height * k).roundToInt(), true) else frame
+                    val out = ByteArrayOutputStream()
+                    small.compress(Bitmap.CompressFormat.JPEG, 55, out)
+                    extra.put("tb", Base64.getEncoder().encodeToString(out.toByteArray()))
+                }
+                r.release()
+            }
+        }
+        sendMedia(conv, "video", bytes, extra, caption, null)
+        return true
     }
 
     /** a story made of a piece of song from the phone */
@@ -1457,13 +1549,14 @@ class Messenger(
         db.messages().insert(Message(newId(), conv, if (outgoing) k.pub else conv, outgoing, now(), "call", text = text, status = MsgStatus.READ))
     }
 
-    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false, music: JSONObject? = null, forwarded: Boolean = false) {
-        val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return
+    /** returns the id of the new message */
+    suspend fun sendPhoto(conv: String, uri: Uri, caption: String, reply: ReplyRef? = null, once: Boolean = false, music: JSONObject? = null, forwarded: Boolean = false): String? {
+        val compressed = withContext(Dispatchers.IO) { Media.compress(ctx, uri) } ?: return null
         val extra = JSONObject().put("w", compressed.width).put("h", compressed.height)
         if (forwarded) extra.put("fw", true)
         if (once) extra.put("once", true)
         if (music != null) extra.put("mu", music)
-        sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)
+        return sendMedia(conv, "photo", compressed.bytes, extra, caption, reply)
     }
 
     suspend fun sendVoice(conv: String, file: File, durationMs: Long, reply: ReplyRef? = null) {
@@ -1472,15 +1565,16 @@ class Messenger(
         runCatching { file.delete() }
     }
 
-    private suspend fun sendMedia(conv: String, kind: String, bytes: ByteArray, extra: JSONObject, caption: String, reply: ReplyRef?) {
+    private suspend fun sendMedia(conv: String, kind: String, bytes: ByteArray, extra: JSONObject, caption: String, reply: ReplyRef?): String? {
         val n = ceil(bytes.size / CHUNK_BYTES.toDouble()).toInt().coerceAtLeast(1)
         extra.put("n", n)
-        val m = newOutgoing(conv, kind, caption.trim(), extra, reply, progress = 0f) ?: return
-        val file = File(Media.dir(ctx), "${m.id}.${extFor(kind)}")
+        val m = newOutgoing(conv, kind, caption.trim(), extra, reply, progress = 0f) ?: return null
+        val file = File(Media.dir(ctx), "${m.id}.${extFor(m)}")
         withContext(Dispatchers.IO) { file.writeBytes(bytes) }
         db.messages().progress(m.id, 0f, file.absolutePath)
         deliver(m)
         sendChunks(m, bytes)
+        return m.id
     }
 
     private suspend fun sendChunks(m: Message, bytes: ByteArray) {
@@ -1603,6 +1697,7 @@ class Messenger(
 
     suspend fun markRead(conv: String) {
         Graph.mentions.clear(conv)
+        Graph.chatOrg.setUnread(conv, false)
         val unread = db.messages().unreadList(conv)
         if (unread.isEmpty()) return
         db.messages().markRead(conv)

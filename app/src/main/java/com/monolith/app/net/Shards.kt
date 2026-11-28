@@ -30,7 +30,25 @@ import java.io.File
  * [only]: a private room, visible to these members only (plus owner and moderators); null = everyone.
  * [ro]: only the founder and the moderators write in it (announcements).
  */
-data class ShardRoom(val id: String, val name: String, val voice: Boolean, val only: List<String>? = null, val ro: Boolean = false)
+data class ShardRoom(
+    val id: String,
+    val name: String,
+    val voice: Boolean,
+    val only: List<String>? = null,
+    val ro: Boolean = false,
+    /** a forum: posts with a title, each with its own replies */
+    val forum: Boolean = false,
+    /** the category it is listed under ("" = none) */
+    val cat: String = "",
+    /** slow mode: seconds between two messages of the same person (0 = off) */
+    val slow: Int = 0,
+)
+
+/** a role of the shard: a name, a colour (a theme key) and what it allows */
+data class ShardRole(val id: String, val name: String, val color: String, val mod: Boolean = false, val ann: Boolean = false)
+
+/** an entry of the moderation log: [k] what happened (del, ban, unban, kick, mod, unmod, role, slow, words, spam, rules), to [who] */
+data class ModEntry(val id: String, val at: Long, val by: String, val k: String, val who: String = "", val x: String = "")
 
 /** a note pinned on the shard board */
 data class ShardNote(val id: String, val text: String, val by: String, val at: Long)
@@ -79,14 +97,25 @@ data class Shard(
     /** the secret of the invite link ("" = no link) and whether whoever uses it waits for a yes */
     val link: String = "",
     val approve: Boolean = false,
+    /** roles, and who has them: pk -> role ids */
+    val roles: List<ShardRole> = emptyList(),
+    val roleOf: Map<String, List<String>> = emptyMap(),
+    /** the rules to accept before writing ("" = none) */
+    val rules: String = "",
+    /** words that are not allowed, and the automatic stop to repeated messages */
+    val words: List<String> = emptyList(),
+    val spam: Boolean = false,
+    /** what the founder and the moderators did, newest first */
+    val log: List<ModEntry> = emptyList(),
 ) {
     fun conv(room: ShardRoom) = "g:" + groupId(id, room.id)
-    fun canManage(pk: String?) = pk != null && (pk == owner || pk in mods)
+    fun rolesOf(pk: String?): List<ShardRole> = pk?.let { p -> roleOf[p].orEmpty().mapNotNull { rid -> roles.firstOrNull { it.id == rid } } } ?: emptyList()
+    fun canManage(pk: String?) = pk != null && (pk == owner || pk in mods || rolesOf(pk).any { it.mod })
     /** who is inside a room: everyone, or for a private room the chosen ones with owner and moderators */
     fun roomMembers(r: ShardRoom): List<String> = r.only?.let { o -> members.filter { it in o || it == owner || it in mods } } ?: members
     fun canSee(r: ShardRoom, pk: String?) = pk != null && (if (open) r.only == null && pk !in ban else pk in roomMembers(r))
     /** may this person write in the room? */
-    fun canWrite(r: ShardRoom, pk: String?) = canSee(r, pk) && (!r.ro || canManage(pk))
+    fun canWrite(r: ShardRoom, pk: String?) = canSee(r, pk) && (!r.ro || canManage(pk) || rolesOf(pk).any { it.ann })
     /** is this person part of the shard (for a shard for everyone: anyone who is not kept out) */
     fun has(pk: String?) = pk != null && (if (open) pk !in ban else pk in members)
 
@@ -200,7 +229,16 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
     internal fun toJson(s: Shard): JSONObject = JSONObject()
         .put("id", s.id).put("n", s.name).put("e", s.emoji).put("o", s.owner)
         .put("m", s.members.toJsonArray()).put("u", s.updatedAt).put("md", s.mods.toJsonArray())
-        .put("r", JSONArray().also { a -> s.rooms.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice).put("ro", r.ro).also { j -> r.only?.let { j.put("pm", it.toJsonArray()) } }) } })
+        .put("r", JSONArray().also { a ->
+            s.rooms.forEach { r ->
+                a.put(JSONObject().put("id", r.id).put("n", r.name).put("v", r.voice).put("ro", r.ro).put("fo", r.forum).put("cat", r.cat).put("sl", r.slow)
+                    .also { j -> r.only?.let { j.put("pm", it.toJsonArray()) } })
+            }
+        })
+        .put("rl", JSONArray().also { a -> s.roles.forEach { r -> a.put(JSONObject().put("id", r.id).put("n", r.name).put("c", r.color).put("m", r.mod).put("a", r.ann)) } })
+        .put("rof", JSONObject().also { o -> s.roleOf.forEach { (k, v) -> o.put(k, v.toJsonArray()) } })
+        .put("rules", s.rules).put("wd", s.words.toJsonArray()).put("sp", s.spam)
+        .put("lg", JSONArray().also { a -> s.log.take(100).forEach { e -> a.put(JSONObject().put("id", e.id).put("at", e.at).put("by", e.by).put("k", e.k).put("w", e.who).put("x", e.x)) } })
         .put("ds", s.desc).put("op", s.open).put("k", s.key).put("bn", s.ban.toJsonArray()).put("lk", s.link).put("ap", s.approve)
         .put("wl", s.welcome)
         .put("tt", JSONObject().also { o -> s.titles.forEach { (k, v) -> o.put(k, v) } })
@@ -217,6 +255,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
                     ShardRoom(
                         r.optString("id").filter { c -> c.isLetterOrDigit() }.take(24), r.optString("n").take(40), r.optBoolean("v"),
                         r.optJSONArray("pm")?.strings()?.filter { Hex.isHex64(it) }, r.optBoolean("ro"),
+                        r.optBoolean("fo"), r.optString("cat").take(30), r.optInt("sl").coerceIn(0, 3600),
                     )
                 }
             }.filter { it.id.isNotBlank() }.take(30),
@@ -234,8 +273,21 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
             ban = (o.optJSONArray("bn") ?: JSONArray()).strings().filter { Hex.isHex64(it) },
             link = o.optString("lk").filter { it.isLetterOrDigit() }.take(32),
             approve = o.optBoolean("ap"),
+            roles = (o.optJSONArray("rl") ?: JSONArray()).let { a ->
+                (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { r -> ShardRole(r.optString("id").take(16), r.optString("n").take(24), r.optString("c").take(16), r.optBoolean("m"), r.optBoolean("a")) } }
+            }.filter { it.id.isNotBlank() && it.name.isNotBlank() }.take(20),
+            roleOf = o.optJSONObject("rof")?.let { m -> m.keys().asSequence().filter { Hex.isHex64(it) }.associateWith { (m.optJSONArray(it) ?: JSONArray()).strings().take(10) } } ?: emptyMap(),
+            rules = o.optString("rules").take(2000),
+            words = (o.optJSONArray("wd") ?: JSONArray()).strings().map { it.trim().lowercase().take(40) }.filter { it.isNotBlank() }.take(200),
+            spam = o.optBoolean("sp"),
+            log = (o.optJSONArray("lg") ?: JSONArray()).let { a ->
+                (0 until a.length()).mapNotNull { i -> a.optJSONObject(i)?.let { e -> ModEntry(e.optString("id"), e.optLong("at"), e.optString("by"), e.optString("k").take(12), e.optString("w"), e.optString("x").take(120)) } }
+            }.filter { it.id.isNotBlank() }.take(100),
         )
     }.getOrNull()?.let { if (it.open && it.key.isBlank()) null else it }
+
+    /** the moderation log of two copies of the shard, newest first */
+    private fun mergeLog(a: List<ModEntry>, b: List<ModEntry>): List<ModEntry> = (a + b).distinctBy { it.id }.sortedByDescending { it.at }.take(100)
 
     /** events from two copies of the shard: the newest version of each one wins */
     private fun mergeEvents(a: List<ShardEvent>, b: List<ShardEvent>): List<ShardEvent> =
@@ -312,13 +364,17 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         }
         // the owner changes everything; moderators rooms, members and board; anyone may add people
         val merged = when {
-            old == null || from == old.owner -> incoming.copy(events = mergeEvents(old?.events ?: emptyList(), incoming.events))
-            from in old.mods -> old.copy(
+            old == null || from == old.owner -> incoming.copy(events = mergeEvents(old?.events ?: emptyList(), incoming.events), log = mergeLog(old?.log ?: emptyList(), incoming.log))
+            old.canManage(from) -> old.copy(
                 rooms = incoming.rooms,
                 members = (incoming.members + old.owner + old.mods.filter { it in old.members }).distinct(),
                 notes = incoming.notes,
                 welcome = incoming.welcome,
                 titles = incoming.titles,
+                rules = incoming.rules,
+                words = incoming.words,
+                spam = incoming.spam,
+                log = mergeLog(old.log, incoming.log),
                 events = mergeEvents(old.events, incoming.events),
                 updatedAt = incoming.updatedAt,
             )
@@ -425,10 +481,11 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         }
         if (old.updatedAt >= incoming.updatedAt) return true
         val merged = when (author) {
-            old.owner -> incoming.copy(members = (listOf(incoming.owner) + incoming.mods).distinct(), events = mergeEvents(old.events, incoming.events))
-            in old.mods -> old.copy(
+            old.owner -> incoming.copy(members = (listOf(incoming.owner) + incoming.mods).distinct(), events = mergeEvents(old.events, incoming.events), log = mergeLog(old.log, incoming.log))
+            in old.mods, in old.roleOf.keys.filter { old.canManage(it) } -> old.copy(
                 rooms = incoming.rooms, notes = incoming.notes, welcome = incoming.welcome, titles = incoming.titles, desc = incoming.desc,
-                ban = incoming.ban.filter { it != old.owner && it !in old.mods }, updatedAt = incoming.updatedAt,
+                ban = incoming.ban.filter { it != old.owner && it !in old.mods }, rules = incoming.rules, words = incoming.words, spam = incoming.spam,
+                log = mergeLog(old.log, incoming.log), updatedAt = incoming.updatedAt,
             )
             else -> return true
         }
@@ -475,7 +532,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val s = get(id) ?: return
         if (!s.canManage(me()) || pk == s.owner || (pk in s.mods && s.owner != me())) return
         if (s.open) { setBanned(id, pk, true); return }
-        val n = s.copy(members = s.members - pk, mods = s.mods - pk, updatedAt = now())
+        val n = s.copy(members = s.members - pk, mods = s.mods - pk, roleOf = s.roleOf - pk, log = (listOf(entry("kick", pk)) + s.log).take(100), updatedAt = now())
         store(n, s)
         broadcast(n, extra = listOf(pk))  // they get the list without themselves and drop it
     }
@@ -485,7 +542,10 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val s = get(id) ?: return
         val k = me() ?: return
         if (!s.open || !s.canManage(k) || pk == s.owner || (pk in s.mods && s.owner != k)) return
-        val n = s.copy(ban = if (on) (s.ban + pk).distinct() else s.ban - pk, mods = s.mods - pk, members = if (on) s.members - pk else s.members, updatedAt = now())
+        val n = s.copy(
+            ban = if (on) (s.ban + pk).distinct() else s.ban - pk, mods = s.mods - pk, members = if (on) s.members - pk else s.members,
+            roleOf = if (on) s.roleOf - pk else s.roleOf, log = (listOf(entry(if (on) "ban" else "unban", pk)) + s.log).take(100), updatedAt = now(),
+        )
         store(n, s)
         if (on) s.rooms.forEach { r -> db.messages().deleteFrom(s.conv(r), pk) }
         broadcast(n)
@@ -499,11 +559,12 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         broadcast(n)
     }
 
-    suspend fun addRoom(id: String, name: String, voice: Boolean) {
+    suspend fun addRoom(id: String, name: String, voice: Boolean, forum: Boolean = false, ro: Boolean = false, cat: String = "") {
         val s = get(id) ?: return
         if (!s.canManage(me()) || (s.open && voice)) return
         val clean = name.trim().ifBlank { if (voice) t("Vocale") else t("stanza") }.take(40)
-        val n = s.copy(rooms = s.rooms + ShardRoom(newId().take(8), if (voice) clean else clean.lowercase().replace(' ', '-'), voice), updatedAt = now())
+        val room = ShardRoom(newId().take(8), if (voice) clean else clean.lowercase().replace(' ', '-'), voice, forum = forum && !voice, ro = ro && !voice, cat = cat.trim().take(30))
+        val n = s.copy(rooms = s.rooms + room, updatedAt = now())
         store(n, s)
         broadcast(n)
     }
@@ -525,6 +586,129 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val n = s.copy(rooms = s.rooms + room, updatedAt = now())
         store(n, s)
         broadcast(n)
+    }
+
+    // ------------------------------------------------------------------ roles, categories, rules, moderation
+
+    private fun entry(k: String, who: String = "", x: String = ""): ModEntry = ModEntry(newId().take(12), now(), me() ?: "", k, who, x.take(120))
+
+    /** the founder: the roles of the shard */
+    suspend fun setRoles(id: String, roles: List<ShardRole>) {
+        val s = get(id) ?: return
+        if (s.owner != me()) return
+        val ids = roles.map { it.id }.toSet()
+        val n = s.copy(roles = roles.take(20), roleOf = s.roleOf.mapValues { (_, v) -> v.filter { it in ids } }.filterValues { it.isNotEmpty() }, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** the founder: which roles someone has */
+    suspend fun assignRoles(id: String, pk: String, roleIds: List<String>) {
+        val s = get(id) ?: return
+        if (s.owner != me() || !Hex.isHex64(pk)) return
+        val valid = roleIds.filter { r -> s.roles.any { it.id == r } }.distinct()
+        val n = s.copy(
+            roleOf = if (valid.isEmpty()) s.roleOf - pk else s.roleOf + (pk to valid),
+            members = if (s.open && valid.isNotEmpty()) (s.members + pk).distinct() else s.members,
+            log = (listOf(entry("role", pk, valid.mapNotNull { r -> s.roles.firstOrNull { it.id == r }?.name }.joinToString(", "))) + s.log).take(100),
+            updatedAt = now(),
+        )
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** founder and moderators: the category of a room */
+    suspend fun setRoomCategory(id: String, roomId: String, cat: String) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(rooms = s.rooms.map { if (it.id == roomId) it.copy(cat = cat.trim().take(30)) else it }, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** founder and moderators: the order of the rooms */
+    suspend fun reorderRooms(id: String, order: List<String>) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val byId = s.rooms.associateBy { it.id }
+        val sorted = order.mapNotNull { byId[it] } + s.rooms.filter { it.id !in order }
+        val n = s.copy(rooms = sorted, updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** founder and moderators: seconds between two messages of the same person in a room (0 = off) */
+    suspend fun setSlow(id: String, roomId: String, sec: Int) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val r = s.rooms.firstOrNull { it.id == roomId } ?: return
+        val n = s.copy(
+            rooms = s.rooms.map { if (it.id == roomId) it.copy(slow = sec.coerceIn(0, 3600)) else it },
+            log = (listOf(entry("slow", "", "#" + r.name + " · " + sec)) + s.log).take(100),
+            updatedAt = now(),
+        )
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun setRules(id: String, text: String) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(rules = text.trim().take(2000), log = (listOf(entry("rules")) + s.log).take(100), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    suspend fun setAutomod(id: String, words: List<String>, spam: Boolean) {
+        val s = get(id) ?: return
+        if (!s.canManage(me())) return
+        val clean = words.map { it.trim().lowercase().take(40) }.filter { it.isNotBlank() }.distinct().take(200)
+        val n = s.copy(words = clean, spam = spam, log = (listOf(entry("words", "", clean.size.toString() + (if (spam) " · spam" else ""))) + s.log).take(100), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    /** a moderator deleted someone's message in a room: written in the log */
+    suspend fun logDelete(conv: String, target: String) {
+        val (s, r) = ofConv(conv) ?: return
+        if (!s.canManage(me())) return
+        val n = s.copy(log = (listOf(entry("del", target, "#" + r.name)) + s.log).take(100), updatedAt = now())
+        store(n, s)
+        broadcast(n)
+    }
+
+    // the rules: accepted on this phone, once for every version of the text
+    private val rulesPrefs by lazy { Graph.app.getSharedPreferences("shard_rules", Context.MODE_PRIVATE) }
+    private fun rulesKey(s: Shard) = s.id + ":" + s.rules.hashCode()
+    fun mustAcceptRules(s: Shard) = s.rules.isNotBlank() && !s.canManage(me()) && !rulesPrefs.getBoolean(rulesKey(s), false)
+    fun acceptRules(s: Shard) { rulesPrefs.edit().putBoolean(rulesKey(s), true).apply() }
+
+    /** a word of the shard's list in this text, if any */
+    fun badWord(s: Shard, text: String): String? {
+        if (s.words.isEmpty()) return null
+        val low = text.lowercase()
+        return s.words.firstOrNull { w -> Regex("(^|[^\\p{L}\\p{N}])" + Regex.escape(w) + "($|[^\\p{L}\\p{N}])").containsMatchIn(low) }
+    }
+
+    private val lastBy = java.util.concurrent.ConcurrentHashMap<String, ArrayDeque<Pair<Long, String>>>()
+
+    /** what the shard's rules let through, on every phone: slow mode, words, repeated messages */
+    fun allowIncoming(s: Shard, r: ShardRoom, from: String, text: String, sentAt: Long): Boolean {
+        if (s.canManage(from)) return true
+        if (badWord(s, text) != null) return false
+        val key = s.conv(r) + "|" + from
+        val q = lastBy.getOrPut(key) { ArrayDeque() }
+        synchronized(q) {
+            val last = q.lastOrNull()
+            if (r.slow > 0 && last != null && sentAt - last.first < r.slow * 800L) return false
+            if (s.spam) {
+                if (text.isNotBlank() && q.any { it.second == text && sentAt - it.first < 60_000L }) return false
+                if (q.count { sentAt - it.first < 10_000L } >= 5) return false
+            }
+            q.addLast(sentAt to text)
+            while (q.size > 12) q.removeFirst()
+        }
+        return true
     }
 
     /** founder and moderators: a room where only they write, or a room for everyone again */
@@ -566,9 +750,12 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         return s.titles[pk] ?: when (pk) {
             s.owner -> t("Fondatore")
             in s.mods -> t("Moderatore")
-            else -> null
+            else -> s.rolesOf(pk).firstOrNull()?.name
         }
     }
+
+    /** the colour of someone's first role in a shard room (a theme key), if any */
+    fun roleColorFor(conv: String, pk: String): String? = ofConv(conv)?.first?.rolesOf(pk)?.firstOrNull { it.color.isNotBlank() }?.color
 
     /** only the owner names moderators (in a shard for everyone, anyone who is not kept out) */
     suspend fun setMod(id: String, pk: String, on: Boolean) {
@@ -577,6 +764,7 @@ class ShardManager(ctx: Context, private val scope: CoroutineScope) {
         val n = s.copy(
             mods = if (on) (s.mods + pk).distinct() else s.mods - pk,
             members = if (s.open) (if (on) (s.members + pk).distinct() else s.members - pk) else s.members,
+            log = (listOf(entry(if (on) "mod" else "unmod", pk)) + s.log).take(100),
             updatedAt = now(),
         )
         store(n, s)

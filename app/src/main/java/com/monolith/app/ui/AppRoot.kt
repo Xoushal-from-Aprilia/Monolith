@@ -408,6 +408,22 @@ private fun MainNav() {
                     CompositionLocalProvider(LocalNavScope provides this) { NewGroupScreen(nav) }
                 }
                 composable("groupinfo/{gid}") { entry -> com.monolith.app.ui.screens.GroupInfoScreen(nav, Uri.decode(entry.arguments?.getString("gid") ?: "")) }
+                composable("thread/{conv}/{root}") { entry ->
+                    CompositionLocalProvider(LocalNavScope provides this) {
+                        com.monolith.app.ui.screens.ThreadScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: ""), entry.arguments?.getString("root") ?: "")
+                    }
+                }
+                composable(
+                    "media/{conv}?search={search}",
+                    arguments = listOf(navArgument("conv") { type = NavType.StringType }, navArgument("search") { type = NavType.BoolType; defaultValue = false }),
+                ) { entry -> com.monolith.app.ui.screens.ChatMediaScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: ""), entry.arguments?.getBoolean("search") ?: false) }
+                composable(
+                    "video?path={path}",
+                    arguments = listOf(navArgument("path") { type = NavType.StringType; defaultValue = "" }),
+                    enterTransition = { fadeIn(tween(250)) }, popExitTransition = { fadeOut(tween(250)) },
+                ) { entry -> com.monolith.app.ui.screens.VideoViewer(nav, Uri.decode(entry.arguments?.getString("path") ?: "")) }
+                composable("duo/{pk}") { entry -> com.monolith.app.ui.screens.DuoScreen(nav, entry.arguments?.getString("pk") ?: "") }
+                composable("concert/{conv}") { entry -> com.monolith.app.ui.screens.ConcertScreen(nav, Uri.decode(entry.arguments?.getString("conv") ?: "")) }
                 composable("kid/{pk}") { entry -> com.monolith.app.kids.ChildScreen(nav, entry.arguments?.getString("pk") ?: "") }
                 composable("settings") {
                     CompositionLocalProvider(LocalNavScope provides this) { SettingsScreen(nav) }

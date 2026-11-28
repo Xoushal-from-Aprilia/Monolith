@@ -167,6 +167,7 @@ object ReminderScheduler {
         Graph.db.agenda().allNow().forEach { schedule(ctx, it) }
         BirthdayAlarm.schedule(ctx)
         ScheduledSender.rearmAll(ctx)
+        MessageReminders.rearmAll(ctx)
         // a birthday today that nobody announced yet (phone was off at nine)
         if (java.util.Calendar.getInstance().get(java.util.Calendar.HOUR_OF_DAY) >= 9) BirthdayAlarm.fire(ctx)
         WeeklyAlarm.schedule(ctx)
@@ -223,6 +224,7 @@ class ReminderReceiver : BroadcastReceiver() {
         const val ACTION_SEND = "monolith.reminder.SEND"
         const val ACTION_WEEK = "monolith.reminder.WEEK"
         const val ACTION_BACKUP = "monolith.reminder.BACKUP"
+        const val ACTION_MSG = "monolith.reminder.MSG"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -237,6 +239,7 @@ class ReminderReceiver : BroadcastReceiver() {
                     action == ACTION_WEEK -> WeeklyAlarm.fire(context)
                     action == ACTION_BACKUP -> com.monolith.app.core.AutoBackup.run(context)
                     action.startsWith(ACTION_SEND) && id != null -> ScheduledSender.fire(id)
+                    action.startsWith(ACTION_MSG) && id != null -> MessageReminders.fire(id)
                     action.startsWith(ACTION_SNOOZE) && id != null -> {
                         Graph.notifier.cancelReminder(id)
                         ReminderScheduler.snooze(context, id, occ, intent.getIntExtra("snooze", 10))
@@ -268,6 +271,46 @@ class ReminderReceiver : BroadcastReceiver() {
                 pending.finish()
             }
         }
+    }
+}
+
+/** a message that comes back as a reminder at the chosen time ("Ricordamelo") */
+object MessageReminders {
+    private fun pi(ctx: Context, id: String): PendingIntent {
+        val i = Intent(ctx, ReminderReceiver::class.java).setAction(ReminderReceiver.ACTION_MSG + "." + id).putExtra("id", id)
+        return PendingIntent.getBroadcast(ctx, ("mrem$id").hashCode(), i, PendingIntent.FLAG_IMMUTABLE or PendingIntent.FLAG_UPDATE_CURRENT)
+    }
+
+    fun add(ctx: Context, conv: String, msgId: String, preview: String, at: Long) {
+        val r = com.monolith.app.data.MsgReminder(java.util.UUID.randomUUID().toString(), conv, msgId, preview.take(160), at)
+        Graph.msgReminders.all.value.firstOrNull { it.msgId == msgId }?.let { cancel(ctx, it.id) }
+        Graph.msgReminders.add(r)
+        arm(ctx, r)
+    }
+
+    fun cancel(ctx: Context, id: String) {
+        Graph.msgReminders.remove(id)
+        runCatching { ctx.getSystemService(AlarmManager::class.java).cancel(pi(ctx, id)) }
+    }
+
+    private fun arm(ctx: Context, r: com.monolith.app.data.MsgReminder) {
+        val am = ctx.getSystemService(AlarmManager::class.java)
+        try {
+            if (Build.VERSION.SDK_INT >= 31 && !am.canScheduleExactAlarms()) am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.at, pi(ctx, r.id))
+            else am.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.at, pi(ctx, r.id))
+        } catch (_: SecurityException) {
+            am.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, r.at, pi(ctx, r.id))
+        }
+    }
+
+    fun fire(id: String) {
+        val r = Graph.msgReminders.get(id) ?: return
+        Graph.msgReminders.remove(id)
+        Graph.notifier.messageReminder(r)
+    }
+
+    fun rearmAll(ctx: Context) {
+        Graph.msgReminders.all.value.forEach { if (it.at <= now()) fire(it.id) else arm(ctx, it) }
     }
 }
 

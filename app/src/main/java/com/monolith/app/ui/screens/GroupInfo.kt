@@ -212,6 +212,7 @@ fun GroupInfoScreen(nav: NavHostController, gid: String) {
                             }
                         }
                     }
+                    item(key = "stone") { com.monolith.app.ui.components.GroupMonolithCard("g:$gid") }
                     // people who used the link and wait for a yes
                     if (isAdmin && waiting.isNotEmpty()) {
                         item(key = "asksLabel") { SectionLabel(t("Chiedono di entrare"), Modifier.padding(top = 8.dp)) }

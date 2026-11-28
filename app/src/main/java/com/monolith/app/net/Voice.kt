@@ -23,9 +23,26 @@ class VoiceRecorder(private val ctx: Context) {
     private var rec: MediaRecorder? = null
     private var file: File? = null
     private var startedAt = 0L
+    private var pausedAt = 0L
+    private var pausedTotal = 0L
 
     val isRecording get() = rec != null
-    fun elapsed(): Long = if (rec != null) now() - startedAt else 0L
+    val isPaused get() = pausedAt > 0L
+    /** recorded time, without the pauses */
+    fun elapsed(): Long = if (rec != null) (if (pausedAt > 0L) pausedAt else now()) - startedAt - pausedTotal else 0L
+
+    /** a pause in a long voice message (hands-free recording) */
+    fun pause(): Boolean {
+        val r = rec ?: return false
+        if (pausedAt > 0L) return true
+        return runCatching { r.pause(); pausedAt = now() }.isSuccess
+    }
+
+    fun resume(): Boolean {
+        val r = rec ?: return false
+        if (pausedAt == 0L) return true
+        return runCatching { r.resume(); pausedTotal += now() - pausedAt; pausedAt = 0L }.isSuccess
+    }
 
     fun start(): Boolean {
         stop(cancel = true)
@@ -45,6 +62,8 @@ class VoiceRecorder(private val ctx: Context) {
             rec = r
             file = f
             startedAt = now()
+            pausedAt = 0L
+            pausedTotal = 0L
             true
         } catch (e: Exception) {
             rec = null
@@ -56,7 +75,9 @@ class VoiceRecorder(private val ctx: Context) {
     fun stop(cancel: Boolean): Pair<File, Long>? {
         val r = rec ?: return null
         val f = file
-        val dur = now() - startedAt
+        val dur = elapsed()
+        pausedAt = 0L
+        pausedTotal = 0L
         rec = null
         file = null
         val ok = runCatching { r.stop() }.isSuccess

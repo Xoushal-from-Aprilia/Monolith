@@ -77,6 +77,11 @@ object Graph {
     lateinit var groupMeta: com.monolith.app.data.GroupMetaStore
     lateinit var joinAsks: com.monolith.app.data.JoinAsks
     lateinit var mentions: com.monolith.app.data.Mentions
+    lateinit var chatOrg: com.monolith.app.data.ChatOrg
+    lateinit var drafts: com.monolith.app.data.Drafts
+    lateinit var receipts: com.monolith.app.data.Receipts
+    lateinit var roomNotify: com.monolith.app.data.RoomNotify
+    lateinit var msgReminders: com.monolith.app.data.MsgReminders
 
     @Volatile
     var foreground = false
@@ -119,6 +124,11 @@ object Graph {
         groupMeta = com.monolith.app.data.GroupMetaStore(application)
         joinAsks = com.monolith.app.data.JoinAsks(application)
         mentions = com.monolith.app.data.Mentions(application)
+        chatOrg = com.monolith.app.data.ChatOrg(application)
+        drafts = com.monolith.app.data.Drafts(application)
+        receipts = com.monolith.app.data.Receipts(application)
+        roomNotify = com.monolith.app.data.RoomNotify(application)
+        msgReminders = com.monolith.app.data.MsgReminders(application)
         dev = com.monolith.app.net.DevChannel(application, scope)
         com.monolith.app.kids.Kids.init(application)
         together = com.monolith.app.net.Together(application)
@@ -183,6 +193,7 @@ object Graph {
         scheduled.clear(); pins.clear(); statuses.clear(); together.clear(); bondDays.clear(); favorites.clear(); saved.clear(); guard.clear(); medical.clear(); diary.setEnabled(false); diary.clear(); com.monolith.app.ui.screens.Countdowns.clear(); profileExtras.clear(); com.monolith.app.net.Badges.clear(ctx); nearby.clear(); com.monolith.app.core.AutoBackup.clear(ctx)
         com.monolith.app.kids.Kids.clear()
         hubs.clear(); groupMeta.clear(); joinAsks.clear(); mentions.clearAll(); com.monolith.app.net.Invites.clear()
+        chatOrg.clear(); drafts.clear(); receipts.clear(); roomNotify.clear(); msgReminders.clear()
         identity.reset()
         prefs.lastWrapSec = 0
         prefs.permissionsDone = false

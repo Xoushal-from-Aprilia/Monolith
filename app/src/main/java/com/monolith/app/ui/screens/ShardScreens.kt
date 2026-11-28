@@ -46,6 +46,13 @@ import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.PersonAdd
 import androidx.compose.material.icons.rounded.Tag
 import androidx.compose.material.icons.rounded.Campaign
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Gavel
+import androidx.compose.material.icons.rounded.HourglassTop
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsOff
+import androidx.compose.material.icons.rounded.SwapVert
+import androidx.compose.material.icons.rounded.Tune
 import androidx.compose.foundation.layout.widthIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.DropdownMenu
@@ -95,6 +102,15 @@ import com.monolith.app.ui.components.PulseDot
 import com.monolith.app.ui.components.SectionLabel
 import com.monolith.app.ui.components.bounceClick
 import kotlinx.coroutines.launch
+
+@Composable
+private fun RoomAction(icon: androidx.compose.ui.graphics.vector.ImageVector, label: String, onClick: () -> Unit) {
+    Row(Modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 24.dp, vertical = 14.dp), verticalAlignment = Alignment.CenterVertically) {
+        Icon(icon, null)
+        Spacer(Modifier.width(16.dp))
+        Text(label, style = MaterialTheme.typography.bodyLarge)
+    }
+}
 
 /** the mark of a shard for everyone, drawn by the app: a globe of lines */
 @Composable
@@ -254,6 +270,17 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     val waiting = asks.filter { it.target == "s:" + s.id && it.pk !in s.members }
     var qr by remember { mutableStateOf(false) }
     var modPicker by remember { mutableStateOf(false) }
+    var roomActions by remember { mutableStateOf<ShardRoom?>(null) }
+    var slowFor by remember { mutableStateOf<ShardRoom?>(null) }
+    var notifyFor by remember { mutableStateOf<String?>(null) }
+    var rolesSheet by remember { mutableStateOf(false) }
+    var rolesFor by remember { mutableStateOf<String?>(null) }
+    var reorder by remember { mutableStateOf(false) }
+    var rulesEdit by remember { mutableStateOf(false) }
+    var rulesRead by remember { mutableStateOf(false) }
+    var automod by remember { mutableStateOf(false) }
+    var modLog by remember { mutableStateOf(false) }
+    var stats by remember { mutableStateOf(false) }
 
     fun join(r: ShardRoom) {
         if (!Graph.shards.joinVoice(s.id, r.id)) Toast.makeText(ctx, t("La stanza è piena (massimo 4 persone)"), Toast.LENGTH_SHORT).show()
@@ -292,7 +319,13 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                         DropdownMenuItem(text = { Text(t("Nuova stanza")) }, onClick = { menu = false; roomDialog = true })
                         DropdownMenuItem(text = { Text(t("Nuova nota in bacheca")) }, onClick = { menu = false; noteDialog = true })
                         DropdownMenuItem(text = { Text(t("Messaggio di benvenuto")) }, onClick = { menu = false; welcomeDialog = true })
+                        DropdownMenuItem(text = { Text(t("Ordina e categorie")) }, onClick = { menu = false; reorder = true })
+                        DropdownMenuItem(text = { Text(t("Regole")) }, onClick = { menu = false; rulesEdit = true })
+                        DropdownMenuItem(text = { Text(t("Moderazione automatica")) }, onClick = { menu = false; automod = true })
+                        DropdownMenuItem(text = { Text(t("Registro della moderazione")) }, onClick = { menu = false; modLog = true })
+                        DropdownMenuItem(text = { Text(t("Statistiche")) }, onClick = { menu = false; stats = true })
                     }
+                    if (isOwner) DropdownMenuItem(text = { Text(t("Ruoli")) }, onClick = { menu = false; rolesSheet = true })
                     DropdownMenuItem(text = { Text(t("Nuovo evento")) }, onClick = { menu = false; eventDialog = true })
                     DropdownMenuItem(text = { Text(t("Esci dallo shard")) }, onClick = { menu = false; confirmLeave = true })
                 }
@@ -327,20 +360,38 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     }
                 }
             }
-            item(key = "textLabel") { SectionLabel(t("Stanze scritte")) }
-            items(s.rooms.filter { !it.voice && s.canSee(it, me) }, key = { "t" + it.id }) { r ->
+            if (s.rules.isNotBlank()) item(key = "rules") {
+                val must = Graph.shards.mustAcceptRules(s)
+                Surface(
+                    shape = RoundedCornerShape(18.dp), color = if (must) MaterialTheme.colorScheme.primaryContainer else MaterialTheme.colorScheme.surfaceContainerLow,
+                    modifier = Modifier.fillMaxWidth().padding(horizontal = 16.dp, vertical = 6.dp).bounceClick(0.98f) { rulesRead = true },
+                ) {
+                    Row(Modifier.padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Rounded.Gavel, null, Modifier.size(22.dp))
+                        Spacer(Modifier.width(12.dp))
+                        Text(if (must) t("Leggi e accetta le regole per scrivere") else t("Le regole dello shard"), style = MaterialTheme.typography.titleSmall, modifier = Modifier.weight(1f))
+                    }
+                }
+            }
+            s.rooms.filter { !it.voice && s.canSee(it, me) }.groupBy { it.cat }.forEach { (cat, list) ->
+            item(key = "cat-t-$cat") { SectionLabel(cat.ifBlank { t("Stanze scritte") }) }
+            items(list, key = { "t" + it.id }) { r ->
                 val conv = s.conv(r)
                 val n = unreadBy[conv] ?: 0
                 Row(
                     Modifier.fillMaxWidth().animateItem()
-                        .combinedClickable(onClick = { nav.navigate(Routes.chat(conv)) }, onLongClick = { if (canManage) roomMenu = r })
+                        .combinedClickable(onClick = { nav.navigate(Routes.chat(conv)) }, onLongClick = { roomActions = r })
                         .padding(horizontal = 20.dp, vertical = 10.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
-                    Icon(if (r.only != null) Icons.Rounded.Lock else if (r.ro) Icons.Rounded.Campaign else Icons.Rounded.Tag, null, Modifier.size(22.dp))
+                    Icon(if (r.only != null) Icons.Rounded.Lock else if (r.forum) Icons.Rounded.Forum else if (r.ro) Icons.Rounded.Campaign else Icons.Rounded.Tag, null, Modifier.size(22.dp))
                     Spacer(Modifier.width(14.dp))
                     Column(Modifier.weight(1f)) {
-                        Text(r.name, style = MaterialTheme.typography.titleMedium)
+                        Row(verticalAlignment = Alignment.CenterVertically) {
+                            Text(r.name, style = MaterialTheme.typography.titleMedium)
+                            if (r.slow > 0) { Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.HourglassTop, t("Modalità lenta"), Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                            if ((Graph.roomNotify.all.collectAsState().value[conv] ?: 0) == 2) { Spacer(Modifier.width(6.dp)); Icon(Icons.Rounded.NotificationsOff, null, Modifier.size(14.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant) }
+                        }
                         if (r.ro && lastBy[conv] == null) Text(t("Scrivono solo il fondatore e i moderatori"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                         lastBy[conv]?.let { m ->
                             Text(
@@ -361,6 +412,7 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                         }
                     }
                 }
+            }
             }
             if (!s.open || s.rooms.any { it.voice }) item(key = "voiceLabel") { SectionLabel(t("Stanze vocali"), Modifier.padding(top = 10.dp)) }
             items(s.rooms.filter { it.voice && s.canSee(it, me) }, key = { "v" + it.id }) { r ->
@@ -485,7 +537,10 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                             s.titles[pk],
                         ).joinToString(" · ").ifBlank { null }
                         if (role != null) Text(role, style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        val rs = s.rolesOf(pk)
+                        if (rs.isNotEmpty()) Row(Modifier.padding(top = 3.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) { rs.take(3).forEach { RoleChip(it) } }
                     }
+                    if (isOwner && pk != me && s.roles.isNotEmpty()) TextButton(onClick = { rolesFor = pk }) { Text(t("Ruoli")) }
                     val canTouch = pk != me && pk != s.owner && (isOwner || (canManage && pk !in s.mods))
                     if (canManage && !canTouch) {
                         IconButton(onClick = { titleFor = pk }) { Icon(Icons.Rounded.Badge, t("Dai un titolo")) }
@@ -513,6 +568,29 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
     }
 
     if (editSheet) ShardEditSheet(s, onClose = { editSheet = false })
+    roomActions?.let { r ->
+        MonoSheet(onDismissRequest = { roomActions = null }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(bottom = 24.dp)) {
+                Text((if (r.voice) "🔊 " else "#") + r.name, style = MaterialTheme.typography.titleLarge, modifier = Modifier.padding(horizontal = 24.dp, vertical = 4.dp))
+                RoomAction(Icons.Rounded.Notifications, t("Notifiche")) { roomActions = null; notifyFor = s.conv(r) }
+                if (canManage) {
+                    RoomAction(Icons.Rounded.Tune, t("Gestisci la stanza")) { roomActions = null; roomMenu = r }
+                    if (!r.voice) RoomAction(Icons.Rounded.HourglassTop, t("Modalità lenta") + if (r.slow > 0) " · " + r.slow + " s" else "") { roomActions = null; slowFor = r }
+                    RoomAction(Icons.Rounded.SwapVert, t("Ordina e categorie")) { roomActions = null; reorder = true }
+                }
+            }
+        }
+    }
+    slowFor?.let { r -> SlowDialog(s, r) { slowFor = null } }
+    notifyFor?.let { c -> NotifyDialog(c) { notifyFor = null } }
+    if (rolesSheet) RolesSheet(s) { rolesSheet = false }
+    rolesFor?.let { pk -> AssignRolesDialog(s, pk, byPk[pk]?.displayName ?: t("Qualcuno")) { rolesFor = null } }
+    if (reorder) ReorderSheet(s) { reorder = false }
+    if (rulesEdit) RulesEditDialog(s) { rulesEdit = false }
+    if (rulesRead) RulesDialog(s, onDismiss = { rulesRead = false }) { rulesRead = false }
+    if (automod) AutomodDialog(s) { automod = false }
+    if (modLog) ModLogSheet(s, byPk) { modLog = false }
+    if (stats) ShardStatsSheet(s, byPk) { stats = false }
     if (modPicker) {
         // shard for everyone: any person met in the rooms can become a moderator
         val state = rememberModalBottomSheetState(skipPartiallyExpanded = true)
@@ -659,17 +737,20 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
         var voice by remember { mutableStateOf(false) }
         var private by remember { mutableStateOf(false) }
         var ro by remember { mutableStateOf(false) }
+        var forum by remember { mutableStateOf(false) }
         var chosen by remember { mutableStateOf(setOf<String>()) }
         MonoDialog(
             onDismissRequest = { roomDialog = false },
             title = { Text(t("Nuova stanza")) },
             text = {
                 Column {
-                    if (!s.open) SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
-                        listOf(t("Scritta"), t("Vocale")).forEachIndexed { i, label ->
+                    SingleChoiceSegmentedButtonRow(Modifier.fillMaxWidth()) {
+                        val kinds = if (s.open) listOf(t("Scritta"), t("Forum")) else listOf(t("Scritta"), t("Forum"), t("Vocale"))
+                        kinds.forEachIndexed { i, label ->
                             SegmentedButton(
-                                selected = voice == (i == 1), onClick = { voice = i == 1 },
-                                shape = SegmentedButtonDefaults.itemShape(i, 2), icon = {},
+                                selected = when (i) { 0 -> !voice && !forum; 1 -> forum; else -> voice },
+                                onClick = { voice = i == 2; forum = i == 1 },
+                                shape = SegmentedButtonDefaults.itemShape(i, kinds.size), icon = {},
                                 colors = SegmentedButtonDefaults.colors(activeContainerColor = MaterialTheme.colorScheme.primary, activeContentColor = MaterialTheme.colorScheme.onPrimary),
                             ) { Text(label) }
                         }
@@ -706,7 +787,7 @@ fun ShardBody(nav: NavHostController, id: String, embedded: Boolean) {
                     roomDialog = false
                     Graph.scope.launch {
                         val before = Graph.shards.get(s.id)?.rooms?.map { it.id }?.toSet() ?: emptySet()
-                        if (private && !s.open) Graph.shards.addPrivateRoom(s.id, name, voice, chosen.toList()) else Graph.shards.addRoom(s.id, name, voice && !s.open)
+                        if (private && !s.open) Graph.shards.addPrivateRoom(s.id, name, voice, chosen.toList()) else Graph.shards.addRoom(s.id, name, voice && !s.open, forum = forum)
                         if (ro && !voice) Graph.shards.get(s.id)?.rooms?.firstOrNull { it.id !in before }?.let { Graph.shards.setRoomReadOnly(s.id, it.id, true) }
                     }
                 }, enabled = name.isNotBlank()) { Text(t("Crea")) }

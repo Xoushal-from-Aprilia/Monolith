@@ -368,6 +368,21 @@ class Notifier(private val ctx: Context) {
     fun togetherShared(from: String, what: String, kind: Int) =
         simple(("tog$kind$what").hashCode(), if (kind == 0) t("{0} ti ha aggiunto a delle spese condivise", from) else t("{0} ti ha invitato a un'abitudine", from), what, if (kind == 0) "💶" else "✅", openApp(19) { putExtra(EXTRA_TAB, 0) })
 
+    /** a friend opened the joined screen with me */
+    fun duoInvite(pk: String, name: String, emoji: String) =
+        simple(("duo$pk").hashCode(), t("{0} vuole unire gli schermi", name), t("Avvicina il tuo telefono al suo e tocca qui"), emoji,
+            openApp(("duo$pk").hashCode()) { putExtra(EXTRA_ROUTE, "duo/$pk") })
+
+    /** someone starts a concert in a group */
+    fun concertInvite(conv: String, name: String, group: String) =
+        simple(("concert$conv").hashCode(), t("{0} avvia un concerto in {1}", name, group), t("Tocca per suonare insieme: ogni telefono fa una parte"), "🎵",
+            openApp(("concert$conv").hashCode()) { putExtra(EXTRA_ROUTE, "concert/" + android.net.Uri.encode(conv)) })
+
+    /** "Ricordamelo": a message comes back at the chosen time */
+    fun messageReminder(r: com.monolith.app.data.MsgReminder) =
+        simple(("mrem" + r.id).hashCode(), t("Ti avevo promesso di ricordartelo"), r.preview, "⏰",
+            openApp(("mrem" + r.id).hashCode()) { putExtra(EXTRA_ROUTE, "chat/" + android.net.Uri.encode(r.conv) + "?focus=" + android.net.Uri.encode(r.msgId)) })
+
     /** I'm inside a shard for everyone (once) */
     fun hubJoined(shard: String) =
         simple(("hub$shard").hashCode(), t("Sei dentro {0}", shard), t("Lo Shard di tutti gli utenti di Monolith: annunci e chiacchiere con tutta la community"), "🌐", openApp(23) { putExtra(EXTRA_TAB, 4) })

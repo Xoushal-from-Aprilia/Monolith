@@ -102,6 +102,19 @@ import androidx.compose.material.icons.rounded.Info
 import androidx.compose.material.icons.rounded.Block
 import androidx.compose.material.icons.rounded.PersonRemove
 import androidx.compose.material.icons.rounded.Link
+import androidx.compose.material.icons.rounded.PhotoLibrary
+import androidx.compose.material.icons.rounded.Search
+import androidx.compose.material.icons.rounded.Devices
+import androidx.compose.material.icons.rounded.MusicNote
+import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Forum
+import androidx.compose.material.icons.rounded.Checklist
+import androidx.compose.material.icons.rounded.Alarm
+import androidx.compose.material.icons.rounded.PushPin
+import androidx.compose.material.icons.rounded.Archive
+import androidx.compose.material.icons.rounded.Unarchive
+import androidx.compose.material.icons.rounded.MarkChatUnread
+import androidx.compose.material.icons.rounded.MarkChatRead
 import androidx.compose.material.icons.rounded.Vibration
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.AlertDialog
@@ -140,6 +153,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberUpdatedState
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.saveable.rememberSaveable
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
@@ -203,9 +217,7 @@ import org.json.JSONObject
 import java.io.File
 import com.monolith.app.ui.components.MonoSheet
 import com.monolith.app.ui.components.MonoDialog
-import androidx.compose.material.icons.rounded.Search
 import androidx.compose.material.icons.rounded.Schedule
-import androidx.compose.material.icons.rounded.PushPin
 import androidx.compose.material.icons.rounded.AutoAwesome
 
 private data class ConvRow(
@@ -247,6 +259,12 @@ fun ChatListScreen(nav: NavHostController) {
     val favs by Graph.favorites.all.collectAsState()
     val mentions by Graph.mentions.convs.collectAsState()
     var pasteLink by remember { mutableStateOf(false) }
+    val pinnedChats by Graph.chatOrg.pinned.collectAsState()
+    val archived by Graph.chatOrg.archived.collectAsState()
+    val markedUnread by Graph.chatOrg.unread.collectAsState()
+    val drafts by Graph.drafts.all.collectAsState()
+    var folder by rememberSaveable { mutableIntStateOf(0) }
+    var rowMenu by remember { mutableStateOf<ConvRow?>(null) }
     val byPk = friends.associateBy { it.pubkey }
     val lastBy = last.associateBy { it.convId }
     val unreadBy = unread.associate { it.convId to it.n }
@@ -261,7 +279,20 @@ fun ChatListScreen(nav: NavHostController) {
             val m = lastBy[c]
             add(ConvRow(c, g.name, g.emoji, m, unreadBy[c] ?: 0, false, true, m?.ts ?: g.createdAt))
         }
-    }.sortedWith(compareByDescending<ConvRow> { !it.isGroup && it.conv in favs }.thenByDescending { it.sort })
+        // notes to myself
+        lastBy[Messenger.SELF]?.let { m -> add(ConvRow(Messenger.SELF, t("Note per te"), "📝", m, 0, false, false, m.ts)) }
+    }.sortedWith(compareByDescending<ConvRow> { it.conv in pinnedChats }.thenByDescending { !it.isGroup && it.conv in favs }.thenByDescending { it.sort })
+    // folders: all, unread, friends, groups, archived
+    val shown = rows.filter { r ->
+        val arch = r.conv in archived
+        when (folder) {
+            1 -> !arch && (r.unread > 0 || r.conv in markedUnread)
+            2 -> !arch && !r.isGroup
+            3 -> !arch && r.isGroup
+            4 -> arch
+            else -> !arch
+        }
+    }
     val onlineFriends = friends.filter { it.status == FriendStatus.FRIEND && isOnline(it.pubkey) }
 
     Box(Modifier.fillMaxSize()) {
@@ -285,6 +316,17 @@ fun ChatListScreen(nav: NavHostController) {
                 )
             }
             if (weeklyReady) item(key = "weekly") { WeeklyCard { nav.navigate("wrapped") } }
+            if (rows.isNotEmpty()) item(key = "folders") {
+                val archUnread = rows.filter { it.conv in archived }.sumOf { it.unread }
+                Row(Modifier.fillMaxWidth().horizontalScroll(rememberScrollState()).padding(horizontal = 16.dp, vertical = 4.dp), horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    listOf(t("Tutte"), t("Non lette"), t("Amici"), t("Gruppi"), t("Archiviate") + if (archUnread > 0) " · $archUnread" else "").forEachIndexed { i, label ->
+                        androidx.compose.material3.FilterChip(
+                            selected = folder == i, onClick = { folder = i }, label = { Text(label) },
+                            colors = androidx.compose.material3.FilterChipDefaults.filterChipColors(selectedContainerColor = MaterialTheme.colorScheme.primary, selectedLabelColor = MaterialTheme.colorScheme.onPrimary),
+                        )
+                    }
+                }
+            }
             if (rows.isEmpty()) {
                 item(key = "empty") {
                     EmptyState(
@@ -294,8 +336,15 @@ fun ChatListScreen(nav: NavHostController) {
                     )
                 }
             }
-            items(rows, key = { it.conv }) { r ->
-                ConversationRow(r, typing[r.conv]?.takeIf { it.second > now() }?.first, byPk, Modifier.animateItem(), mention = r.conv in mentions && r.unread > 0) { nav.navigate(Routes.chat(r.conv)) }
+            if (rows.isNotEmpty() && shown.isEmpty()) item(key = "folderEmpty") {
+                Text(t("Niente qui."), color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(24.dp))
+            }
+            items(shown, key = { it.conv }) { r ->
+                ConversationRow(
+                    r, typing[r.conv]?.takeIf { it.second > now() }?.first, byPk, Modifier.animateItem(), mention = r.conv in mentions && r.unread > 0,
+                    draft = drafts[r.conv], pinned = r.conv in pinnedChats, markedUnread = r.conv in markedUnread,
+                    onLongClick = { rowMenu = r },
+                ) { nav.navigate(Routes.chat(r.conv)) }
             }
         }
         ExtendedFloatingActionButton(
@@ -311,6 +360,27 @@ fun ChatListScreen(nav: NavHostController) {
 
     if (statusSheet) StatusSheet { statusSheet = false }
     if (pasteLink) PasteLinkDialog { pasteLink = false }
+    rowMenu?.let { r ->
+        MonoSheet(onDismissRequest = { rowMenu = null }, containerColor = MaterialTheme.colorScheme.surfaceContainerLow) {
+            Column(Modifier.padding(bottom = 24.dp)) {
+                Row(Modifier.padding(horizontal = 24.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
+                    Avatar(r.emoji, 40.dp)
+                    Spacer(Modifier.width(12.dp))
+                    Text(r.title, style = MaterialTheme.typography.titleMedium)
+                }
+                Spacer(Modifier.height(8.dp))
+                val pin = r.conv in pinnedChats
+                ActionRow(Icons.Rounded.PushPin, if (pin) t("Togli dalla cima") else t("Fissa in alto")) { Graph.chatOrg.setPinned(r.conv, !pin); rowMenu = null }
+                val arch = r.conv in archived
+                ActionRow(if (arch) Icons.Rounded.Unarchive else Icons.Rounded.Archive, if (arch) t("Togli dall'archivio") else t("Archivia")) { Graph.chatOrg.setArchived(r.conv, !arch); rowMenu = null }
+                if (r.unread > 0 || r.conv in markedUnread) {
+                    ActionRow(Icons.Rounded.MarkChatRead, t("Segna come letta")) { Graph.chatOrg.setUnread(r.conv, false); Graph.scope.launch { Graph.messenger.markRead(r.conv) }; rowMenu = null }
+                } else {
+                    ActionRow(Icons.Rounded.MarkChatUnread, t("Segna come da leggere")) { Graph.chatOrg.setUnread(r.conv, true); rowMenu = null }
+                }
+            }
+        }
+    }
     statusOf?.let { (f, st) ->
         StatusDialog(f, st, onClose = { statusOf = null }, onWrite = { nav.navigate(Routes.chat(f.pubkey)) })
     }
@@ -330,6 +400,17 @@ fun ChatListScreen(nav: NavHostController) {
                     }
                     Spacer(Modifier.width(16.dp))
                     Text(t("Nuovo gruppo"), style = MaterialTheme.typography.titleMedium)
+                }
+                Row(
+                    Modifier.fillMaxWidth().bounceClick(0.98f) { newChat = false; nav.navigate(Routes.chat(Messenger.SELF)) }.padding(horizontal = 24.dp, vertical = 12.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.surfaceContainerHighest), contentAlignment = Alignment.Center) { Text("📝", fontSize = 22.sp) }
+                    Spacer(Modifier.width(16.dp))
+                    Column {
+                        Text(t("Note per te"), style = MaterialTheme.typography.titleMedium)
+                        Text(t("Appunti, link e foto che restano solo sul tuo telefono"), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
                 }
                 if (!com.monolith.app.kids.Kids.edition) Row(
                     Modifier.fillMaxWidth().bounceClick(0.98f) { newChat = false; pasteLink = true }.padding(horizontal = 24.dp, vertical = 12.dp),
@@ -365,8 +446,19 @@ fun ChatListScreen(nav: NavHostController) {
 }
 
 @Composable
-private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, Friend>, modifier: Modifier, mention: Boolean = false, onClick: () -> Unit) {
-    Row(modifier.fillMaxWidth().bounceClick(0.98f, onClick = onClick).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
+private fun ConversationRow(
+    r: ConvRow,
+    typingPk: String?,
+    people: Map<String, Friend>,
+    modifier: Modifier,
+    mention: Boolean = false,
+    draft: String? = null,
+    pinned: Boolean = false,
+    markedUnread: Boolean = false,
+    onLongClick: () -> Unit = {},
+    onClick: () -> Unit,
+) {
+    Row(modifier.fillMaxWidth().combinedClickable(onClick = onClick, onLongClick = onLongClick).padding(horizontal = 20.dp, vertical = 10.dp), verticalAlignment = Alignment.CenterVertically) {
         Avatar(r.emoji, 54.dp, Modifier.sharedElementKey("avatar-" + r.conv), online = r.online)
         Spacer(Modifier.width(14.dp))
         Column(Modifier.weight(1f)) {
@@ -385,6 +477,11 @@ private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, F
                         Spacer(Modifier.width(6.dp))
                         TypingDots()
                     }
+                } else if (!draft.isNullOrBlank()) {
+                    Text(
+                        t("Bozza") + ": " + draft.replace('\n', ' '), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.error,
+                        maxLines = 1, overflow = TextOverflow.Ellipsis,
+                    )
                 } else {
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         val m = r.last
@@ -406,8 +503,13 @@ private fun ConversationRow(r: ConvRow, typingPk: String?, people: Map<String, F
         }
         Spacer(Modifier.width(8.dp))
         Column(horizontalAlignment = Alignment.End) {
-            Text(r.last?.let { Fmt.chatStamp(it.ts) } ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            Row(verticalAlignment = Alignment.CenterVertically) {
+                if (pinned) { Icon(Icons.Rounded.PushPin, t("Fissata"), Modifier.size(13.dp), tint = MaterialTheme.colorScheme.onSurfaceVariant); Spacer(Modifier.width(4.dp)) }
+                Text(r.last?.let { Fmt.chatStamp(it.ts) } ?: "", style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+            }
             Spacer(Modifier.height(6.dp))
+            // marked as unread by hand
+            if (markedUnread && r.unread == 0) Box(Modifier.size(12.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary))
             AnimatedVisibility(r.unread > 0, enter = scaleIn(Motion.bouncy()), exit = scaleOut()) {
                 Row(verticalAlignment = Alignment.CenterVertically) {
                     // someone tagged me in there
@@ -437,6 +539,8 @@ internal class TagCtx(
     val rooms: Map<String, String>,
     val onRoom: (String) -> Unit,
     val titleOf: (String) -> String?,
+    /** the colour of someone's role in a shard */
+    val colorOf: (String) -> Color? = { null },
 )
 
 private sealed class ChatItem(val key: String) {
@@ -477,8 +581,24 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     val roomOf = remember(conv, shardsAll) { Graph.shards.ofConv(conv) }
     val isHub = roomOf?.first?.open == true
     val gMeta = if (isGroup && !isRoom) metaAll[conv.removePrefix("g:")] else null
+    // forum rooms have a page of their own: posts with a title, each with its thread
+    roomOf?.let { (fs, fr) -> if (fr.forum) { ForumScreen(nav, conv, fs, fr); return } }
+    val isSelf = conv == Messenger.SELF
+    val dark = com.monolith.app.ui.theme.LocalDark.current
 
-    var text by rememberSaveable(conv) { mutableStateOf("") }
+    var text by rememberSaveable(conv) { mutableStateOf(Graph.drafts.get(conv)) }
+    var selecting by remember { mutableStateOf(setOf<String>()) }
+    var forwardMany by remember { mutableStateOf<List<Message>>(emptyList()) }
+    var readBy by remember { mutableStateOf<Message?>(null) }
+    var remindFor by remember { mutableStateOf<Message?>(null) }
+    var notifyDialog by remember { mutableStateOf(false) }
+    var rulesOpen by remember { mutableStateOf(false) }
+    var slowUntil by remember { mutableLongStateOf(0L) }
+    var locked by remember { mutableStateOf(false) }
+    var recPaused by remember { mutableStateOf(false) }
+    var preview by remember { mutableStateOf<Pair<File, Long>?>(null) }
+    // what you started writing stays here until you send it
+    LaunchedEffect(text) { delay(400); Graph.drafts.set(conv, text) }
     var menu by remember { mutableStateOf(false) }
     var attach by remember { mutableStateOf(false) }
     var shareEvent by remember { mutableStateOf(false) }
@@ -513,7 +633,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             VoicePlayer.stop()
         }
     }
-    LaunchedEffect(conv) { if (!isGroup) Graph.rtc.ensureConnected(conv) }
+    LaunchedEffect(conv) { if (!isGroup && !isSelf) Graph.rtc.ensureConnected(conv) }
+    // slow mode: the time of my last message in the room
+    LaunchedEffect(roomOf?.second?.slow, messages.firstOrNull { it.outgoing }?.id) {
+        val r = roomOf ?: return@LaunchedEffect
+        if (r.second.slow <= 0 || r.first.canManage(myPub)) { slowUntil = 0L; return@LaunchedEffect }
+        val last = messages.firstOrNull { it.outgoing && it.kind != "system" }?.ts ?: 0L
+        slowUntil = maxOf(slowUntil, last + r.second.slow * 1000L)
+    }
+    val recElapsed by produceState(0L, locked, recPaused) { while (locked) { value = recorder.elapsed(); delay(200) } }
     ShakeToNudge(conv)
     EarForVoice()
     val guarded by Graph.guard.blocked.collectAsState()
@@ -538,29 +666,36 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
             rooms = roomOf?.first?.let { s -> s.rooms.filter { !it.voice && s.canSee(it, myPub) }.associate { it.name to s.conv(it) } } ?: emptyMap(),
             onRoom = { c -> if (c != conv) nav.navigate(Routes.chat(c)) },
             titleOf = { pk -> if (isRoom) Graph.shards.titleFor(conv, pk) else Graph.groupMeta.titleFor(group, pk) },
+            colorOf = { pk ->
+                if (!isRoom) null else Graph.shards.roleColorFor(conv, pk)?.let { key -> com.monolith.app.ui.theme.Palettes.byKey(key).let { Color(if (dark) it.dark else it.light) } }
+            },
         )
     }
-    val title = if (isGroup) group?.name ?: t("Gruppo") else friend?.displayName ?: t("Chat")
-    val emoji = if (isGroup) group?.emoji ?: "💬" else friend?.emoji ?: "🙂"
+    val title = if (isSelf) t("Note per te") else if (isGroup) group?.name ?: t("Gruppo") else friend?.displayName ?: t("Chat")
+    val emoji = if (isSelf) "📝" else if (isGroup) group?.emoji ?: "💬" else friend?.emoji ?: "🙂"
     val typing = typingMap[conv]?.takeIf { it.second > now() && tick >= 0 }
     val isOn = !isGroup && now() - (online[conv] ?: 0L) < 100_000L
     val ttl = setting?.ttlSec ?: 0L
     val subtitle = when {
         typing != null -> (if (isGroup) (names[typing.first]?.displayName ?: "") + " " else "") + t("sta scrivendo…")
+        isSelf -> t("Solo sul tuo telefono")
         isHub -> t("Per tutti gli utenti di Monolith")
         isGroup -> group?.memberList()?.let { t("{0} membri", it.size) } ?: ""
         isOn -> t("online")
         (friend?.lastSeen ?: 0L) > 0L -> t("ultimo accesso {0}", Fmt.ago(friend?.lastSeen ?: 0L))
         else -> "@" + (friend?.username ?: "")
     }
-    val canCall = !isRoom && if (isGroup) (group?.memberList()?.size ?: 99) <= CallManager.MAX_PEOPLE else friend?.status == FriendStatus.FRIEND
+    val canCall = !isRoom && !isSelf && if (isGroup) (group?.memberList()?.size ?: 99) <= CallManager.MAX_PEOPLE else friend?.status == FriendStatus.FRIEND
     val reactBy = remember(reactions) { reactions.groupBy { it.msgId } }
     val votesBy = remember(votes) { votes.groupBy { it.msgId } }
 
-    val chatItems = remember(messages, names) {
+    val threadOf = remember(messages) { messages.associate { it.id to extraOf(it).optString("th") }.filterValues { it.isNotBlank() } }
+    val threads = remember(threadOf, messages) { messages.filter { it.id in threadOf }.groupBy({ threadOf[it.id]!! }, { it.ts }) }
+    val chatItems = remember(messages, names, threadOf) {
         val out = ArrayList<ChatItem>()
-        messages.forEachIndexed { i, m ->
-            val older = messages.getOrNull(i + 1)
+        val main = messages.filter { it.id !in threadOf }
+        main.forEachIndexed { i, m ->
+            val older = main.getOrNull(i + 1)
             val showName = isGroup && !m.outgoing && m.kind != "system" && (older == null || older.sender != m.sender || older.kind == "system")
             out.add(ChatItem.Msg(m, showName))
             if (older == null || !Fmt.sameDay(older.ts, m.ts)) {
@@ -575,6 +710,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
     // ---- launchers
     val pickPhoto = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) { PendingPhoto.set(uri, conv, replyRef()); replyTo = null; nav.navigate("photoedit") }
+    }
+    fun tooBig(ok: Boolean) {
+        if (!ok) Graph.scope.launch(kotlinx.coroutines.Dispatchers.Main) { Toast.makeText(ctx, t("Troppo grande: al massimo 8 MB"), Toast.LENGTH_LONG).show() }
+    }
+    val pickVideo = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
+        if (uri != null) Graph.scope.launch { tooBig(Graph.messenger.sendVideo(conv, uri)) }
+    }
+    val pickFile = rememberLauncherForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) Graph.scope.launch { tooBig(Graph.messenger.sendFile(conv, uri)) }
     }
     val pickOnce = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri ->
         if (uri != null) { PendingPhoto.set(uri, conv, null, once = true); nav.navigate("photoedit") }
@@ -623,12 +767,23 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
 
     GroupTheme(gMeta?.color.orEmpty()) {
     Column(Modifier.fillMaxSize().background(MaterialTheme.colorScheme.background).imePadding()) {
-        // ---- top bar
-        Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
+        // ---- top bar (or the bar of the chosen messages)
+        val chosen = messages.filter { it.id in selecting }
+        if (selecting.isNotEmpty()) SelectionBar(
+            chosen.size,
+            canCopy = chosen.any { it.text.isNotBlank() },
+            canDeleteForAll = !isSelf && chosen.all { it.outgoing && it.kind != "deleted" && it.kind != "system" },
+            onClose = { selecting = emptySet() },
+            onCopy = { copyMessages(ctx, chosen, names); selecting = emptySet() },
+            onForward = { forwardMany = chosen.filter { it.kind != "system" && it.kind != "deleted" && it.kind != "call" }; selecting = emptySet() },
+            onDeleteMe = { val l = chosen; selecting = emptySet(); Graph.scope.launch { l.forEach { Graph.messenger.deleteForMe(it) } } },
+            onDeleteAll = { val l = chosen; selecting = emptySet(); Graph.scope.launch { l.forEach { Graph.messenger.deleteForEveryone(it) } } },
+        ) else Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 4.dp, vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
                 IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
                 fun openInfo() {
                     when {
+                        isSelf -> {}
                         !isGroup -> nav.navigate(Routes.profile(conv))
                         roomOf != null -> nav.navigate(Routes.shard(roomOf.first.id))
                         !com.monolith.app.net.Shard.isHiddenGroup(conv.removePrefix("g:")) -> nav.navigate("groupinfo/" + Uri.encode(conv.removePrefix("g:")))
@@ -670,7 +825,15 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         if (isGroup && !isRoom && !com.monolith.app.net.Shard.isHiddenGroup(conv.removePrefix("g:"))) {
                             DropdownMenuItem(text = { Text(t("Info gruppo")) }, leadingIcon = { Icon(Icons.Rounded.Info, null) }, onClick = { menu = false; nav.navigate("groupinfo/" + Uri.encode(conv.removePrefix("g:"))) })
                         }
-                        DropdownMenuItem(text = { Text(t("Trillo")) }, leadingIcon = { Icon(Icons.Rounded.Vibration, null) }, onClick = {
+                        DropdownMenuItem(text = { Text(t("Media, link e file")) }, leadingIcon = { Icon(Icons.Rounded.PhotoLibrary, null) }, onClick = { menu = false; nav.navigate("media/" + Uri.encode(conv) + "?search=false") })
+                        DropdownMenuItem(text = { Text(t("Cerca nella chat")) }, leadingIcon = { Icon(Icons.Rounded.Search, null) }, onClick = { menu = false; nav.navigate("media/" + Uri.encode(conv) + "?search=true") })
+                        if (!isGroup && !isSelf && friend?.status == FriendStatus.FRIEND) {
+                            DropdownMenuItem(text = { Text(t("Schermo unito")) }, leadingIcon = { Icon(Icons.Rounded.Devices, null) }, onClick = { menu = false; nav.navigate("duo/$conv") })
+                        }
+                        if ((!kidLimit || kidRules.games) && (isGroup && !isHub && !com.monolith.app.net.Shard.isHiddenGroup(conv.removePrefix("g:")) || (isRoom && !isHub))) {
+                            DropdownMenuItem(text = { Text(t("Concerto")) }, leadingIcon = { Icon(Icons.Rounded.MusicNote, null) }, onClick = { menu = false; nav.navigate("concert/" + Uri.encode(conv)) })
+                        }
+                        if (!isSelf) DropdownMenuItem(text = { Text(t("Trillo")) }, leadingIcon = { Icon(Icons.Rounded.Vibration, null) }, onClick = {
                             menu = false
                             haptics.performHapticFeedback(HapticFeedbackType.LongPress)
                             Graph.scope.launch { Graph.messenger.sendNudge(conv) }
@@ -678,7 +841,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         DropdownMenuItem(text = { Text(t("Messaggi effimeri")) }, leadingIcon = { Icon(Icons.Rounded.Timer, null) }, onClick = { menu = false; ttlDialog = true })
                         DropdownMenuItem(text = { Text(t("Sfondo")) }, leadingIcon = { Icon(Icons.Rounded.Wallpaper, null) }, onClick = { menu = false; wallSheet = true })
                         val blocked = conv in guarded
-                        DropdownMenuItem(
+                        if (!isSelf) DropdownMenuItem(
                             text = { Text(if (blocked) t("Riattiva gli screenshot") else t("Blocca gli screenshot")) },
                             leadingIcon = { Icon(Icons.Rounded.Screenshot, null) },
                             onClick = { menu = false; Graph.scope.launch { Graph.messenger.setScreenBlock(conv, !blocked) } },
@@ -686,9 +849,9 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         if (isGroup) {
                             val muted = setting?.muted == true
                             DropdownMenuItem(
-                                text = { Text(if (muted) t("Riattiva le notifiche") else t("Silenzia le notifiche")) },
-                                leadingIcon = { Icon(if (muted) Icons.Rounded.Notifications else Icons.Rounded.NotificationsOff, null) },
-                                onClick = { menu = false; Graph.scope.launch { Graph.messenger.setMuted(conv, !muted) } },
+                                text = { Text(t("Notifiche")) },
+                                leadingIcon = { Icon(if (muted) Icons.Rounded.NotificationsOff else Icons.Rounded.Notifications, null) },
+                                onClick = { menu = false; notifyDialog = true },
                             )
                         }
                         DropdownMenuItem(text = { Text(t("Svuota chat")) }, onClick = { menu = false; confirm = "clear" })
@@ -736,12 +899,19 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                             Text(item.label, style = MaterialTheme.typography.labelMedium, modifier = Modifier.padding(horizontal = 12.dp, vertical = 4.dp))
                         }
                     }
-                    is ChatItem.Msg -> MessageRow(
+                    is ChatItem.Msg -> Box(
+                        Modifier.animateItem().clip(RoundedCornerShape(14.dp))
+                            .background(if (item.m.id in selecting) MaterialTheme.colorScheme.primary.copy(alpha = 0.14f) else Color.Transparent),
+                    ) {
+                    MessageRow(
                         item.m, item.showName, names, myPub,
                         reactBy[item.m.id].orEmpty(), votesBy[item.m.id].orEmpty(),
                         isNew = item.m.ts > openedAt,
-                        modifier = Modifier.animateItem(),
-                        onLongPress = { haptics.performHapticFeedback(HapticFeedbackType.LongPress); actionsFor = it },
+                        modifier = Modifier,
+                        onLongPress = {
+                            haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                            if (selecting.isNotEmpty()) selecting = if (it.id in selecting) selecting - it.id else selecting + it.id else actionsFor = it
+                        },
                         onPhoto = { path -> nav.navigate(Routes.photo(path, "photo-" + item.m.id)) },
                         onAddEvent = { ev ->
                             Graph.scope.launch { Graph.messenger.saveEvent(ev, notifyInvitees = false) }
@@ -752,7 +922,14 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         onReact = { m, e -> Graph.scope.launch { Graph.messenger.react(m, e) } },
                         onRoute = { nav.navigate(it) },
                         tags = tagCtx,
+                        thread = threads[item.m.id],
+                        onThread = { nav.navigate("thread/" + Uri.encode(conv) + "/" + item.m.id) },
                     )
+                    // choosing several messages: a tap adds or removes one
+                    if (selecting.isNotEmpty() && item.m.kind != "system") Box(Modifier.matchParentSize().pointerInput(item.m.id) {
+                        detectTapGestures { val id = item.m.id; selecting = if (id in selecting) selecting - id else selecting + id }
+                    })
+                    }
                 }
             }
         }
@@ -787,6 +964,26 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
         // ---- composer
         if (kidLimit && !kidRules.chat) com.monolith.app.kids.KidPausedBar(t("Le chat sono in pausa. La chat con il tuo genitore resta sempre aperta."))
         else if (!canWrite) ReadOnlyBar(if (roomOf != null) t("Qui scrivono solo il fondatore e i moderatori") else t("In questo gruppo scrivono solo gli amministratori"))
+        else if (preview != null) preview?.let { pv ->
+            VoicePreviewBar(pv.first, pv.second, onDelete = { pv.first.delete(); preview = null }) {
+                preview = null
+                val r = replyRef(); replyTo = null
+                Graph.scope.launch { Graph.messenger.sendVoice(conv, pv.first, pv.second, r) }
+            }
+        }
+        else if (locked) VoiceLockedBar(
+            recElapsed, recPaused,
+            onPause = { if (recPaused) recorder.resume() else recorder.pause(); recPaused = !recPaused },
+            onStop = { val res = recorder.stop(cancel = false); locked = false; recording = false; recPaused = false; preview = res },
+            onCancel = { recorder.stop(cancel = true); locked = false; recording = false; recPaused = false },
+            onSend = {
+                val res = recorder.stop(cancel = false)
+                locked = false; recording = false; recPaused = false
+                if (res != null) { val r = replyRef(); replyTo = null; Graph.scope.launch { Graph.messenger.sendVoice(conv, res.first, res.second, r) } }
+            },
+        )
+        else if (roomOf != null && Graph.shards.mustAcceptRules(roomOf.first)) RulesBar { rulesOpen = true }
+        else if (slowUntil > now()) SlowBar(slowUntil) { slowUntil = 0L }
         else Surface(color = MaterialTheme.colorScheme.surfaceContainerLow) {
             Row(Modifier.fillMaxWidth().navigationBarsPadding().padding(horizontal = 8.dp, vertical = 8.dp), verticalAlignment = Alignment.Bottom) {
                 AnimatedContent(recording, label = "composer", modifier = Modifier.weight(1f)) { rec ->
@@ -798,7 +995,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                             Text(Fmt.duration(elapsed), style = MaterialTheme.typography.titleMedium)
                             Spacer(Modifier.width(12.dp))
                             Text(
-                                if (recCancel) t("Rilascia per annullare") else t("← Scorri per annullare"),
+                                if (recCancel) t("Rilascia per annullare") else t("← annulla · ↑ blocca"),
                                 style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant, maxLines = 1,
                             )
                         }
@@ -814,6 +1011,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                     if (photosOk) DropdownMenuItem(text = { Text(t("Fotocamera")) }, leadingIcon = { Icon(Icons.Rounded.PhotoCamera, null) }, onClick = {
                                         attach = false
                                         if (hasPerm(ctx, Manifest.permission.CAMERA)) launchCamera() else camPerm.launch(Manifest.permission.CAMERA)
+                                    })
+                                    if (photosOk) DropdownMenuItem(text = { Text(t("Video")) }, leadingIcon = { Icon(Icons.Rounded.Videocam, null) }, onClick = {
+                                        attach = false; pickVideo.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly))
+                                    })
+                                    if (photosOk) DropdownMenuItem(text = { Text(t("File")) }, leadingIcon = { Icon(Icons.Rounded.AttachFile, null) }, onClick = {
+                                        attach = false; pickFile.launch(arrayOf("*/*"))
                                     })
                                     DropdownMenuItem(text = { Text(t("Sondaggio")) }, leadingIcon = { Icon(Icons.Rounded.BarChart, null) }, onClick = { attach = false; pollDialog = true })
                                     DropdownMenuItem(text = { Text(t("Posizione attuale")) }, leadingIcon = { Icon(Icons.Rounded.LocationOn, null) }, onClick = {
@@ -867,8 +1070,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         Box(
                             Modifier.size(48.dp).clip(CircleShape).background(MaterialTheme.colorScheme.primary).bounceClick(0.85f) {
                                 val tx = text
+                                roomOf?.first?.let { s ->
+                                    Graph.shards.badWord(s, tx)?.let { w -> Toast.makeText(ctx, t("Questa parola non è permessa qui: {0}", w), Toast.LENGTH_SHORT).show(); return@bounceClick }
+                                }
                                 text = ""
                                 haptics.performHapticFeedback(HapticFeedbackType.TextHandleMove)
+                                roomOf?.let { (s, r) -> if (r.slow > 0 && !s.canManage(myPub) && editing == null) slowUntil = now() + r.slow * 1000L }
                                 val ed = editing
                                 if (ed != null) {
                                     editing = null
@@ -906,8 +1113,16 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                                             val ev = awaitPointerEvent()
                                             val ch = ev.changes.firstOrNull { it.id == down.id } ?: break
                                             recCancel = down.position.x - ch.position.x > 180f
+                                            // slide up: the recording goes on without holding the button
+                                            if (down.position.y - ch.position.y > 160f && !recCancel) {
+                                                haptics.performHapticFeedback(HapticFeedbackType.LongPress)
+                                                recPaused = false
+                                                locked = true
+                                                break
+                                            }
                                             if (!ch.pressed) break
                                         }
+                                        if (locked) return@awaitEachGesture
                                         recording = false
                                         val res = recorder.stop(cancel = recCancel)
                                         if (res != null) {
@@ -960,6 +1175,12 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     }
                     Spacer(Modifier.height(12.dp))
                     ActionRow(Icons.AutoMirrored.Rounded.Reply, t("Rispondi")) { replyTo = m; editing = null; actionsFor = null }
+                    if (!isSelf && extraOf(m).optString("th").isBlank()) {
+                        ActionRow(Icons.Rounded.Forum, t("Rispondi nel thread")) { actionsFor = null; nav.navigate("thread/" + Uri.encode(conv) + "/" + m.id) }
+                    }
+                    ActionRow(Icons.Rounded.Checklist, t("Seleziona")) { actionsFor = null; selecting = setOf(m.id) }
+                    ActionRow(Icons.Rounded.Alarm, t("Ricordamelo")) { actionsFor = null; remindFor = m }
+                    if (m.outgoing && isGroup && !isHub) ActionRow(Icons.Rounded.Info, t("Letto da")) { actionsFor = null; readBy = m }
                 }
                 if (m.kind != "system" && m.kind != "call" && m.kind != "deleted" && (!isHub || canModerate)) {
                     val isPinned = pins[conv] == m.id
@@ -1007,7 +1228,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                 if (!m.outgoing && canModerate && m.kind != "deleted" && m.kind != "system" && m.kind != "call") {
                     ActionRow(Icons.Rounded.DeleteOutline, t("Elimina per tutti")) {
                         actionsFor = null
-                        Graph.scope.launch { Graph.messenger.moderatorDelete(m) }
+                        Graph.scope.launch { Graph.messenger.moderatorDelete(m); if (isRoom) Graph.shards.logDelete(conv, m.sender) }
                     }
                     val who = names[m.sender]?.displayName ?: t("Qualcuno")
                     val shardOf = roomOf?.first
@@ -1029,6 +1250,24 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     Graph.scope.launch { Graph.messenger.deleteForMe(m) }
                 }
             }
+        }
+    }
+    readBy?.let { m -> ReadBySheet(m, group, names) { readBy = null } }
+    remindFor?.let { m ->
+        RemindDialog(onDismiss = { remindFor = null }) { at ->
+            com.monolith.app.service.MessageReminders.add(ctx, conv, m.id, title + ": " + Graph.messenger.previewText(m), at)
+            remindFor = null
+            Toast.makeText(ctx, t("Te lo ricordo {0} alle {1}", Fmt.dayShort(at), Fmt.time(at)), Toast.LENGTH_SHORT).show()
+        }
+    }
+    if (notifyDialog) NotifyDialog(conv) { notifyDialog = false }
+    if (rulesOpen) roomOf?.let { (s, _) -> RulesDialog(s, onDismiss = { rulesOpen = false }) { rulesOpen = false } }
+    if (forwardMany.isNotEmpty()) {
+        val list = forwardMany
+        ForwardSheet(onDismiss = { forwardMany = emptyList() }) { targets ->
+            forwardMany = emptyList()
+            Graph.scope.launch { list.sortedBy { it.ts }.forEach { m -> targets.forEach { Graph.messenger.forward(m, it) } } }
+            Toast.makeText(ctx, t("Inoltrato"), Toast.LENGTH_SHORT).show()
         }
     }
     if (stickerSheet) StickerSheet(onDismiss = { stickerSheet = false }) { f ->
@@ -1217,7 +1456,7 @@ private fun PollDialog(onDismiss: () -> Unit, onSend: (String, List<String>, Boo
 
 @OptIn(ExperimentalFoundationApi::class)
 @Composable
-private fun MessageRow(
+internal fun MessageRow(
     m: Message,
     showName: Boolean,
     names: Map<String, Friend>,
@@ -1234,6 +1473,8 @@ private fun MessageRow(
     onReact: (Message, String) -> Unit,
     onRoute: (String) -> Unit = {},
     tags: TagCtx? = null,
+    thread: List<Long>? = null,
+    onThread: () -> Unit = {},
 ) {
     val appear = remember { Animatable(if (isNew) 0f else 1f) }
     LaunchedEffect(Unit) { if (appear.value < 1f) appear.animateTo(1f, spring(dampingRatio = 0.6f, stiffness = 500f)) }
@@ -1269,15 +1510,18 @@ private fun MessageRow(
     // a message that tags me (or everyone) stands out
     val tagsMe = tags != null && !out && (ex.optBoolean("all") || ex.optJSONArray("mn")?.let { a -> (0 until a.length()).any { a.optString(it) == myPub } } == true)
     val accentIn = if (out) textColor else MaterialTheme.colorScheme.primary
-    fun tagged(text: String): androidx.compose.ui.text.AnnotatedString =
-        if (tags == null) androidx.compose.ui.text.AnnotatedString(text)
-        else com.monolith.app.ui.components.Tags.annotate(text, tags.names, tags.mine, tags.rooms, accentIn, accentIn, tags.onRoom)
+    var revealed by remember(m.id) { mutableStateOf(false) }
+    // formatting, spoilers and, in groups and shards, the tags
+    fun tagged(text: String): androidx.compose.ui.text.AnnotatedString = com.monolith.app.ui.components.Rich.annotate(
+        text, textColor, accentIn, revealed, onSpoiler = { revealed = true },
+        names = tags?.names.orEmpty(), mine = tags?.mine.orEmpty(), rooms = tags?.rooms.orEmpty(), tags = tags != null, onRoom = { c -> tags?.onRoom?.invoke(c) },
+    )
 
     Column(modifier.fillMaxWidth().padding(vertical = 2.dp).then(anim), horizontalAlignment = if (out) Alignment.End else Alignment.Start) {
         if (showName) {
             val title = tags?.titleOf?.invoke(m.sender) ?: if (m.convId.startsWith("g:shard.")) Graph.shards.titleFor(m.convId, m.sender) else null
             Text((sender?.emoji ?: "") + " " + (sender?.displayName ?: t("Membro")) + (title?.let { "  ·  $it" } ?: ""), style = MaterialTheme.typography.labelMedium,
-                color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
+                color = tags?.colorOf?.invoke(m.sender) ?: MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, top = 8.dp, bottom = 2.dp))
         }
         if (ex.optBoolean("fw")) {
             Text("↪  " + t("Inoltrato"), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.padding(start = 12.dp, end = 12.dp, top = 4.dp, bottom = 2.dp))
@@ -1293,6 +1537,8 @@ private fun MessageRow(
             "dice" -> DiceBubble(m, isNew, shape, onLongPress)
             "board" -> BoardBubble(m, shape, onOpen = { onRoute("board/" + Uri.encode(m.convId)) }, onLongPress = onLongPress)
             "sticker" -> StickerBubble(m, shape, onLongPress)
+            "file" -> FileBubble(m, ex, textColor, bubbleColor, shape, onLongPress)
+            "video" -> VideoBubble(m, ex, shape, onOpen = { p -> onRoute("video?path=" + Uri.encode(p)) }, onLongPress = onLongPress)
             "deleted" -> Surface(shape = shape, color = MaterialTheme.colorScheme.surfaceContainer, modifier = press) {
                 Text("🚫 " + t("Messaggio eliminato"), style = MaterialTheme.typography.bodyMedium, color = MaterialTheme.colorScheme.onSurfaceVariant,
                     modifier = Modifier.padding(horizontal = 14.dp, vertical = 10.dp))
@@ -1480,6 +1726,7 @@ private fun MessageRow(
                 }
             }
         }
+        if (!thread.isNullOrEmpty()) ThreadChip(thread.size, thread.max(), onThread)
         if (reactions.isNotEmpty()) {
             Row(Modifier.padding(top = 2.dp, start = 6.dp, end = 6.dp), horizontalArrangement = Arrangement.spacedBy(4.dp)) {
                 reactions.groupBy { it.emoji }.forEach { (e, list) ->
@@ -1603,7 +1850,7 @@ private fun PollBubble(m: Message, ex: JSONObject, votes: List<Vote>, myPub: Str
 }
 
 @Composable
-private fun MetaLine(m: Message, color: Color) {
+internal fun MetaLine(m: Message, color: Color) {
     Row(Modifier.padding(top = 2.dp), horizontalArrangement = Arrangement.End, verticalAlignment = Alignment.CenterVertically) {
         if (m.expiresAt > 0) {
             Icon(Icons.Rounded.Timer, null, Modifier.size(11.dp), tint = color.copy(alpha = 0.6f))
