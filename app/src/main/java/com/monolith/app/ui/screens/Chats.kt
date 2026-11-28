@@ -738,7 +738,6 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                     }
                     is ChatItem.Msg -> MessageRow(
                         item.m, item.showName, names, myPub,
-                        tags = tagCtx,
                         reactBy[item.m.id].orEmpty(), votesBy[item.m.id].orEmpty(),
                         isNew = item.m.ts > openedAt,
                         modifier = Modifier.animateItem(),
@@ -752,6 +751,7 @@ fun ChatScreen(nav: NavHostController, conv: String, focus: String = "") {
                         onQuote = { id -> scrollToMsg(id) },
                         onReact = { m, e -> Graph.scope.launch { Graph.messenger.react(m, e) } },
                         onRoute = { nav.navigate(it) },
+                        tags = tagCtx,
                     )
                 }
             }
