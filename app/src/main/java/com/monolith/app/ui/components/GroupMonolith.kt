@@ -112,8 +112,11 @@ fun MonolithFigure(level: Int, glow: Float, cracks: Int, modifier: Modifier = Mo
         val base = Offset(w / 2, h * 0.9f)
         // the glow behind it
         if (glow > 0.02f && cracks == 0) {
-            val r = h * (0.35f + 0.25f * glow) * pulse
-            drawCircle(Brush.radialGradient(listOf(accent.copy(alpha = 0.55f * glow), Color.Transparent), Offset(w / 2, h * 0.55f), r), r, Offset(w / 2, h * 0.55f))
+            // around the stone, as big as the stone
+            val top = h * stoneTop(level)
+            val gc = Offset(w / 2, base.y - top / 2)
+            val r = (top * 0.7f + h * 0.12f) * (0.8f + 0.35f * glow) * pulse
+            drawCircle(Brush.radialGradient(listOf(accent.copy(alpha = 0.55f * glow), Color.Transparent), gc, r), r, gc)
         }
         // the shadow on the ground
         drawOval(edge.copy(alpha = 0.12f), Offset(w / 2 - w * 0.3f, base.y - h * 0.03f), Size(w * 0.6f, h * 0.07f))
@@ -248,7 +251,11 @@ fun GroupMonolithCard(conv: String) {
                 Text(t("Verso {0}", t(next.second)), style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
             Text(
-                t("{0} messaggi · {1} chiamate · {2} giorni insieme", s.msgs, s.calls, s.days),
+                listOf(
+                    if (s.msgs == 1) t("1 messaggio") else t("{0} messaggi", s.msgs),
+                    if (s.calls == 1) t("1 chiamata") else t("{0} chiamate", s.calls),
+                    if (s.days == 1) t("1 giorno insieme") else t("{0} giorni insieme", s.days),
+                ).joinToString(" · "),
                 style = MaterialTheme.typography.labelSmall, color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
         }

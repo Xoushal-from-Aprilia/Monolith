@@ -127,7 +127,7 @@ fun RolesSheet(s: Shard, onDismiss: () -> Unit) {
                     Column(Modifier.weight(1f)) {
                         Text(r.name, style = MaterialTheme.typography.titleMedium, color = roleColor(r.color))
                         val perms = listOfNotNull(if (r.mod) t("Modera") else null, if (r.ann) t("Scrive negli annunci") else null).joinToString(" · ").ifBlank { t("Solo il nome e il colore") }
-                        Text(perms + " · " + t("{0} persone", holders), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text(perms + " · " + (if (holders == 1) t("1 persona") else t("{0} persone", holders)), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Icon(Icons.Rounded.Edit, t("Modifica"), Modifier.size(18.dp))
                 }
@@ -398,7 +398,8 @@ fun AutomodDialog(s: Shard, onDismiss: () -> Unit) {
 @Composable
 fun ModLogSheet(s: Shard, names: Map<String, Friend>, onDismiss: () -> Unit) {
     val me = Graph.identity.keys?.pub
-    fun who(pk: String) = if (pk == me) t("Tu") else names[pk]?.displayName ?: t("Qualcuno")
+    val myName = Graph.identity.profile.value?.displayName ?: t("Qualcuno")
+    fun who(pk: String) = if (pk == me) myName else names[pk]?.displayName ?: t("Qualcuno")
     fun line(e: ModEntry): String = when (e.k) {
         "del" -> t("{0} ha eliminato un messaggio di {1} in {2}", who(e.by), who(e.who), e.x)
         "ban" -> t("{0} ha escluso {1}", who(e.by), who(e.who))

@@ -176,7 +176,7 @@ fun ConcertScreen(nav: NavHostController, conv: String) {
                 Spacer(Modifier.height(8.dp))
                 st.players.forEachIndexed { i, pk ->
                     Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
-                        Text(names[pk]?.emoji ?: "🙂", fontSize = 22.sp)
+                        Text((if (pk == mine) Graph.identity.profile.value?.emoji else names[pk]?.emoji) ?: "🙂", fontSize = 22.sp)
                         Spacer(Modifier.width(10.dp))
                         Text(nameOf(pk), style = MaterialTheme.typography.bodyLarge, modifier = Modifier.weight(1f))
                         Row(horizontalArrangement = Arrangement.spacedBy(4.dp)) { Concert.partsFor(i, st.players.size).forEach { PartChip(it) } }

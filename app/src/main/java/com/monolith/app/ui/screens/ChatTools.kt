@@ -262,7 +262,7 @@ fun ThreadScreen(nav: NavHostController, conv: String, root: String) {
                 IconButton(onClick = { nav.popBackStack() }) { Icon(Icons.AutoMirrored.Rounded.ArrowBack, t("Indietro")) }
                 Column(Modifier.weight(1f)) {
                     Text(title.ifBlank { t("Thread") }, style = MaterialTheme.typography.titleMedium, maxLines = 1, overflow = TextOverflow.Ellipsis)
-                    Text(if (replies.size == 1) t("1 risposta") else t("{0} risposte", replies.size), style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    Text(when (replies.size) { 0 -> t("Nessuna risposta"); 1 -> t("1 risposta"); else -> t("{0} risposte", replies.size) }, style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 }
             }
         }
@@ -270,7 +270,7 @@ fun ThreadScreen(nav: NavHostController, conv: String, root: String) {
             if (first != null) item(key = "root") {
                 if (title.isNotBlank()) Text(title, style = MaterialTheme.typography.headlineSmall, modifier = Modifier.padding(start = 6.dp, bottom = 8.dp))
                 MessageRow(
-                    first, true, names, myPub, reactBy[first.id].orEmpty(), votesBy[first.id].orEmpty(), isNew = false, modifier = Modifier,
+                    first, !first.outgoing, names, myPub, reactBy[first.id].orEmpty(), votesBy[first.id].orEmpty(), isNew = false, modifier = Modifier,
                     onLongPress = {}, onPhoto = { p -> nav.navigate(Routes.photo(p, "photo-" + first.id)) }, onAddEvent = {}, onOpenMap = { _, _ -> }, onQuote = {},
                     onReact = { m, e -> Graph.scope.launch { Graph.messenger.react(m, e) } }, onRoute = { nav.navigate(it) },
                 )
@@ -361,7 +361,7 @@ fun ForumScreen(nav: NavHostController, conv: String, s: Shard, r: ShardRoom) {
                                 Avatar(if (p.outgoing) Graph.identity.profile.value?.emoji ?: "🗿" else names[p.sender]?.emoji ?: "🙂", 22.dp)
                                 Spacer(Modifier.width(8.dp))
                                 Text(author + " · " + Fmt.ago(p.ts), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.onSurfaceVariant, modifier = Modifier.weight(1f))
-                                Text(if (rs.size == 1) t("1 risposta") else t("{0} risposte", rs.size), style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
+                                Text(when (rs.size) { 0 -> t("Nessuna risposta"); 1 -> t("1 risposta"); else -> t("{0} risposte", rs.size) }, style = MaterialTheme.typography.labelMedium, color = MaterialTheme.colorScheme.primary)
                             }
                         }
                     }

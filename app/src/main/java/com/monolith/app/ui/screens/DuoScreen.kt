@@ -269,7 +269,8 @@ fun DuoScreen(nav: NavHostController, pk: String) {
             horizontalArrangement = Arrangement.spacedBy(10.dp),
         ) {
             DuoButton(t("Foto della chat"), Modifier.weight(1f)) { pickSheet = true }
-            DuoButton(t("Lancia una foto"), Modifier.weight(1f)) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
+            val kidRules by com.monolith.app.kids.Kids.rules.collectAsState()
+            if (!com.monolith.app.kids.Kids.isKid || kidRules.photos) DuoButton(t("Lancia una foto"), Modifier.weight(1f)) { picker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) }
             DuoButton(if (st.photo != null) t("Togli") else t("Allinea"), Modifier.weight(0.7f)) { if (st.photo != null) Duo.showPhoto(null) else Duo.realign() }
         }
     }

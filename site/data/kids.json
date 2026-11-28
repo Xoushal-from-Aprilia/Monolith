@@ -1,5 +1,16 @@
 [
  {
+  "version": "1.4.0",
+  "date": "2026-11-28",
+  "notes": [
+   "Nelle chat arrivano file e video, le risposte nel thread, il grassetto e gli spoiler, le bozze che restano e Note per te",
+   "Chat fissate e archiviate, le cartelle Non lette, Amici e Gruppi e la ricerca dentro la chat",
+   "Schermo unito con gli amici approvati: due telefoni vicini diventano un solo schermo e le foto volano da uno all'altro",
+   "Concerto nei gruppi, se i giochi sono accesi: ogni telefono suona una parte della stessa canzone",
+   "Il monolite del gruppo cresce con i messaggi e i giorni passati insieme"
+  ]
+ },
+ {
   "version": "1.3.0",
   "date": "2026-11-28",
   "notes": [

@@ -383,9 +383,9 @@ class Shots {
         com.monolith.app.ui.screens.ConcertScreen(it, "g:g1")
     }
     @Test fun monolith_levels() = shot("91_monolith_levels") { StoneBoard() }
-    @Test fun film_chatorg() = shot("92_film_chat", act = { compose.mainClock.advanceTimeBy(4300L * 3) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
-    @Test fun film_duo() = shot("93_film_duo", act = { compose.mainClock.advanceTimeBy(4300L * 12) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
-    @Test fun film_concert() = shot("94_film_concert", act = { compose.mainClock.advanceTimeBy(4300L * 13) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
+    @Test fun film_chatorg() = shot("92_film_chat") { com.monolith.app.ui.screens.FeatureFilm(onDone = {}, preview = 3) }
+    @Test fun film_duo() = shot("93_film_duo") { com.monolith.app.ui.screens.FeatureFilm(onDone = {}, preview = 12) }
+    @Test fun film_concert() = shot("94_film_concert") { com.monolith.app.ui.screens.FeatureFilm(onDone = {}, preview = 13) }
 
     @Composable
     private fun ShardSheet(content: @Composable (com.monolith.app.net.Shard, Map<String, Friend>) -> Unit) {

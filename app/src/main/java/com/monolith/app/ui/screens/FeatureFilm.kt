@@ -115,14 +115,15 @@ object FilmPrefs {
 
 /** the film itself; [onDone] when it ends or is skipped */
 @Composable
-fun FeatureFilm(onDone: () -> Unit, doneLabel: String = t("Inizia")) {
-    var index by remember { mutableIntStateOf(0) }
-    var paused by remember { mutableStateOf(false) }
+fun FeatureFilm(onDone: () -> Unit, doneLabel: String = t("Inizia"), preview: Int = -1) {
+    // [preview]: for the screenshots, one scene held still near its end
+    var index by remember { mutableIntStateOf(preview.coerceAtLeast(0)) }
+    var paused by remember { mutableStateOf(preview >= 0) }
     val progress = remember { Animatable(0f) }
     var shown by remember { mutableIntStateOf(-1) }
     val last = FILM.lastIndex
     LaunchedEffect(index, paused) {
-        if (shown != index) { shown = index; progress.snapTo(0f) }
+        if (shown != index) { shown = index; progress.snapTo(if (preview >= 0) 0.95f else 0f) }
         if (paused) return@LaunchedEffect
         val remaining = ((1f - progress.value) * SCENE_MS).toInt().coerceAtLeast(1)
         progress.animateTo(1f, tween(remaining, easing = LinearEasing))

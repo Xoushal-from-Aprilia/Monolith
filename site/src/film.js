@@ -161,6 +161,127 @@ export function drawArt(ctx, art, w, h, ink, bg, p, clock) {
       });
       break;
     }
+    case "chatorg": {
+      // folder chips, a pinned chat, a thread branching off a message, a spoiler
+      const chips = [0.2, 0.16, 0.18];
+      let x = w * 0.04;
+      chips.forEach((cw, k) => {
+        const s = stage(p, k * 0.06, k * 0.06 + 0.2);
+        rrect(ctx, x, h * 0.05, w * cw, h * 0.08, h * 0.04); ctx.fillStyle = rgba(ink, (k === 0 ? 0.9 : 0.2) * s); ctx.fill();
+        x += w * cw + w * 0.03;
+      });
+      for (let k = 0; k < 3; k++) {
+        const s = stage(p, 0.15 + k * 0.08, 0.35 + k * 0.08);
+        const y = h * (0.2 + k * 0.13);
+        circle(ctx, w * 0.1, y + h * 0.045, h * 0.045); ctx.fillStyle = rgba(ink, 0.25 * s); ctx.fill();
+        rrect(ctx, w * 0.2, y + h * 0.015, w * 0.45 * s, h * 0.025, h * 0.012); ctx.fillStyle = rgba(ink, 0.6 * s); ctx.fill();
+        rrect(ctx, w * 0.2, y + h * 0.055, w * 0.6 * s, h * 0.02, h * 0.01); ctx.fillStyle = rgba(ink, 0.2 * s); ctx.fill();
+        if (k === 0) {
+          const px = w * 0.9, py = y + h * 0.04;
+          circle(ctx, px, py, h * 0.018); ctx.fillStyle = rgba(ink, s); ctx.fill();
+          ctx.strokeStyle = rgba(ink, s); ctx.lineWidth = u(3); ctx.lineCap = "round";
+          ctx.beginPath(); ctx.moveTo(px, py); ctx.lineTo(px - h * 0.03, py + h * 0.04); ctx.stroke();
+        }
+      }
+      const ty = h * 0.64;
+      const sm = stage(p, 0.45, 0.6);
+      rrect(ctx, w * 0.04, ty, w * 0.5, h * 0.09, h * 0.045); ctx.fillStyle = rgba(ink, 0.9 * sm); ctx.fill();
+      const st = stage(p, 0.6, 0.8);
+      ctx.strokeStyle = rgba(ink, 0.5); ctx.lineWidth = u(3); ctx.lineCap = "round";
+      ctx.beginPath(); ctx.moveTo(w * 0.12, ty + h * 0.09); ctx.lineTo(w * 0.12, ty + h * 0.09 + h * 0.17 * st); ctx.stroke();
+      for (let k = 0; k < 2; k++) {
+        const a = stage(p, 0.68 + k * 0.08, 0.85 + k * 0.06);
+        const yy = ty + h * (0.13 + k * 0.08);
+        ctx.strokeStyle = rgba(ink, 0.5 * a);
+        ctx.beginPath(); ctx.moveTo(w * 0.12, yy + h * 0.025); ctx.lineTo(w * 0.17, yy + h * 0.025); ctx.stroke();
+        rrect(ctx, w * 0.18, yy, w * 0.32, h * 0.05, h * 0.025); ctx.fillStyle = rgba(ink, 0.22 * a); ctx.fill();
+      }
+      const sp = stage(p, 0.5, 0.65), clear = stage(p, 0.85, 1);
+      const ox = w * 0.6, oy = h * 0.66;
+      rrect(ctx, ox, oy, w * 0.36, h * 0.09, h * 0.045); ctx.fillStyle = rgba(ink, 0.18 * sp); ctx.fill();
+      const r = seeded(5);
+      for (let i = 0; i < 36; i++) {
+        const dx = r(), dy = r();
+        const tw = 0.5 + 0.5 * Math.sin(clock * TAU * 3 + i);
+        circle(ctx, ox + w * 0.03 + dx * w * 0.3, oy + h * 0.015 + dy * h * 0.06, u(2.2)); ctx.fillStyle = rgba(ink, 0.8 * tw * sp * (1 - clear)); ctx.fill();
+      }
+      rrect(ctx, ox + w * 0.04, oy + h * 0.035, w * 0.26 * clear, h * 0.02, h * 0.01); ctx.fillStyle = rgba(ink, 0.85 * clear); ctx.fill();
+      break;
+    }
+    case "duo": {
+      // two phones side by side; one picture runs across both; a photo flies from one to the other
+      const pw = w * 0.36, ph = h * 0.62, gap = w * 0.03, y0 = h * 0.12;
+      const l = [c.x - gap / 2 - pw, y0], rr = [c.x + gap / 2, y0 + h * 0.03];
+      const s = stage(p, 0, 0.3);
+      ctx.strokeStyle = rgba(ink, 0.9); ctx.lineWidth = u(4);
+      [l, rr].forEach((o, k) => {
+        const slide = (1 - s) * (k === 0 ? -w * 0.2 : w * 0.2);
+        rrect(ctx, o[0] + slide, o[1], pw, ph, w * 0.04); ctx.stroke();
+      });
+      const ring = stage(p, 0.3, 0.6);
+      if (ring > 0) {
+        const cc = [c.x, y0 + ph * 0.5];
+        [l, rr].forEach((o) => {
+          ctx.save(); ctx.beginPath(); ctx.rect(o[0] + 6, o[1] + 6, pw - 12, ph - 12); ctx.clip();
+          ctx.strokeStyle = rgba(ink, 0.85); ctx.lineWidth = w * 0.02;
+          circle(ctx, cc[0], cc[1], pw * 0.7 * ring); ctx.stroke();
+          ctx.restore();
+        });
+      }
+      const f = stage(p, 0.62, 0.92);
+      const card = (x, y, rot) => {
+        ctx.save(); ctx.translate(x, y); ctx.rotate(rot * Math.PI / 180);
+        rrect(ctx, -w * 0.07, -w * 0.05, w * 0.14, w * 0.1, u(6)); ctx.fillStyle = rgba(ink, 1); ctx.fill();
+        ctx.restore();
+      };
+      const x0 = l[0] + pw * 0.5, x1 = rr[0] + pw * 0.5;
+      if (f > 0 && f < 1) card(x0 + (x1 - x0) * f, y0 + ph * 0.78 - Math.sin(f * Math.PI) * h * 0.18, -20 + 40 * f);
+      if (f >= 1) card(x1, y0 + ph * 0.78, 0);
+      const sw = stage(p, 0.2, 0.45);
+      if (sw > 0.01 && sw < 0.99) { circle(ctx, l[0] + pw * (0.6 + 0.8 * sw), y0 + ph * 0.3, w * 0.025); ctx.fillStyle = rgba(ink, 0.5); ctx.fill(); }
+      break;
+    }
+    case "concert": {
+      // four phones, each lit in turn by the wave, with notes rising from them
+      const n = 4, pw = w * 0.17, ph = h * 0.36, gap = (w - n * pw) / (n + 1), y0 = h * 0.45;
+      const beat = (clock * 4) % 1;
+      for (let k = 0; k < n; k++) {
+        const s = stage(p, k * 0.08, k * 0.08 + 0.25);
+        const x = gap + k * (pw + gap);
+        let d = beat - k * 0.12; if (d < 0) d += 1;
+        const wave = (d < 0.3 ? 1 - d / 0.3 : 0) * stage(p, 0.4, 0.55);
+        const py = y0 + (1 - s) * h * 0.2;
+        rrect(ctx, x, py, pw, ph, w * 0.03); ctx.fillStyle = rgba(ink, (0.12 + 0.75 * wave) * s); ctx.fill();
+        ctx.strokeStyle = rgba(ink, 0.9 * s); ctx.lineWidth = u(3); ctx.stroke();
+        const gx = x + pw / 2, gy = y0 + ph * 0.5;
+        const gi = wave > 0.5 ? bg : ink;
+        ctx.strokeStyle = rgba(gi, s); ctx.fillStyle = rgba(gi, s); ctx.lineCap = "round"; ctx.lineWidth = u(4);
+        if (k === 0) {
+          ctx.beginPath(); ctx.moveTo(gx - pw * 0.3, gy);
+          ctx.bezierCurveTo(gx - pw * 0.1, gy - ph * 0.15, gx, gy - ph * 0.15, gx, gy);
+          ctx.bezierCurveTo(gx, gy + ph * 0.15, gx + pw * 0.1, gy + ph * 0.15, gx + pw * 0.3, gy); ctx.stroke();
+        } else if (k === 1) {
+          for (let q = 0; q < 3; q++) { ctx.beginPath(); ctx.moveTo(gx - pw * 0.25, gy - ph * 0.08 + q * ph * 0.08); ctx.lineTo(gx + pw * 0.25, gy - ph * 0.08 + q * ph * 0.08); ctx.stroke(); }
+        } else if (k === 2) {
+          ctx.lineWidth = u(5);
+          ctx.beginPath(); ctx.moveTo(gx - pw * 0.28, gy - ph * 0.05); ctx.quadraticCurveTo(gx, gy + ph * 0.2, gx + pw * 0.28, gy - ph * 0.05); ctx.stroke();
+        } else {
+          circle(ctx, gx - pw * 0.15, gy, pw * 0.09); ctx.fill();
+          circle(ctx, gx + pw * 0.05, gy, pw * 0.06); ctx.fill();
+          circle(ctx, gx + pw * 0.2, gy, pw * 0.04); ctx.fill();
+        }
+        const rise = stage(p, 0.5, 1);
+        for (let q = 0; q < 2; q++) {
+          const f = (clock * 1.5 + k * 0.25 + q * 0.5) % 1;
+          const a = rise * (1 - f);
+          const nx = gx + Math.sin((f + k) * TAU) * pw * 0.2, ny = y0 - f * h * 0.35;
+          circle(ctx, nx, ny, w * 0.014); ctx.fillStyle = rgba(ink, a); ctx.fill();
+          ctx.strokeStyle = rgba(ink, a); ctx.lineWidth = u(3);
+          ctx.beginPath(); ctx.moveTo(nx + w * 0.013, ny); ctx.lineTo(nx + w * 0.013, ny - h * 0.06); ctx.stroke();
+        }
+      }
+      break;
+    }
     case "kids": {
       // the parent's monolith and the child's (in coral, like the Kids icon), joined by a line of dots
       const base = h * 0.8;
