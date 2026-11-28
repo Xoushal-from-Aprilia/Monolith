@@ -30,10 +30,10 @@ import kotlin.math.tanh
  */
 object Concert {
     enum class Part(val label: String, val color: Long) {
-        MELODIA("Melodia", 0xFFFF5A6E),
-        ACCORDI("Accordi", 0xFF5AA8FF),
-        BASSO("Basso", 0xFFA67CFF),
-        RITMO("Ritmo", 0xFFFFC94A),
+        MELODIA("Melodia" /*i18n*/, 0xFFFF5A6E),
+        ACCORDI("Accordi" /*i18n*/, 0xFF5AA8FF),
+        BASSO("Basso" /*i18n*/, 0xFFA67CFF),
+        RITMO("Ritmo" /*i18n*/, 0xFFFFC94A),
     }
 
     /** a note of the score: [start] and [len] in beats; for the rhythm [midi] is the drum */
@@ -57,21 +57,21 @@ object Concert {
 
     val SONGS = listOf(
         Song(
-            "Monolite", "Allegra", 100,
+            "Monolite" /*i18n*/, "Allegra" /*i18n*/, 100,
             listOf("C", "G", "Am", "F", "C", "G", "F", "C"),
             "E5/1 G5/1 E5/1 C5/1  D5/1.5 B4/.5 G4/2  A4/1 C5/1 E5/1 A5/1  G5/1.5 F5/.5 E5/2 " +
                 "E5/.5 F5/.5 G5/1 C6/1 G5/1  B5/1 A5/.5 G5/.5 D5/2  F5/1 A5/1 G5/1 F5/1  E5/3 r/1",
             0,
         ),
         Song(
-            "Luci della città", "Di sera", 112,
+            "Luci della città" /*i18n*/, "Di sera" /*i18n*/, 112,
             listOf("Am", "F", "C", "G", "Am", "F", "G", "E"),
             "A4/.5 C5/.5 E5/1 D5/.5 C5/.5 E5/1  F5/1 E5/.5 D5/.5 C5/2  G4/.5 C5/.5 E5/1 G5/1 E5/1  D5/1 B4/1 G4/2 " +
                 "A4/.5 C5/.5 E5/1 A5/1 G5/1  F5/.5 E5/.5 F5/1 A5/2  G5/1 F5/1 D5/1 B4/1  G#4/2 B4/1 E5/1",
             1,
         ),
         Song(
-            "Ninna dei sassi", "Piano", 76,
+            "Ninna dei sassi" /*i18n*/, "Piano" /*i18n*/, 76,
             listOf("G", "Em", "C", "D", "G", "Em", "D", "G"),
             "B4/1.5 D5/.5 G5/2  E5/1 G5/1 B4/2  C5/1 E5/1 G5/1 E5/1  D5/1 F#5/1 A5/2 " +
                 "B5/1 A5/.5 G5/.5 D5/2  E5/1 D5/.5 B4/.5 G4/2  A4/1 C5/1 B4/1 A4/1  G4/3 r/1",
@@ -284,6 +284,9 @@ object Concert {
     private var job: Job? = null
 
     private fun me() = Graph.messenger.me()?.pub
+
+    /** for the screenshots: a concert as it would be, without sound or messages */
+    fun preview(s: State) { _state.value = s }
 
     private fun send(conv: String, p: JSONObject, only: String? = null) {
         Graph.scope.launch { runCatching { Graph.messenger.fastToConv(conv, p.put("t", "concert"), only) } }

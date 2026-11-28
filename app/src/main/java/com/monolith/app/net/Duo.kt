@@ -46,6 +46,9 @@ object Duo {
     private var mine: Edge? = null
     private var theirs: Edge? = null
 
+    /** for the screenshots: two phones already joined */
+    fun preview(s: State) { _state.value = s }
+
     private fun send(p: JSONObject) {
         val peer = _state.value.peer ?: return
         Graph.scope.launch { Graph.messenger.sendFast(peer, p.put("t", "duo")) }

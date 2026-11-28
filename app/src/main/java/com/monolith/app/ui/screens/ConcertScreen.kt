@@ -1,5 +1,6 @@
 package com.monolith.app.ui.screens
 
+import androidx.compose.animation.core.withInfiniteAnimationFrameNanos
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
@@ -36,7 +37,6 @@ import androidx.compose.runtime.mutableFloatStateOf
 import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.remember
 import androidx.compose.runtime.setValue
-import androidx.compose.runtime.withFrameNanos
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
@@ -242,8 +242,8 @@ private fun Equalizer(seed: Int, tint: Color) {
 @Composable
 private fun Stage(song: Concert.Song, index: Int, n: Int, parts: Set<Concert.Part>, startAt: Long, ready: Boolean, iHost: Boolean, group: String, onStop: () -> Unit) {
     val notes = remember(song, parts) { Concert.Part.entries.associateWith { p -> Concert.score(song).filter { it.part == p && p in parts } } }
-    var sec by remember { mutableFloatStateOf(-4f) }
-    LaunchedEffect(startAt) { while (true) { withFrameNanos { }; sec = (now() - startAt) / 1000f } }
+    var sec by remember { mutableFloatStateOf((now() - startAt) / 1000f) }
+    LaunchedEffect(startAt) { while (true) { withInfiniteAnimationFrameNanos { }; sec = (now() - startAt) / 1000f } }
     // the brightest of my parts gives the colour
     var bright = 0f
     var color = Color(parts.firstOrNull()?.color ?: 0xFFFFFFFF)

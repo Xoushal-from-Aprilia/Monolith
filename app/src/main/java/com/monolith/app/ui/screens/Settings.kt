@@ -462,6 +462,20 @@ private class Release(val version: String, val date: String, val notes: List<Str
 
 private val JOURNAL = listOf(
     Release(
+        "2.9.0", "2026-11-28",
+        listOf(
+            "Schermo unito: metti due telefoni uno accanto all'altro, passa il dito da uno schermo all'altro e diventano un solo schermo, con una foto della chat su tutti e due",
+            "Lancia una foto: trascinala verso il telefono dell'amico e la vedi volare da uno schermo all'altro; arriva anche in chat",
+            "Concerto: nei gruppi ogni telefono suona una parte della stessa canzone, melodia, accordi, basso o ritmo, e un'onda di luce passa da un telefono all'altro",
+            "Il monolite del gruppo, in Info gruppo: cresce con i messaggi, le chiamate e i giorni passati insieme, brilla quando siete vivaci e si crepa se il gruppo tace",
+            "Nelle chat: file e video, risposte nel thread, grassetto, corsivo, barrato, codice e spoiler, bozze che restano, Note per te e la selezione di più messaggi",
+            "Chat fissate, archiviate e segnate da leggere, con le cartelle Non lette, Amici, Gruppi e Archiviate; Media, link e file e la ricerca dentro la chat",
+            "Letto da nei gruppi, Ricordamelo su un messaggio e vocali più comodi: scorri in su per bloccare la registrazione, mettila in pausa e riascoltala prima di mandarla",
+            "Negli Shard: stanze forum con i post, ruoli con nome, colore e permessi, categorie e ordine delle stanze col trascinamento",
+            "Regole da accettare, modalità lenta, moderazione automatica con parole vietate e anti spam, registro della moderazione, notifiche per stanza e statistiche",
+        ),
+    ),
+    Release(
         "2.8.0", "2026-11-28",
         listOf(
             "Gli account verificati come Sviluppatore possono creare uno Shard per tutti: dentro ci sono tutti gli utenti di Monolith, anche chi si iscrive dopo, con le stanze per gli annunci",

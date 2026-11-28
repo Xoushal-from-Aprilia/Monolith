@@ -64,7 +64,7 @@ object GroupStone {
     )
 
     /** score needed for each level */
-    val LEVELS = listOf(0 to "Sasso", 40 to "Ciottolo", 120 to "Pietra", 300 to "Masso", 600 to "Menhir", 1000 to "Obelisco", 1600 to "Monolite")
+    val LEVELS = listOf(0 to "Sasso" /*i18n*/, 40 to "Ciottolo" /*i18n*/, 120 to "Pietra" /*i18n*/, 300 to "Masso" /*i18n*/, 600 to "Menhir" /*i18n*/, 1000 to "Obelisco" /*i18n*/, 1600 to "Monolite" /*i18n*/)
 
     private const val DAY = 86_400_000L
 

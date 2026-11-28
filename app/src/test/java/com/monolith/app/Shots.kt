@@ -6,6 +6,9 @@ import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.width
+import androidx.compose.runtime.collectAsState
+import androidx.compose.runtime.getValue
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.test.junit4.createComposeRule
 import androidx.compose.ui.test.onAllNodesWithContentDescription
@@ -108,15 +111,28 @@ class Shots {
         val sh = JSONObject().put("id", "s1").put("n", "Montagna").put("e", "🏔️").put("o", me).put("u", now)
             .put("m", org.json.JSONArray().put(me).put(ada).put(leo).put(mia)).put("md", org.json.JSONArray().put(ada))
             .put("r", org.json.JSONArray()
-                .put(JSONObject().put("id", "gen").put("n", "generale").put("v", false))
-                .put(JSONObject().put("id", "gite").put("n", "gite").put("v", false))
+                .put(JSONObject().put("id", "gen").put("n", "generale").put("v", false).put("sl", 30))
+                .put(JSONObject().put("id", "gite").put("n", "gite").put("v", false).put("cat", "Uscite"))
                 .put(JSONObject().put("id", "staff").put("n", "organizzatori").put("v", false).put("pm", org.json.JSONArray().put(me).put(ada)))
-                .put(JSONObject().put("id", "voce").put("n", "chiacchiere").put("v", true)))
+                .put(JSONObject().put("id", "voce").put("n", "chiacchiere").put("v", true))
+                .put(JSONObject().put("id", "diario").put("n", "diario").put("v", false).put("fo", true).put("cat", "Uscite")))
             .put("wl", "Benvenuti! Qui organizziamo le uscite in montagna.")
+            .put("rl", org.json.JSONArray()
+                .put(JSONObject().put("id", "r1").put("n", "Guida").put("c", "forest").put("m", true).put("a", true))
+                .put(JSONObject().put("id", "r2").put("n", "Fotografa").put("c", "sunset").put("m", false).put("a", false)))
+            .put("rof", JSONObject().put(ada, org.json.JSONArray().put("r1")).put(mia, org.json.JSONArray().put("r2")))
+            .put("rules", "1. Gentilezza prima di tutto\n2. Niente pubblicità\n3. Le uscite si confermano in #gite")
+            .put("wd", org.json.JSONArray().put("spam")).put("sp", true)
+            .put("lg", org.json.JSONArray()
+                .put(JSONObject().put("id", "l1").put("at", now - 3_600_000L).put("by", ada).put("k", "del").put("w", tom).put("x", "#generale"))
+                .put(JSONObject().put("id", "l2").put("at", now - 2 * day).put("by", me).put("k", "role").put("w", mia).put("x", "Fotografa"))
+                .put(JSONObject().put("id", "l3").put("at", now - 3 * day).put("by", me).put("k", "slow").put("x", "30 s"))
+                .put(JSONObject().put("id", "l4").put("at", now - 4 * day).put("by", me).put("k", "mod").put("w", ada)))
             .put("tt", JSONObject().put(ada, "Guida"))
             .put("nb", org.json.JSONArray().put(JSONObject().put("id", "n1").put("x", "Sabato: ritrovo alle 7 al parcheggio").put("by", ada).put("at", now)))
         java.io.File(ctx.filesDir, "shards.json").writeText(org.json.JSONArray().put(sh).toString())
         Graph.shards = com.monolith.app.net.ShardManager(ctx, Graph.scope)
+        s1Extras(now, day)
         val gid = "shard.s1.gen"
         db.groups().upsert(com.monolith.app.data.Group(gid, "Montagna · #generale", "🏔️", listOf(me, ada, leo, mia).joinToString(","), me, now))
         listOf(ada to "Chi viene sabato?", leo to "Io ci sono!", me to "Porto il thermos ☕", mia to "Ci sono anche io, ma arrivo alle 8").forEachIndexed { i, (who, tx) ->
@@ -158,6 +174,49 @@ class Shots {
         }
         Graph.joinAsks.add("g:g1", tom, "Tommaso", "🚲", "⚽ Calcetto del giovedì")
         Thread.sleep(300)
+    }
+
+    /** a small picture, as a base64 JPEG (for video thumbnails) */
+    private fun thumb(w: Int, h: Int): String {
+        val b = android.graphics.Bitmap.createBitmap(w, h, android.graphics.Bitmap.Config.ARGB_8888)
+        val c = android.graphics.Canvas(b)
+        val p = android.graphics.Paint()
+        p.shader = android.graphics.LinearGradient(0f, 0f, 0f, h.toFloat(), 0xFF2B4C7E.toInt(), 0xFFE9A15B.toInt(), android.graphics.Shader.TileMode.CLAMP)
+        c.drawRect(0f, 0f, w.toFloat(), h.toFloat(), p)
+        p.shader = null; p.color = 0xFF1C2B22.toInt()
+        val path = android.graphics.Path().apply { moveTo(0f, h * 0.8f); lineTo(w * 0.3f, h * 0.45f); lineTo(w * 0.5f, h * 0.65f); lineTo(w * 0.75f, h * 0.35f); lineTo(w.toFloat(), h * 0.7f); lineTo(w.toFloat(), h.toFloat()); lineTo(0f, h.toFloat()); close() }
+        c.drawPath(path, p)
+        val out = java.io.ByteArrayOutputStream()
+        b.compress(android.graphics.Bitmap.CompressFormat.JPEG, 80, out)
+        return java.util.Base64.getEncoder().encodeToString(out.toByteArray())
+    }
+
+    /** 2.9.0: forum posts in the shard, and a rich chat with Leo: formatting, a file, a video, a thread */
+    private fun s1Extras(now: Long, day: Long) = runBlocking {
+        val ctx = ApplicationProvider.getApplicationContext<Context>()
+        val db = Graph.db
+        db.groups().upsert(com.monolith.app.data.Group("shard.s1.diario", "Montagna · #diario", "🏔️", listOf(me, ada, leo, mia).joinToString(","), me, now))
+        listOf(
+            Triple("p1", ada, "Monte Rosa, giro dei rifugi" to "Due giorni, 1800 m di dislivello. Foto e traccia qui sotto."),
+            Triple("p2", leo, "Lago di Braies all'alba" to "Partenza alle 4, ma ne vale la pena."),
+            Triple("p3", mia, "Consigli per gli scarponi?" to "Cerco qualcosa di leggero per l'estate."),
+        ).forEachIndexed { i, (id, who, tp) ->
+            db.messages().upsert(Message(id, "g:shard.s1.diario", who, who == me, now - (3 - i) * day, "text", tp.second, extra = JSONObject().put("tt", tp.first).toString(), status = MsgStatus.READ))
+        }
+        listOf(leo to "Che spettacolo!", me to "La prossima volta vengo anche io", mia to "Salvata la traccia 🙌").forEachIndexed { i, (who, tx) ->
+            db.messages().upsert(Message("p1r$i", "g:shard.s1.diario", who, who == me, now - 2 * day + (i + 1) * 3_600_000L, "text", tx, extra = JSONObject().put("th", "p1").toString(), status = MsgStatus.READ))
+        }
+        val dir = java.io.File(ctx.filesDir, "media").apply { mkdirs() }
+        val pdf = java.io.File(dir, "percorso.pdf").apply { writeBytes(ByteArray(2048)) }
+        val vid = java.io.File(dir, "cascata.mp4").apply { writeBytes(ByteArray(2048)) }
+        val t0 = now - 3 * 3_600_000L
+        db.messages().upsert(Message("r1", leo, leo, false, t0, "text", "*Sabato* si parte alle _7 in punto_: porta ~la tenda~ il sacco a pelo. Ritrovo in `piazza Duomo`, poi ||sorpresa sul lago||", status = MsgStatus.READ))
+        db.messages().upsert(Message("r2", leo, me, true, t0 + 60_000L, "file", "", mediaPath = pdf.path, extra = JSONObject().put("name", "Percorso-sentiero.pdf").put("size", 482_000).put("mime", "application/pdf").toString(), status = MsgStatus.READ))
+        db.messages().upsert(Message("r3", leo, leo, false, t0 + 120_000L, "video", "La cascata dell'anno scorso", mediaPath = vid.path, extra = JSONObject().put("w", 1280).put("h", 720).put("dur", 42_000).put("size", 5_200_000).put("tb", thumb(360, 202)).toString(), status = MsgStatus.READ))
+        db.messages().upsert(Message("r4", leo, me, true, t0 + 180_000L, "text", "Chi porta il fornelletto?", status = MsgStatus.READ))
+        db.messages().upsert(Message("r5", leo, leo, false, t0 + 240_000L, "text", "Ci penso io 🔥", extra = JSONObject().put("th", "r4").toString(), status = MsgStatus.READ))
+        db.messages().upsert(Message("r6", leo, me, true, t0 + 300_000L, "text", "Grande, allora io porto il caffè", extra = JSONObject().put("th", "r4").toString(), status = MsgStatus.READ))
+        db.messages().upsert(Message("r7", leo, leo, false, t0 + 360_000L, "text", "Ok! Ci vediamo sabato", status = MsgStatus.DELIVERED))
     }
 
     @OptIn(com.github.takahirom.roborazzi.ExperimentalRoborazziApi::class)
@@ -293,6 +352,65 @@ class Shots {
         com.monolith.app.ui.screens.ShardEditSheet(null, onClose = {})
     }
     @Config(qualifiers = "+h2400dp") @Test fun group_info_dark() = shot("76_group_info_dark", dark = true) { com.monolith.app.ui.screens.GroupInfoScreen(it, "g1") }
+    // ---- 2.9.0
+    @Config(qualifiers = "+h1100dp") @Test fun chat_rich() = shot("77_chat_rich") { com.monolith.app.ui.screens.ChatScreen(it, leo) }
+    @Test fun chat_thread() = shot("78_chat_thread") { com.monolith.app.ui.screens.ThreadScreen(it, leo, "r4") }
+    @Test fun chat_folders() = shot("79_chat_folders") {
+        Graph.chatOrg.setPinned(ada, true); Graph.chatOrg.setUnread(mia, true); Graph.drafts.set(leo, "Ci vediamo dopo la partita")
+        com.monolith.app.ui.HomeScreen(it, 1) {}
+    }
+    @Test fun chat_media() = shot("80_chat_media", act = { click("File · 1") }) { com.monolith.app.ui.screens.ChatMediaScreen(it, leo, false) }
+    @Test fun chat_search() = shot("81_chat_search") { com.monolith.app.ui.screens.ChatMediaScreen(it, leo, true) }
+    @Test fun forum() = shot("82_forum") { com.monolith.app.ui.screens.ChatScreen(it, "g:shard.s1.diario") }
+    @Config(qualifiers = "+h1500dp") @Test fun shard_new() = shot("83_shard_new") { com.monolith.app.ui.screens.ShardScreen(it, "s1") }
+    @Test fun shard_stats() = shot("84_shard_stats") { ShardSheet { s, names -> com.monolith.app.ui.screens.ShardStatsSheet(s, names) {} } }
+    @Test fun shard_log() = shot("85_shard_log") { ShardSheet { s, names -> com.monolith.app.ui.screens.ModLogSheet(s, names) {} } }
+    @Test fun shard_roles() = shot("86_shard_roles") { ShardSheet { s, _ -> com.monolith.app.ui.screens.RolesSheet(s) {} } }
+    @Test fun duo_left() = shot("87_duo_left", dark = true) {
+        com.monolith.app.net.Duo.preview(com.monolith.app.net.Duo.State(ada, true, 68f, 148f, com.monolith.app.net.Duo.Layout(63.5f, 6f, 68f, 148f, true)))
+        com.monolith.app.ui.screens.DuoScreen(it, ada)
+    }
+    @Test fun duo_right() = shot("88_duo_right", dark = true) {
+        com.monolith.app.net.Duo.preview(com.monolith.app.net.Duo.State(ada, true, 63.5f, 136f, com.monolith.app.net.Duo.Layout(-63.5f, -6f, 63.5f, 136f, false)))
+        com.monolith.app.ui.screens.DuoScreen(it, ada)
+    }
+    @Test fun concert_lobby() = shot("89_concert_lobby") {
+        com.monolith.app.net.Concert.preview(com.monolith.app.net.Concert.State("g:g1", me, 1, listOf(me, ada, leo, mia)))
+        com.monolith.app.ui.screens.ConcertScreen(it, "g:g1")
+    }
+    @Test fun concert_stage() = shot("90_concert_stage") {
+        com.monolith.app.net.Concert.preview(com.monolith.app.net.Concert.State("g:g1", ada, 0, listOf(ada, me, leo), System.currentTimeMillis() - 6_050L, true))
+        com.monolith.app.ui.screens.ConcertScreen(it, "g:g1")
+    }
+    @Test fun monolith_levels() = shot("91_monolith_levels") { StoneBoard() }
+    @Test fun film_chatorg() = shot("92_film_chat", act = { compose.mainClock.advanceTimeBy(4300L * 3) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
+    @Test fun film_duo() = shot("93_film_duo", act = { compose.mainClock.advanceTimeBy(4300L * 12) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
+    @Test fun film_concert() = shot("94_film_concert", act = { compose.mainClock.advanceTimeBy(4300L * 13) }) { com.monolith.app.ui.screens.FeatureFilm(onDone = {}) }
+
+    @Composable
+    private fun ShardSheet(content: @Composable (com.monolith.app.net.Shard, Map<String, Friend>) -> Unit) {
+        val people by androidx.compose.runtime.remember { Graph.db.friends().all() }.collectAsState(initial = emptyList())
+        val s = Graph.shards.get("s1") ?: return
+        com.monolith.app.ui.screens.ShardScreen(rememberNavController(), "s1")
+        content(s, people.associateBy { it.pubkey })
+    }
+
+    @Composable
+    private fun StoneBoard() {
+        androidx.compose.foundation.layout.Column(androidx.compose.ui.Modifier.fillMaxSize().padding(16.dp)) {
+            androidx.compose.material3.Text("Il monolite del gruppo", style = androidx.compose.material3.MaterialTheme.typography.titleLarge)
+            for (row in listOf(0..3, 4..6)) androidx.compose.foundation.layout.Row {
+                for (l in row) androidx.compose.foundation.layout.Column(horizontalAlignment = androidx.compose.ui.Alignment.CenterHorizontally) {
+                    com.monolith.app.ui.components.MonolithFigure(l, if (l == 5) 0.9f else 0.3f, 0, androidx.compose.ui.Modifier.padding(4.dp).height(140.dp).width(84.dp))
+                    androidx.compose.material3.Text(com.monolith.app.ui.components.GroupStone.LEVELS[l].second, style = androidx.compose.material3.MaterialTheme.typography.labelMedium)
+                }
+            }
+            androidx.compose.foundation.layout.Row {
+                for (c in 1..3) com.monolith.app.ui.components.MonolithFigure(4, 0f, c, androidx.compose.ui.Modifier.padding(4.dp).height(140.dp).width(84.dp))
+            }
+            com.monolith.app.ui.components.GroupMonolithCard("g:g1")
+        }
+    }
     @Test fun dev_update_wall() = shot("69_update_wall") { com.monolith.app.ui.screens.UpdateWallContent(onBackup = {}) {} }
     @Test fun dev_device_wall() = shot("65_device_wall") { com.monolith.app.ui.screens.DeviceWallContent("Account multipli per spam", true) {} }
     @Test fun dev_deleted() = shot("66_dev_deleted") { com.monolith.app.ui.screens.DeletedNoticeDialog("Spam ripetuto nei gruppi") {} }

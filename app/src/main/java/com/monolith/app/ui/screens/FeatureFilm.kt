@@ -57,6 +57,7 @@ import androidx.compose.ui.graphics.PathMeasure
 import androidx.compose.ui.graphics.StrokeCap
 import androidx.compose.ui.graphics.drawscope.DrawScope
 import androidx.compose.ui.graphics.drawscope.Stroke
+import androidx.compose.ui.graphics.drawscope.clipRect
 import androidx.compose.ui.graphics.drawscope.rotate
 import androidx.compose.ui.graphics.graphicsLayer
 import androidx.compose.ui.input.pointer.pointerInput
@@ -85,14 +86,17 @@ private val FILM = listOf(
     Scene("", "Monolith" /*i18n*/, listOf("Tutto quello che conta, tra amici." /*i18n*/), "intro"),
     Scene("Agenda" /*i18n*/, "Il tuo tempo, condiviso" /*i18n*/, listOf("Eventi e inviti agli amici" /*i18n*/, "Conto alla rovescia e meteo" /*i18n*/, "Compleanni e anniversari d'amicizia" /*i18n*/), "agenda"),
     Scene("Chat" /*i18n*/, "Chat che sanno giocare" /*i18n*/, listOf("Giochi, dadi e lavagna condivisa" /*i18n*/, "Sticker, inoltri e foto a vista unica" /*i18n*/, "Date nei messaggi che diventano eventi" /*i18n*/), "chat"),
+    Scene("Chat" /*i18n*/, "Tutto in ordine" /*i18n*/, listOf("Thread, file e video" /*i18n*/, "Cartelle, chat fissate e note per te" /*i18n*/, "Grassetto, spoiler e Ricordamelo" /*i18n*/, "Letto da, nei gruppi" /*i18n*/), "chatorg"),
     Scene("Storie" /*i18n*/, "Racconta la giornata" /*i18n*/, listOf("Filtri in bianco e nero" /*i18n*/, "Musica nelle storie" /*i18n*/, "Risposte che arrivano in chat" /*i18n*/), "stories"),
     Scene("Chiamate" /*i18n*/, "Voce, video e schermo" /*i18n*/, listOf("Fino a 4 persone" /*i18n*/, "Cuffie Bluetooth e microfono a scelta" /*i18n*/, "Condividi lo schermo" /*i18n*/, "Ascolta musica insieme" /*i18n*/), "calls"),
     Scene("Mappa" /*i18n*/, "Sai sempre dove trovarvi" /*i18n*/, listOf("Posizione in diretta e arrivo in diretta" /*i18n*/, "Luoghi comuni e amici nei paraggi" /*i18n*/, "Bussola verso l'amico" /*i18n*/), "map"),
     Scene("Profilo" /*i18n*/, "Il tuo spazio" /*i18n*/, listOf("Copertine da scegliere" /*i18n*/, "Distintivi disegnati, tre in vetrina" /*i18n*/, "Account verificati, con il simbolo accanto al nome" /*i18n*/), "profile"),
     Scene("Colori" /*i18n*/, "Del colore che vuoi" /*i18n*/, listOf("Dodici temi da scegliere" /*i18n*/, "Chiaro, scuro o dal tuo sfondo" /*i18n*/, "E l'icona che preferisci" /*i18n*/), "colors"),
     Scene("Legame" /*i18n*/, "Più vi scrivete, più cresce" /*i18n*/, listOf("Da Sasso a Monolite" /*i18n*/, "Serie di giorni insieme" /*i18n*/, "Il simbolo accanto al nome dopo 100 giorni" /*i18n*/), "bond"),
-    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e private" /*i18n*/, "Bacheca, eventi e ruoli" /*i18n*/, "Stanze per gli annunci e link d'invito" /*i18n*/, "Lo Shard per tutti gli utenti di Monolith" /*i18n*/), "shard"),
-    Scene("Gruppi" /*i18n*/, "Il gruppo è vostro" /*i18n*/, listOf("Aggiungi persone quando vuoi" /*i18n*/, "Un link per entrare, anche con il codice" /*i18n*/, "Descrizione, colori e copertina" /*i18n*/, "I tag si vedono subito" /*i18n*/), "groups"),
+    Scene("Shard" /*i18n*/, "Spazi per il tuo gruppo" /*i18n*/, listOf("Stanze scritte, vocali e forum" /*i18n*/, "Ruoli con nome, colore e permessi" /*i18n*/, "Regole, modalità lenta e moderazione automatica" /*i18n*/, "Lo Shard per tutti gli utenti di Monolith" /*i18n*/), "shard"),
+    Scene("Gruppi" /*i18n*/, "Il gruppo è vostro" /*i18n*/, listOf("Aggiungi persone quando vuoi" /*i18n*/, "Un link per entrare, anche con il codice" /*i18n*/, "I tag si vedono subito" /*i18n*/, "Il monolite del gruppo cresce con voi" /*i18n*/), "groups"),
+    Scene("Schermo unito" /*i18n*/, "Due telefoni, uno schermo" /*i18n*/, listOf("Una foto su tutti e due gli schermi" /*i18n*/, "Lancia una foto da un telefono all'altro" /*i18n*/), "duo"),
+    Scene("Concerto" /*i18n*/, "Ogni telefono suona una parte" /*i18n*/, listOf("Melodia, accordi, basso e ritmo" /*i18n*/, "Un'onda di luce da un telefono all'altro" /*i18n*/), "concert"),
     Scene("Insieme" /*i18n*/, "Spese, album, abitudini" /*i18n*/, listOf("Chi deve quanto, in un tocco" /*i18n*/, "Le foto di tutti in un posto" /*i18n*/, "Abitudini da tenere insieme" /*i18n*/), "together"),
     Scene("Sicurezza" /*i18n*/, "Al sicuro, sempre" /*i18n*/, listOf("Tasto SOS con scheda medica" /*i18n*/, "Screenshot bloccati, account molesti fermati" /*i18n*/, "Backup cifrato di tutto, anche automatico" /*i18n*/), "safe"),
     Scene("Il tuo telefono" /*i18n*/, "Si muove con te" /*i18n*/, listOf("Batti cinque per aggiungere amici" /*i18n*/, "Vocali all'orecchio" /*i18n*/, "Sfondo animato e widget" /*i18n*/, "Una piccola vibrazione a ogni tocco" /*i18n*/), "phone"),
@@ -278,6 +282,124 @@ private fun SceneArt(art: String, ink: Color, bg: Color, p: Float, clock: Float)
                     drawRoundRect(ink.copy(alpha = 0.22f * a * glow), Offset(o.x - w * 0.08f, o.y - h * 0.028f), Size(w * 0.16f, h * 0.056f), CornerRadius(h * 0.028f))
                     drawCircle(ink.copy(alpha = a), h * 0.012f, Offset(o.x - w * 0.045f, o.y))
                     drawRect(ink.copy(alpha = 0.8f * a), Offset(o.x - w * 0.02f, o.y - h * 0.005f), Size(w * 0.07f, h * 0.01f))
+                }
+            }
+            "chatorg" -> {
+                // folder chips, a pinned chat, a thread branching off a message, a spoiler
+                val chips = listOf(0.2f, 0.16f, 0.18f)
+                var x = w * 0.04f
+                chips.forEachIndexed { k, cw ->
+                    val s = stage(p, k * 0.06f, k * 0.06f + 0.2f)
+                    drawRoundRect(ink.copy(alpha = if (k == 0) 0.9f * s else 0.2f * s), Offset(x, h * 0.05f), Size(w * cw, h * 0.08f), CornerRadius(h * 0.04f))
+                    x += w * cw + w * 0.03f
+                }
+                for (k in 0 until 3) {
+                    val s = stage(p, 0.15f + k * 0.08f, 0.35f + k * 0.08f)
+                    val y = h * (0.2f + k * 0.13f)
+                    drawCircle(ink.copy(alpha = 0.25f * s), h * 0.045f, Offset(w * 0.1f, y + h * 0.045f))
+                    drawRoundRect(ink.copy(alpha = 0.6f * s), Offset(w * 0.2f, y + h * 0.015f), Size(w * 0.45f * s, h * 0.025f), CornerRadius(h * 0.012f))
+                    drawRoundRect(ink.copy(alpha = 0.2f * s), Offset(w * 0.2f, y + h * 0.055f), Size(w * 0.6f * s, h * 0.02f), CornerRadius(h * 0.01f))
+                    if (k == 0) {
+                        // the pin, drawn: a head and a needle
+                        val px = w * 0.9f
+                        val py = y + h * 0.04f
+                        drawCircle(ink.copy(alpha = s), h * 0.018f, Offset(px, py))
+                        drawLine(ink.copy(alpha = s), Offset(px, py), Offset(px - h * 0.03f, py + h * 0.04f), 3f, StrokeCap.Round)
+                    }
+                }
+                // a message with its thread
+                val ty = h * 0.64f
+                val sm = stage(p, 0.45f, 0.6f)
+                drawRoundRect(ink.copy(alpha = 0.9f * sm), Offset(w * 0.04f, ty), Size(w * 0.5f, h * 0.09f), CornerRadius(h * 0.045f))
+                val st = stage(p, 0.6f, 0.8f)
+                drawLine(ink.copy(alpha = 0.5f), Offset(w * 0.12f, ty + h * 0.09f), Offset(w * 0.12f, ty + h * 0.09f + h * 0.17f * st), 3f, StrokeCap.Round)
+                for (k in 0 until 2) {
+                    val a = stage(p, 0.68f + k * 0.08f, 0.85f + k * 0.06f)
+                    val yy = ty + h * (0.13f + k * 0.08f)
+                    drawLine(ink.copy(alpha = 0.5f * a), Offset(w * 0.12f, yy + h * 0.025f), Offset(w * 0.17f, yy + h * 0.025f), 3f, StrokeCap.Round)
+                    drawRoundRect(ink.copy(alpha = 0.22f * a), Offset(w * 0.18f, yy), Size(w * 0.32f, h * 0.05f), CornerRadius(h * 0.025f))
+                }
+                // a spoiler: dots that shimmer, then clear
+                val sp = stage(p, 0.5f, 0.65f)
+                val clear = stage(p, 0.85f, 1f)
+                val ox = w * 0.6f
+                val oy = h * 0.66f
+                drawRoundRect(ink.copy(alpha = 0.18f * sp), Offset(ox, oy), Size(w * 0.36f, h * 0.09f), CornerRadius(h * 0.045f))
+                val rnd = java.util.Random(5)
+                repeat(36) {
+                    val dx = rnd.nextFloat()
+                    val dy = rnd.nextFloat()
+                    val tw = 0.5f + 0.5f * sin(clock * tau * 3 + it)
+                    drawCircle(ink.copy(alpha = 0.8f * tw * sp * (1 - clear)), 2.2f, Offset(ox + w * 0.03f + dx * w * 0.3f, oy + h * 0.015f + dy * h * 0.06f))
+                }
+                drawRoundRect(ink.copy(alpha = 0.85f * clear), Offset(ox + w * 0.04f, oy + h * 0.035f), Size(w * 0.26f * clear, h * 0.02f), CornerRadius(h * 0.01f))
+            }
+            "duo" -> {
+                // two phones side by side; one picture runs across both; a photo flies from one to the other
+                val pw = w * 0.36f
+                val ph = h * 0.62f
+                val gap = w * 0.03f
+                val y0 = h * 0.12f
+                val l = Offset(c.x - gap / 2 - pw, y0)
+                val r = Offset(c.x + gap / 2, y0 + h * 0.03f)
+                val s = stage(p, 0f, 0.3f)
+                listOf(l, r).forEachIndexed { k, o ->
+                    val slide = (1 - s) * (if (k == 0) -w * 0.2f else w * 0.2f)
+                    drawRoundRect(ink.copy(alpha = 0.9f), Offset(o.x + slide, o.y), Size(pw, ph), CornerRadius(w * 0.04f), style = Stroke(4f))
+                }
+                // the shared circle, cut by the gap between the screens
+                val ring = stage(p, 0.3f, 0.6f)
+                if (ring > 0f) {
+                    val cc = Offset(c.x, y0 + ph * 0.5f)
+                    clipRect(l.x + 6f, l.y + 6f, l.x + pw - 6f, l.y + ph - 6f) { drawCircle(ink.copy(alpha = 0.85f), pw * 0.7f * ring, cc, style = Stroke(w * 0.02f)) }
+                    clipRect(r.x + 6f, r.y + 6f, r.x + pw - 6f, r.y + ph - 6f) { drawCircle(ink.copy(alpha = 0.85f), pw * 0.7f * ring, cc, style = Stroke(w * 0.02f)) }
+                }
+                // the throw
+                val f = stage(p, 0.62f, 0.92f)
+                if (f > 0f && f < 1f) {
+                    val x = l.x + pw * 0.5f + (r.x + pw * 0.5f - (l.x + pw * 0.5f)) * f
+                    val y = y0 + ph * 0.78f - sin(f * PI.toFloat()) * h * 0.18f
+                    rotate(-20f + 40f * f, Offset(x, y)) { drawRoundRect(ink, Offset(x - w * 0.07f, y - w * 0.05f), Size(w * 0.14f, w * 0.1f), CornerRadius(6f)) }
+                }
+                if (f >= 1f) drawRoundRect(ink, Offset(r.x + pw * 0.5f - w * 0.07f, y0 + ph * 0.78f - w * 0.05f), Size(w * 0.14f, w * 0.1f), CornerRadius(6f))
+                // the finger crossing the edge
+                val sw = stage(p, 0.2f, 0.45f)
+                if (sw in 0.01f..0.99f) drawCircle(ink.copy(alpha = 0.5f), w * 0.025f, Offset(l.x + pw * (0.6f + 0.8f * sw), y0 + ph * 0.3f))
+            }
+            "concert" -> {
+                // four phones, each lit in turn by the wave, with notes rising from them
+                val n = 4
+                val pw = w * 0.17f
+                val ph = h * 0.36f
+                val gap = (w - n * pw) / (n + 1)
+                val y0 = h * 0.45f
+                val beat = (clock * 4f) % 1f
+                for (k in 0 until n) {
+                    val s = stage(p, k * 0.08f, k * 0.08f + 0.25f)
+                    val x = gap + k * (pw + gap)
+                    val wave = ((beat - k * 0.12f).let { if (it < 0) it + 1 else it }).let { if (it < 0.3f) 1f - it / 0.3f else 0f } * stage(p, 0.4f, 0.55f)
+                    drawRoundRect(ink.copy(alpha = (0.12f + 0.75f * wave) * s), Offset(x, y0 + (1 - s) * h * 0.2f), Size(pw, ph), CornerRadius(w * 0.03f))
+                    drawRoundRect(ink.copy(alpha = 0.9f * s), Offset(x, y0 + (1 - s) * h * 0.2f), Size(pw, ph), CornerRadius(w * 0.03f), style = Stroke(3f))
+                    // the part, drawn small on each phone
+                    val gx = x + pw / 2
+                    val gy = y0 + ph * 0.5f
+                    val gi = if (wave > 0.5f) bg else ink
+                    when (k) {
+                        0 -> drawPath(Path().apply { moveTo(gx - pw * 0.3f, gy); cubicTo(gx - pw * 0.1f, gy - ph * 0.15f, gx, gy - ph * 0.15f, gx, gy); cubicTo(gx, gy + ph * 0.15f, gx + pw * 0.1f, gy + ph * 0.15f, gx + pw * 0.3f, gy) }, gi.copy(alpha = s), style = Stroke(4f, cap = StrokeCap.Round))
+                        1 -> for (q in 0 until 3) drawLine(gi.copy(alpha = s), Offset(gx - pw * 0.25f, gy - ph * 0.08f + q * ph * 0.08f), Offset(gx + pw * 0.25f, gy - ph * 0.08f + q * ph * 0.08f), 4f, StrokeCap.Round)
+                        2 -> drawPath(Path().apply { moveTo(gx - pw * 0.28f, gy - ph * 0.05f); quadraticTo(gx, gy + ph * 0.2f, gx + pw * 0.28f, gy - ph * 0.05f) }, gi.copy(alpha = s), style = Stroke(5f, cap = StrokeCap.Round))
+                        else -> { drawCircle(gi.copy(alpha = s), pw * 0.09f, Offset(gx - pw * 0.15f, gy)); drawCircle(gi.copy(alpha = s), pw * 0.06f, Offset(gx + pw * 0.05f, gy)); drawCircle(gi.copy(alpha = s), pw * 0.04f, Offset(gx + pw * 0.2f, gy)) }
+                    }
+                    // notes rising
+                    val rise = stage(p, 0.5f, 1f)
+                    for (q in 0 until 2) {
+                        val f = ((clock * 1.5f + k * 0.25f + q * 0.5f) % 1f)
+                        val a = rise * (1 - f)
+                        val nx = gx + sin((f + k) * tau) * pw * 0.2f
+                        val ny = y0 - f * h * 0.35f
+                        drawCircle(ink.copy(alpha = a), w * 0.014f, Offset(nx, ny))
+                        drawLine(ink.copy(alpha = a), Offset(nx + w * 0.013f, ny), Offset(nx + w * 0.013f, ny - h * 0.06f), 3f, StrokeCap.Round)
+                    }
                 }
             }
             "kids" -> {
