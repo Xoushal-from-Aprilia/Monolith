@@ -86,6 +86,11 @@ android {
             all {
                 it.systemProperty("roborazzi.test.record", "true")
                 it.maxHeapSize = "3g"
+                // CI downloads Robolectric's Android jar beforehand (with retries and a mirror) and runs offline
+                System.getenv("ROBOLECTRIC_DIR")?.let { dir ->
+                    it.systemProperty("robolectric.offline", "true")
+                    it.systemProperty("robolectric.dependency.dir", dir)
+                }
             }
         }
     }
