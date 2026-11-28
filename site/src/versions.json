@@ -1,5 +1,19 @@
 [
  {
+  "version": "2.8.0",
+  "date": "2026-11-28",
+  "notes": [
+   "Gli account verificati come Sviluppatore possono creare uno Shard per tutti: dentro ci sono tutti gli utenti di Monolith, anche chi si iscrive dopo, con le stanze per gli annunci",
+   "Nei gruppi puoi aggiungere persone quando vuoi e c'è la pagina Info gruppo con descrizione, membri, amministratori e titoli",
+   "Gruppi e Shard hanno un link d'invito, anche come codice QR, da cambiare o spegnere quando vuoi; puoi scegliere di approvare chi entra",
+   "Impostazioni del gruppo: chi modifica le info, chi aggiunge persone, chi scrive; e poi un colore, una copertina e le reazioni rapide tutte vostre",
+   "I tag si vedono subito: @nomi e #stanze sono evidenziati e i messaggi che ti taggano hanno il bordo e la @ accanto alla chat"
+  ],
+  "build": 62,
+  "url": "https://github.com/Xoushal-from-Aprilia/Monolith/releases/download/build-62/Monolith-62.apk",
+  "size": 23997765
+ },
+ {
   "version": "2.7.0",
   "date": "2026-11-26",
   "notes": [

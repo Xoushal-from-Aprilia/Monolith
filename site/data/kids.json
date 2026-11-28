@@ -6,7 +6,8 @@
    "I tag nei gruppi si vedono subito: i nomi con la @ sono evidenziati e i messaggi che ti taggano hanno il bordo",
    "Nuova pagina Info gruppo con descrizione, membri e titoli; chi ha creato il gruppo può aggiungere gli amici approvati anche dopo",
    "Colori, copertina e reazioni rapide per ogni gruppo"
-  ]
+  ],
+  "build": 62
  },
  {
   "version": "1.2.0",

@@ -332,8 +332,8 @@ function Invite({ code, onClose }) {
     <div className="invite" role="dialog" aria-modal="true" aria-labelledby="invite-title">
       <div className="invite-card">
         <span className="kicker">Invito</span>
-        <h2 id="invite-title" className="sub">Ti hanno invitato in un gruppo di Monolith</h2>
-        <p className="lead">Se hai già Monolith, aprilo da qui: vedi il gruppo e scegli se entrare. Se non ce l'hai, scaricala, installala e poi tocca di nuovo il link.</p>
+        <h2 id="invite-title" className="sub">Ti hanno invitato su Monolith</h2>
+        <p className="lead">Se hai già Monolith, aprilo da qui: vedi il gruppo o lo Shard e scegli se entrare. Se non ce l'hai, scaricala, installala e poi tocca di nuovo il link.</p>
         <div className="invite-btns">
           <a className="btn" href={app}>Apri in Monolith</a>
           <a className="btn btn-ghost" href={latest.url} rel="noopener">Scarica Monolith</a>
